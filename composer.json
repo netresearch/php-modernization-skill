@@ -1,0 +1,20 @@
+{
+  "name": "netresearch/agent-php-modernization",
+  "description": "PHP 8.x modernization patterns for upgrading legacy PHP applications. This skill should be used when modernizing PHP codebases to PHP 8.1/8.2/8.3, implementing type safety and strict typing, adopting ",
+  "type": "ai-agent-skill",
+  "license": "MIT",
+  "authors": [
+    {
+      "name": "Netresearch DTT GmbH",
+      "email": "plugins@netresearch.de",
+      "homepage": "https://www.netresearch.de/",
+      "role": "Manufacturer"
+    }
+  ],
+  "require": {
+    "netresearch/composer-agent-skill-plugin": "*"
+  },
+  "extra": {
+    "ai-agent-skill": "SKILL.md"
+  }
+}
