@@ -20,6 +20,7 @@ Modernize PHP applications to PHP 8.x with type safety, Symfony patterns, and st
 - `references/symfony-patterns.md` - Modern Symfony architecture
 - `references/phpstan-compliance.md` - Static analysis configuration
 - `references/migration-strategies.md` - Version upgrade planning
+- `references/adapter-registry-pattern.md` - Dynamic adapter instantiation
 
 ## Quick Patterns
 
