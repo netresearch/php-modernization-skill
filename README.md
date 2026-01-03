@@ -1,16 +1,16 @@
 # PHP Modernization Skill
 
-Expert patterns for modernizing PHP applications to PHP 8.x with type safety, Symfony best practices, and static analysis compliance.
+Expert patterns for modernizing PHP applications to PHP 8.x with type safety, PSR/PER compliance, Symfony best practices, and static analysis.
 
-## 🔌 Compatibility
+## Compatibility
 
 This is an **Agent Skill** following the [open standard](https://agentskills.io) originally developed by Anthropic and released for cross-platform use.
 
 **Supported Platforms:**
-- ✅ Claude Code (Anthropic)
-- ✅ Cursor
-- ✅ GitHub Copilot
-- ✅ Other skills-compatible AI agents
+- Claude Code (Anthropic)
+- Cursor
+- GitHub Copilot
+- Other skills-compatible AI agents
 
 > Skills are portable packages of procedural knowledge that work across any AI agent supporting the Agent Skills specification.
 
@@ -18,10 +18,10 @@ This is an **Agent Skill** following the [open standard](https://agentskills.io)
 ## Features
 
 - **PHP 8.x Features**: Constructor property promotion, readonly properties and classes, named arguments, enums and match expressions, attributes (replacing annotations), union and intersection types, nullsafe operator
-- **Type Safety Patterns**: Generic collection typing via PHPDoc, ArrayTypeHelper for type-safe array operations, strict typing enforcement, PHPStan level 9+ compliance, runtime type validation
-- **Symfony Integration**: Dependency injection patterns, service configuration (YAML → PHP), event dispatcher and PSR-14, form handling modernization, security component updates
-- **Static Analysis**: PHPStan level 9 configuration and compliance strategies
-- **Migration Strategies**: Version upgrade planning and systematic modernization approaches
+- **PSR/PER Compliance**: Enforces all active PHP-FIG standards (PSR-1, 3, 4, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 20) and PER Coding Style 2.0
+- **Type Safety Patterns**: Generic collection typing via PHPDoc, ArrayTypeHelper for type-safe array operations, strict typing enforcement, PHPStan level 10 compliance, runtime type validation
+- **Symfony Integration**: Dependency injection patterns, service configuration (YAML to PHP), event dispatcher and PSR-14, form handling modernization, security component updates
+- **Static Analysis**: PHPStan level 10 (max) configuration and compliance strategies
 
 ## Installation
 
@@ -47,19 +47,22 @@ composer require netresearch/agent-php-modernization-skill
 
 This skill is automatically triggered when:
 
-- Modernizing PHP codebases to PHP 8.1/8.2/8.3
+- Modernizing PHP codebases to PHP 8.1/8.2/8.3/8.4/8.5
 - Implementing type safety and strict typing
+- Ensuring PSR/PER compliance
 - Adopting Symfony best practices
-- Achieving PHPStan level 9+ compliance
+- Achieving PHPStan level 10 compliance
 - Upgrading from older PHP versions
 - Implementing generic collection patterns
 
 Example queries:
 - "Modernize this PHP class to PHP 8.2"
-- "Add strict type safety with PHPStan level 9"
+- "Add strict type safety with PHPStan level 10"
+- "Ensure this code follows PSR standards"
 - "Convert YAML service configuration to PHP"
 - "Implement readonly class with constructor promotion"
 - "Create type-safe array helper with generics"
+- "Make this HTTP client PSR-18 compliant"
 
 ## Structure
 
@@ -67,7 +70,8 @@ Example queries:
 php-modernization-skill/
 ├── SKILL.md                              # Skill metadata and core patterns
 ├── references/
-│   ├── php8-features.md                  # PHP 8.0-8.4 feature adoption patterns
+│   ├── psr-per-compliance.md             # Active PSR and PER standards (required)
+│   ├── php8-features.md                  # PHP 8.0-8.5 feature adoption patterns
 │   ├── type-safety.md                    # Type system maximization strategies
 │   ├── symfony-patterns.md               # Modern Symfony architecture
 │   ├── phpstan-compliance.md             # Static analysis configuration
@@ -77,6 +81,25 @@ php-modernization-skill/
 ```
 
 ## Expertise Areas
+
+### PSR/PER Compliance
+
+All modern PHP code must follow active PHP-FIG standards:
+
+| Standard | Purpose | Requirement |
+|----------|---------|-------------|
+| PSR-1 | Basic Coding | **Required** |
+| PSR-4 | Autoloading | **Required** |
+| PER CS 2.0 | Coding Style | **Required** (supersedes PSR-12) |
+| PSR-3 | Logger | Use when logging |
+| PSR-6/16 | Cache | Use when caching |
+| PSR-7/17/18 | HTTP | Use for HTTP clients |
+| PSR-11 | Container | Use for DI containers |
+| PSR-14 | Events | Use for event dispatching |
+| PSR-15 | Middleware | Use for HTTP middleware |
+| PSR-20 | Clock | Use for time-dependent code |
+
+**Source of truth:** https://www.php-fig.org/psr/ and https://www.php-fig.org/per/
 
 ### PHP 8.x Features
 - Constructor property promotion
@@ -91,12 +114,12 @@ php-modernization-skill/
 - Generic collection typing via PHPDoc
 - ArrayTypeHelper for type-safe array operations
 - Strict typing enforcement
-- PHPStan level 9+ compliance
+- PHPStan level 10 compliance
 - Runtime type validation
 
 ### Symfony Integration
 - Dependency injection patterns
-- Service configuration (YAML → PHP)
+- Service configuration (YAML to PHP)
 - Event dispatcher and PSR-14
 - Form handling modernization
 - Security component updates
@@ -111,7 +134,16 @@ php-modernization-skill/
 - Use readonly where applicable
 - Replace switch with match expressions
 - Adopt enums for status/type constants
-- Update PHPStan to highest stable level
+- Update PHPStan to level 10 (max)
+
+### PSR/PER Compliance
+- Configure PSR-4 autoloading in composer.json
+- Enforce PER Coding Style 2.0 via PHP-CS-Fixer
+- Type-hint against PSR interfaces (not implementations)
+- Use PSR-3 for logging
+- Use PSR-14 for event dispatching
+- Use PSR-18/17 for HTTP clients
+- Use PSR-20 for time-dependent code
 
 ### Type Safety Enhancement
 - Add return types to all methods
@@ -137,4 +169,4 @@ Developed and maintained by [Netresearch DTT GmbH](https://www.netresearch.de/).
 
 ---
 
-**Made with ❤️ for Open Source by [Netresearch](https://www.netresearch.de/)**
+**Made with love for Open Source by [Netresearch](https://www.netresearch.de/)**
