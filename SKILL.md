@@ -10,7 +10,7 @@ Modernize PHP applications to PHP 8.x with type safety, PSR compliance, Symfony 
 ## Expertise Areas
 
 - **PHP 8.x**: Constructor promotion, readonly, enums, match, attributes, union types
-- **PSR/PER Compliance**: Active PHP-FIG standards (PSR-1,3,4,6,7,11,12,13,14,15,16,17,18,20, PER CS 2.0)
+- **PSR/PER Compliance**: Active PHP-FIG standards (PSR-1,3,4,6,7,11,12,13,14,15,16,17,18,20, PER Coding Style)
 - **Type Safety**: Generics via PHPDoc, ArrayTypeHelper, PHPStan level 10 (max)
 - **Symfony**: DI patterns, PHP config, PSR-14 events
 
@@ -33,7 +33,7 @@ All modern PHP code must follow active PHP-FIG standards:
 |----------|---------|-------------|
 | PSR-1 | Basic Coding | **Required** |
 | PSR-4 | Autoloading | **Required** |
-| PER CS 2.0 | Coding Style | **Required** (supersedes PSR-12) |
+| PER Coding Style | Coding Style | **Required** (supersedes PSR-12) |
 | PSR-3 | Logger | Use when logging |
 | PSR-6/16 | Cache | Use when caching |
 | PSR-7/17/18 | HTTP | Use for HTTP clients |
@@ -99,7 +99,7 @@ public function getUsers(): array
 | Criterion | Requirement |
 |-----------|-------------|
 | PHPStan | Level 10 (max) required for full points |
-| PHP-CS-Fixer | `@PER-CS2.0` ruleset required |
+| PHP-CS-Fixer | `@PER-CS` ruleset required |
 | PSR Compliance | Type-hint against PSR interfaces |
 | Rector | No remaining suggestions |
 
@@ -111,8 +111,8 @@ public function getUsers(): array
 // .php-cs-fixer.dist.php
 return (new PhpCsFixer\Config())
     ->setRules([
-        '@PER-CS2.0' => true,
-        '@PER-CS2.0:risky' => true,
+        '@PER-CS' => true,
+        '@PER-CS:risky' => true,
         'declare_strict_types' => true,
     ])
     ->setRiskyAllowed(true);

@@ -18,7 +18,7 @@ This is an **Agent Skill** following the [open standard](https://agentskills.io)
 ## Features
 
 - **PHP 8.x Features**: Constructor property promotion, readonly properties and classes, named arguments, enums and match expressions, attributes (replacing annotations), union and intersection types, nullsafe operator
-- **PSR/PER Compliance**: Enforces all active PHP-FIG standards (PSR-1, 3, 4, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 20) and PER Coding Style 2.0
+- **PSR/PER Compliance**: Enforces all active PHP-FIG standards (PSR-1, 3, 4, 6, 7, 11, 12, 13, 14, 15, 16, 17, 18, 20) and PER Coding Style
 - **Type Safety Patterns**: Generic collection typing via PHPDoc, ArrayTypeHelper for type-safe array operations, strict typing enforcement, PHPStan level 10 compliance, runtime type validation
 - **Symfony Integration**: Dependency injection patterns, service configuration (YAML to PHP), event dispatcher and PSR-14, form handling modernization, security component updates
 - **Static Analysis**: PHPStan level 10 (max) configuration and compliance strategies
@@ -90,7 +90,7 @@ All modern PHP code must follow active PHP-FIG standards:
 |----------|---------|-------------|
 | PSR-1 | Basic Coding | **Required** |
 | PSR-4 | Autoloading | **Required** |
-| PER CS 2.0 | Coding Style | **Required** (supersedes PSR-12) |
+| PER Coding Style | Coding Style | **Required** (supersedes PSR-12) |
 | PSR-3 | Logger | Use when logging |
 | PSR-6/16 | Cache | Use when caching |
 | PSR-7/17/18 | HTTP | Use for HTTP clients |
@@ -138,7 +138,7 @@ All modern PHP code must follow active PHP-FIG standards:
 
 ### PSR/PER Compliance
 - Configure PSR-4 autoloading in composer.json
-- Enforce PER Coding Style 2.0 via PHP-CS-Fixer
+- Enforce PER Coding Style via PHP-CS-Fixer (`@PER-CS`)
 - Type-hint against PSR interfaces (not implementations)
 - Use PSR-3 for logging
 - Use PSR-14 for event dispatching

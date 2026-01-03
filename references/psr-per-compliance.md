@@ -398,11 +398,13 @@ final class TokenValidator
 
 ## Active PERs (PHP Evolving Recommendations)
 
-### PER Coding Style 2.0
+### PER Coding Style
 
 **Status:** Active | **Required for new projects**
 
 Evolves PSR-12 with modern PHP features. This is the current coding style standard.
+
+> **Note:** Use `@PER-CS` in PHP-CS-Fixer (alias for latest version). Avoid deprecated version-specific rulesets like `@PER-CS2.0` - use `@PER-CS2x0` syntax if pinning is required.
 
 ```php
 <?php
@@ -469,8 +471,8 @@ final readonly class UserService
 // .php-cs-fixer.dist.php
 return (new PhpCsFixer\Config())
     ->setRules([
-        '@PER-CS2.0' => true,
-        '@PER-CS2.0:risky' => true,
+        '@PER-CS' => true,        // Alias for latest PER Coding Style
+        '@PER-CS:risky' => true,
         'declare_strict_types' => true,
     ])
     ->setRiskyAllowed(true)
@@ -480,6 +482,8 @@ return (new PhpCsFixer\Config())
             ->in(__DIR__ . '/tests')
     );
 ```
+
+> **Ruleset naming:** Use `@PER-CS` for latest. For version pinning, use `@PER-CS3x0` (not `@PER-CS3.0` which is deprecated).
 
 ### PHPStan
 
