@@ -29,13 +29,15 @@ jobs:
       - name: Create skill package
         run: |
           mkdir -p dist
-          cp SKILL.md dist/
+          # Copy skill files from new structure
+          cp skills/php-modernization/SKILL.md dist/
           cp LICENSE dist/
-          [ -d "references" ] && cp -r references dist/
-          [ -d "scripts" ] && cp -r scripts dist/
-          [ -d "assets" ] && cp -r assets dist/
-          [ -d "templates" ] && cp -r templates dist/
-          [ -d "skills" ] && cp -r skills dist/
+          [ -d "skills/php-modernization/references" ] && cp -r skills/php-modernization/references dist/
+          [ -d "skills/php-modernization/scripts" ] && cp -r skills/php-modernization/scripts dist/
+          [ -d "skills/php-modernization/assets" ] && cp -r skills/php-modernization/assets dist/
+          [ -d "skills/php-modernization/templates" ] && cp -r skills/php-modernization/templates dist/
+          # Include plugin manifest
+          [ -d ".claude-plugin" ] && cp -r .claude-plugin dist/
           cd dist
           zip -r ../php-modernization-${{ steps.version.outputs.version }}.zip .
           tar -czvf ../php-modernization-${{ steps.version.outputs.version }}.tar.gz .
