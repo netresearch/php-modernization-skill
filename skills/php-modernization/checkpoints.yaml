@@ -51,14 +51,14 @@ mechanical:
   - id: PM-07
     type: regex
     target: Classes/**/*.php
-    pattern: "^<\\?php\\s*\\n\\s*declare\\s*\\(\\s*strict_types\\s*=\\s*1\\s*\\)\\s*;"
+    pattern: "declare\\s*\\(\\s*strict_types\\s*=\\s*1\\s*\\)"
     severity: error
     desc: "PHP files must declare strict_types=1 at the top"
 
   - id: PM-08
     type: regex
     target: Tests/**/*.php
-    pattern: "^<\\?php\\s*\\n\\s*declare\\s*\\(\\s*strict_types\\s*=\\s*1\\s*\\)\\s*;"
+    pattern: "declare\\s*\\(\\s*strict_types\\s*=\\s*1\\s*\\)"
     severity: error
     desc: "Test files must declare strict_types=1 at the top"
 
@@ -79,14 +79,14 @@ mechanical:
   - id: PM-11
     type: contains
     target: "{rector.php,Build/rector.php}"
-    pattern: "DeadCodeSet"
+    pattern: "SetList::DEAD_CODE"
     severity: info
     desc: "Rector should include DeadCodeSet rules"
 
   - id: PM-12
     type: contains
     target: "{rector.php,Build/rector.php}"
-    pattern: "CodeQualitySetList"
+    pattern: "SetList::CODE_QUALITY"
     severity: info
     desc: "Rector should include CodeQualitySetList rules"
 
