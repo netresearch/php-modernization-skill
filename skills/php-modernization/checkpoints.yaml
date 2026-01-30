@@ -8,20 +8,20 @@ mechanical:
   # === PHPSTAN CONFIGURATION ===
   - id: PM-01
     type: file_exists
-    target: phpstan.neon
+    target: "{phpstan.neon,Build/phpstan.neon}"
     severity: error
     desc: "PHPStan configuration must exist"
 
   - id: PM-02
     type: regex
-    target: phpstan.neon
+    target: "{phpstan.neon,Build/phpstan.neon}"
     pattern: "level:\\s*(9|1[0-9]|max)"
     severity: error
     desc: "PHPStan level must be 9 or higher (or max)"
 
   - id: PM-03
     type: contains
-    target: phpstan.neon
+    target: "{phpstan.neon,Build/phpstan.neon}"
     pattern: "treatPhpDocTypesAsCertain: false"
     severity: warning
     desc: "PHPStan should not trust PHPDoc types over runtime"
@@ -29,20 +29,20 @@ mechanical:
   # === PHP-CS-FIXER CONFIGURATION ===
   - id: PM-04
     type: file_exists
-    target: .php-cs-fixer.php
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php}"
     severity: error
     desc: "PHP-CS-Fixer configuration must exist"
 
   - id: PM-05
     type: contains
-    target: .php-cs-fixer.php
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php}"
     pattern: "@PER-CS"
     severity: error
     desc: "PHP-CS-Fixer must use @PER-CS ruleset"
 
   - id: PM-06
     type: contains
-    target: .php-cs-fixer.php
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php}"
     pattern: "strict_types"
     severity: warning
     desc: "PHP-CS-Fixer should enforce strict_types declaration"
@@ -51,41 +51,41 @@ mechanical:
   - id: PM-07
     type: regex
     target: Classes/**/*.php
-    pattern: "^<\\?php\\s*\\n\\s*declare\\(strict_types\\s*=\\s*1\\);"
+    pattern: "^<\\?php\\s*\\n\\s*declare\\s*\\(\\s*strict_types\\s*=\\s*1\\s*\\)\\s*;"
     severity: error
     desc: "PHP files must declare strict_types=1 at the top"
 
   - id: PM-08
     type: regex
     target: Tests/**/*.php
-    pattern: "^<\\?php\\s*\\n\\s*declare\\(strict_types\\s*=\\s*1\\);"
+    pattern: "^<\\?php\\s*\\n\\s*declare\\s*\\(\\s*strict_types\\s*=\\s*1\\s*\\)\\s*;"
     severity: error
     desc: "Test files must declare strict_types=1 at the top"
 
   # === RECTOR CONFIGURATION ===
   - id: PM-09
     type: file_exists
-    target: rector.php
+    target: "{rector.php,Build/rector.php}"
     severity: warning
     desc: "Rector configuration should exist for automated refactoring"
 
   - id: PM-10
     type: contains
-    target: rector.php
+    target: "{rector.php,Build/rector.php}"
     pattern: "LevelSetList"
     severity: warning
     desc: "Rector should use LevelSetList for PHP version upgrades"
 
   - id: PM-11
     type: contains
-    target: rector.php
+    target: "{rector.php,Build/rector.php}"
     pattern: "DeadCodeSet"
     severity: info
     desc: "Rector should include DeadCodeSet rules"
 
   - id: PM-12
     type: contains
-    target: rector.php
+    target: "{rector.php,Build/rector.php}"
     pattern: "CodeQualitySetList"
     severity: info
     desc: "Rector should include CodeQualitySetList rules"
