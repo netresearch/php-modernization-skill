@@ -15,7 +15,7 @@ mechanical:
   - id: PM-02
     type: regex
     target: "{phpstan.neon,Build/phpstan.neon}"
-    pattern: "level:\\s*(9|1[0-9]|max)"
+    pattern: 'level:\s*(9|1[0-9]|max)'
     severity: error
     desc: "PHPStan level must be 9 or higher (or max)"
 
@@ -51,14 +51,14 @@ mechanical:
   - id: PM-07
     type: regex
     target: Classes/**/*.php
-    pattern: "declare\\s*\\(\\s*strict_types\\s*=\\s*1\\s*\\)"
+    pattern: 'declare\s*\(\s*strict_types\s*=\s*1\s*\)'
     severity: error
     desc: "PHP files must declare strict_types=1 at the top"
 
   - id: PM-08
     type: regex
     target: Tests/**/*.php
-    pattern: "declare\\s*\\(\\s*strict_types\\s*=\\s*1\\s*\\)"
+    pattern: 'declare\s*\(\s*strict_types\s*=\s*1\s*\)'
     severity: error
     desc: "Test files must declare strict_types=1 at the top"
 
