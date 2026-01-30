@@ -1,0 +1,222 @@
+# Checkpoints for php-modernization skill
+# Verifies PHP code quality tools and modern PHP patterns
+
+version: 1
+skill_id: php-modernization
+
+mechanical:
+  # === PHPSTAN CONFIGURATION ===
+  - id: PM-01
+    type: file_exists
+    target: phpstan.neon
+    severity: error
+    desc: "PHPStan configuration must exist"
+
+  - id: PM-02
+    type: regex
+    target: phpstan.neon
+    pattern: "level:\\s*(9|1[0-9]|max)"
+    severity: error
+    desc: "PHPStan level must be 9 or higher (or max)"
+
+  - id: PM-03
+    type: contains
+    target: phpstan.neon
+    pattern: "treatPhpDocTypesAsCertain: false"
+    severity: warning
+    desc: "PHPStan should not trust PHPDoc types over runtime"
+
+  # === PHP-CS-FIXER CONFIGURATION ===
+  - id: PM-04
+    type: file_exists
+    target: .php-cs-fixer.php
+    severity: error
+    desc: "PHP-CS-Fixer configuration must exist"
+
+  - id: PM-05
+    type: contains
+    target: .php-cs-fixer.php
+    pattern: "@PER-CS"
+    severity: error
+    desc: "PHP-CS-Fixer must use @PER-CS ruleset"
+
+  - id: PM-06
+    type: contains
+    target: .php-cs-fixer.php
+    pattern: "strict_types"
+    severity: warning
+    desc: "PHP-CS-Fixer should enforce strict_types declaration"
+
+  # === STRICT TYPES DECLARATION ===
+  - id: PM-07
+    type: regex
+    target: Classes/**/*.php
+    pattern: "^<\\?php\\s*\\n\\s*declare\\(strict_types\\s*=\\s*1\\);"
+    severity: error
+    desc: "PHP files must declare strict_types=1 at the top"
+
+  - id: PM-08
+    type: regex
+    target: Tests/**/*.php
+    pattern: "^<\\?php\\s*\\n\\s*declare\\(strict_types\\s*=\\s*1\\);"
+    severity: error
+    desc: "Test files must declare strict_types=1 at the top"
+
+  # === RECTOR CONFIGURATION ===
+  - id: PM-09
+    type: file_exists
+    target: rector.php
+    severity: warning
+    desc: "Rector configuration should exist for automated refactoring"
+
+  - id: PM-10
+    type: contains
+    target: rector.php
+    pattern: "LevelSetList"
+    severity: warning
+    desc: "Rector should use LevelSetList for PHP version upgrades"
+
+  - id: PM-11
+    type: contains
+    target: rector.php
+    pattern: "DeadCodeSet"
+    severity: info
+    desc: "Rector should include DeadCodeSet rules"
+
+  - id: PM-12
+    type: contains
+    target: rector.php
+    pattern: "CodeQualitySetList"
+    severity: info
+    desc: "Rector should include CodeQualitySetList rules"
+
+  # === COMPOSER CONFIGURATION ===
+  - id: PM-13
+    type: json_path
+    target: composer.json
+    pattern: '.scripts["cs:fix"] or .scripts["fix:cs"] or .scripts["php:cs:fix"]'
+    severity: warning
+    desc: "Composer should have a coding standards fix script"
+
+  - id: PM-14
+    type: json_path
+    target: composer.json
+    pattern: '.scripts["phpstan"] or .scripts["analyse"] or .scripts["analyze"]'
+    severity: warning
+    desc: "Composer should have a PHPStan script"
+
+  - id: PM-15
+    type: json_path
+    target: composer.json
+    pattern: '.scripts["rector"] or .scripts["refactor"]'
+    severity: info
+    desc: "Composer should have a Rector script"
+
+  # === DEV DEPENDENCIES ===
+  - id: PM-16
+    type: json_path
+    target: composer.json
+    pattern: '."require-dev"["phpstan/phpstan"]'
+    severity: error
+    desc: "PHPStan must be in require-dev"
+
+  - id: PM-17
+    type: json_path
+    target: composer.json
+    pattern: '."require-dev"["friendsofphp/php-cs-fixer"]'
+    severity: error
+    desc: "PHP-CS-Fixer must be in require-dev"
+
+  - id: PM-18
+    type: json_path
+    target: composer.json
+    pattern: '."require-dev"["rector/rector"]'
+    severity: warning
+    desc: "Rector should be in require-dev"
+
+llm_reviews:
+  # === CODE QUALITY PATTERNS ===
+  - id: PM-20
+    domain: code-quality
+    prompt: |
+      Review the PHP codebase for methods that use array parameters or return arrays
+      where structured data (DTOs, Value Objects) would be more appropriate.
+
+      Look for patterns like:
+      - Methods with @param array<string, mixed> that represent structured data
+      - Methods returning associative arrays that could be typed objects
+      - Array-heavy constructors that should use named parameters or DTOs
+
+      Examine files in Classes/ directory. Report specific files and methods
+      that should be refactored to use typed objects instead of arrays.
+
+      This is important for:
+      - IDE autocompletion
+      - Static analysis accuracy
+      - Self-documenting code
+      - Type safety at runtime with strict_types
+    severity: warning
+    desc: "Identify array params/returns that should be DTOs or Value Objects"
+
+  - id: PM-21
+    domain: code-quality
+    prompt: |
+      Review the PHP codebase for class constants that should be converted
+      to backed enums (available since PHP 8.1).
+
+      Look for patterns like:
+      - Classes with multiple related STATUS_*, TYPE_*, or STATE_* constants
+      - Constants used in switch statements or match expressions
+      - Constants that represent a finite set of valid values
+      - Method parameters typed as int|string that accept constant values
+
+      Examine files in Classes/ directory. Report specific files and constant
+      groups that would benefit from enum conversion.
+
+      Good candidates for enums:
+      - Status constants (PENDING, ACTIVE, COMPLETED)
+      - Type constants (TYPE_A, TYPE_B, TYPE_C)
+      - State machine states
+      - Configuration option values
+    severity: warning
+    desc: "Identify class constants that should be backed enums"
+
+  - id: PM-22
+    domain: code-quality
+    prompt: |
+      Review the codebase for proper use of PHP 8+ features:
+
+      1. Constructor property promotion - are properties declared the old way
+         when they could use promotion?
+
+      2. Named arguments - are there function calls with many positional
+         parameters that would benefit from named arguments?
+
+      3. Match expressions - are there complex switch statements that
+         could be simplified to match expressions?
+
+      4. Nullsafe operator - are there verbose null checks that could use ?->?
+
+      5. Union/intersection types - are there PHPDoc types that could be
+         native union types?
+
+      Report specific files and line numbers where modernization is needed.
+    severity: info
+    desc: "Verify modern PHP 8+ features are used where appropriate"
+
+  - id: PM-23
+    domain: code-quality
+    prompt: |
+      Review the PHPStan configuration for completeness:
+
+      1. Is level 9 or max used?
+      2. Are all relevant paths included in paths/scanDirectories?
+      3. Are extension-specific extensions configured (e.g., phpstan-typo3)?
+      4. Is treatPhpDocTypesAsCertain set to false?
+      5. Are there excessive baseline entries that should be fixed?
+      6. Is checkMissingIterableValueType enabled?
+      7. Is checkGenericClassInNonGenericObjectType enabled?
+
+      Suggest specific configuration improvements.
+    severity: warning
+    desc: "Verify PHPStan configuration follows best practices"
