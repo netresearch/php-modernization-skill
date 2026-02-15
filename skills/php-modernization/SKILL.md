@@ -1,6 +1,6 @@
 ---
 name: php-modernization
-description: "Agent Skill: PHP 8.x modernization patterns. Use when upgrading to PHP 8.1/8.2/8.3/8.4/8.5, implementing type safety, or achieving PHPStan level 10. By Netresearch."
+description: "Use when upgrading to PHP 8.1-8.5, implementing type safety, configuring PHPStan/Rector/PHP-CS-Fixer, or modernizing PHP code with enums, DTOs, and readonly properties."
 ---
 
 # PHP Modernization Skill
