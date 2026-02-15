@@ -1,6 +1,6 @@
 ---
 name: php-modernization
-description: "Use when upgrading to PHP 8.1-8.5, implementing type safety, configuring PHPStan/Rector/PHP-CS-Fixer, or modernizing PHP code with enums, DTOs, and readonly properties."
+description: "Use when upgrading to PHP 8.1+, implementing type safety, configuring PHPStan/Rector/PHP-CS-Fixer, or modernizing PHP code with enums, DTOs, and readonly properties."
 ---
 
 # PHP Modernization Skill
