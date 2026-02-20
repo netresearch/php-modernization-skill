@@ -591,3 +591,59 @@ class BankAccount
 // $account->balance;      // OK - public read
 // $account->balance = 10; // Error - private write
 ```
+
+### Dom\HTMLDocument (New DOM API)
+
+PHP 8.4 introduces `Dom\HTMLDocument` as a modern, encoding-correct replacement for `DOMDocument`:
+
+```php
+// PHP 8.4+: Proper encoding support out of the box
+$doc = Dom\HTMLDocument::createFromString(
+    '<div>' . $html . '</div>',
+    LIBXML_NOERROR,
+    'UTF-8',
+);
+```
+
+See also: [DOMDocument UTF-8 Pitfall](#domdocument-utf-8-encoding-pitfall) below.
+
+## Common PHP Pitfalls
+
+### DOMDocument UTF-8 Encoding Pitfall
+
+`DOMDocument::loadHTML()` defaults to ISO-8859-1, silently corrupting multi-byte UTF-8 characters such as German umlauts (ä/ö/ü/ß), French accents, and any non-ASCII content.
+
+**Symptom**: Characters like `ä`, `ö`, `ü`, `ß` are replaced with `?` or mojibake after HTML parsing.
+
+**Affected contexts**: TYPO3 extensions, HTML parsers, RTE processors, any PHP code using `DOMDocument` to manipulate HTML fragments.
+
+```php
+// WRONG: Silently corrupts UTF-8 multi-byte characters
+$dom = new \DOMDocument();
+$dom->loadHTML('<div>' . $html . '</div>', LIBXML_NONET | LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+
+// CORRECT: Prefix with XML encoding declaration to force UTF-8
+$dom = new \DOMDocument();
+$dom->loadHTML(
+    '<?xml encoding="UTF-8"><div>' . $html . '</div>',
+    LIBXML_NONET | LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD,
+);
+```
+
+**Why the prefix works**: The `<?xml encoding="UTF-8">` processing instruction tells libxml to interpret the byte stream as UTF-8 before any charset detection occurs. Without it, libxml falls back to ISO-8859-1.
+
+**PHP 8.4+ alternative**: Use `Dom\HTMLDocument::createFromString()` which handles encoding correctly by default:
+
+```php
+// PHP 8.4+: Correct encoding, no prefix hack needed
+$doc = Dom\HTMLDocument::createFromString(
+    '<div>' . $html . '</div>',
+    LIBXML_NOERROR,
+    'UTF-8',
+);
+```
+
+**Migration checklist when reviewing code using `DOMDocument::loadHTML()`**:
+- [ ] Does the HTML input contain non-ASCII content?
+- [ ] Is `<?xml encoding="UTF-8">` prefix present before `loadHTML()`?
+- [ ] If PHP 8.4+ is the minimum requirement, consider migrating to `Dom\HTMLDocument`
