@@ -360,8 +360,10 @@ $items = $decoded['items'] ?? null;
 if (!is_array($items)) {
     throw new \RuntimeException('Missing items');
 }
-/** @var array<string, mixed> $firstItem */
-$firstItem = $items[0];
+$firstItem = $items[0] ?? null;
+if (!is_array($firstItem)) {
+    throw new \RuntimeException('First item missing or invalid');
+}
 
 // 3. Return type narrowing (covariance) — genuine fix, not a suppression
 // If interface declares: function transform(): Node|null
