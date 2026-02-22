@@ -337,6 +337,63 @@ includes:
 vendor/bin/phpstan analyse --generate-baseline
 ```
 
+### Baseline Reduction Strategy
+
+**Always prefer genuine code fixes over suppressions** (`@phpstan-ignore` annotations or baseline entries). Only keep baseline entries for external library constraints that cannot be fixed locally (e.g., upstream interfaces returning `mixed`).
+
+Effective fix patterns for `mixed` types:
+
+```php
+// 1. is_string()/is_array() guards for framework methods returning mixed
+$argument = $input->getArgument('name'); // returns mixed
+if (!is_string($argument)) {
+    throw new \RuntimeException('Expected string argument');
+}
+// PHPStan now knows $argument is string
+
+// 2. Step-by-step validation for json_decode()/Yaml::parse()
+$decoded = json_decode($contents, true); // returns mixed
+if (!is_array($decoded)) {
+    throw new \RuntimeException('Invalid JSON');
+}
+$items = $decoded['items'] ?? null;
+if (!is_array($items)) {
+    throw new \RuntimeException('Missing items');
+}
+/** @var array<string, mixed> $firstItem */
+$firstItem = $items[0];
+
+// 3. Return type narrowing (covariance) — genuine fix, not a suppression
+// If interface declares: function transform(): Node|null
+// Implementation can narrow to: function transform(): Node
+// This is valid PHP and satisfies PHPStan without @phpstan-ignore
+
+// 4. Type-specific parameters instead of mixed
+// Bad:  private function errorHandler(mixed $errno, string $errstr)
+// Good: private function errorHandler(int $errno, string $errstr)
+```
+
+## PHPStan 1.x to 2.x Migration
+
+### Breaking Changes
+
+| Change | Details |
+|--------|---------|
+| Config rename | `strictCalls` → `strictFunctionCalls` |
+| Stricter mixed | More errors flagged for `mixed` type operations |
+| Error identifiers | New identifiers: `foreach.nonIterable`, `binaryOp.invalid`, `argument.type`, `method.nonObject`, `cast.string`, `offsetAccess.invalidOffset`, `return.unusedType` |
+| symplify/phpstan-rules | v13→v14: dropped regex rules, update config accordingly |
+
+### Migration Steps
+
+1. Update packages: `phpstan/phpstan: ^2.1`, `phpstan/phpstan-strict-rules: ^2.0`
+2. Rename `strictCalls` → `strictFunctionCalls` in `phpstan.neon`
+3. Remove dropped rules from config (e.g., symplify regex rules)
+4. Regenerate baseline: `vendor/bin/phpstan analyse --generate-baseline`
+5. Fix errors genuinely (see Baseline Reduction Strategy above)
+6. Re-generate baseline for remaining unfixable entries
+7. Verify: `vendor/bin/phpstan analyse` should report 0 errors
+
 ## Custom Rules
 
 ### Creating Custom Rules
