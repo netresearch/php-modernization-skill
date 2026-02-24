@@ -6,9 +6,12 @@
   "license": "MIT",
   "author": {
     "name": "Netresearch DTT GmbH",
-    "email": "info@netresearch.de"
+    "url": "https://github.com/netresearch/php-modernization-skill"
   },
   "skills": [
     "./skills/php-modernization"
-  ]
+  ],
+  "support": {
+    "issues": "https://github.com/netresearch/php-modernization-skill/issues"
+  }
 }
