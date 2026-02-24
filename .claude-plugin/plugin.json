@@ -10,8 +10,5 @@
   },
   "skills": [
     "./skills/php-modernization"
-  ],
-  "support": {
-    "issues": "https://github.com/netresearch/php-modernization-skill/issues"
-  }
+  ]
 }
