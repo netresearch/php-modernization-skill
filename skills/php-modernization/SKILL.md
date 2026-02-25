@@ -75,31 +75,13 @@ When setting up a modernized PHP project, ensure these tools are configured:
 
 ## Core Rules
 
-### DTOs Required
+- **DTOs required** over arrays for structured data
+- **Backed enums required** for fixed value sets (not constants)
+- **PSR interfaces** for type-hinting dependencies (PSR-3, PSR-6, PSR-7, PSR-11, PSR-14, PSR-18)
 
-When passing structured data, always use DTOs instead of arrays:
-
-```php
-// Bad: public function createUser(array $data): array
-// Good: public function createUser(CreateUserDTO $dto): UserDTO
-```
-
-### Enums Required
-
-When defining fixed value sets, always use backed enums instead of constants:
-
-```php
-// Bad: const STATUS_DRAFT = 'draft'; function setStatus(string $s)
-// Good: enum Status: string { case Draft = 'draft'; }
-```
-
-### PSR Interface Compliance
-
-When type-hinting dependencies, use PSR interfaces (PSR-3, PSR-6, PSR-7, PSR-11, PSR-14, PSR-18).
+See `references/core-rules.md` for code examples and scoring criteria.
 
 ## Migration Checklist
-
-When modernizing a PHP project, verify these requirements:
 
 - [ ] `declare(strict_types=1)` in all files
 - [ ] PER Coding Style via PHP-CS-Fixer (`@PER-CS`)
@@ -109,15 +91,6 @@ When modernizing a PHP project, verify these requirements:
 - [ ] DTOs for data transfer, no array params/returns
 - [ ] Backed enums for all status/type values
 - [ ] Type-hint against PSR interfaces
-
-## Scoring Criteria
-
-| Criterion | Requirement |
-|-----------|-------------|
-| PHPStan | Level 9 minimum |
-| PHP-CS-Fixer | `@PER-CS` zero violations |
-| DTOs/VOs | No array params/returns for structured data |
-| Enums | Backed enums for fixed value sets |
 
 ---
 
