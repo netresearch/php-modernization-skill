@@ -1,5 +1,5 @@
 {
-  "name": "netresearch/agent-php-modernization",
+  "name": "netresearch/php-modernization-skill",
   "description": "Netresearch AI skill for PHP 8.x modernization, type safety and legacy code upgrades",
   "type": "ai-agent-skill",
   "license": "MIT",
@@ -15,6 +15,9 @@
   },
   "extra": {
     "ai-agent-skill": "skills/php-modernization/SKILL.md"
+  },
+  "replace": {
+    "netresearch/agent-php-modernization": "self.version"
   },
   "support": {
     "issues": "https://github.com/netresearch/php-modernization-skill/issues",
