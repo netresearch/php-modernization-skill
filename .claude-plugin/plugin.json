@@ -2,11 +2,11 @@
   "name": "php-modernization",
   "version": "1.7.4",
   "description": "PHP 8.x modernization patterns with type safety and PHPStan",
-  "repository": "https://github.com/netresearch/php-modernization-skill",
+  "repository": "https://www.netresearch.de",
   "license": "MIT",
   "author": {
     "name": "Netresearch DTT GmbH",
-    "url": "https://github.com/netresearch/php-modernization-skill"
+    "url": "https://www.netresearch.de"
   },
   "skills": [
     "./skills/php-modernization"
