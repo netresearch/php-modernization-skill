@@ -263,8 +263,12 @@ See `references/php8-features.md` for complete enum patterns including methods, 
 
 ## License
 
-MIT License - See [LICENSE](LICENSE) for details.
+This project uses split licensing:
 
+- **Code** (scripts, workflows, configs): [MIT](LICENSE-MIT)
+- **Content** (skill definitions, documentation, references): [CC-BY-SA-4.0](LICENSE-CC-BY-SA-4.0)
+
+See the individual license files for full terms.
 ## Credits
 
 Developed and maintained by [Netresearch DTT GmbH](https://www.netresearch.de/).

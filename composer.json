@@ -1,26 +1,26 @@
 {
-  "name": "netresearch/php-modernization-skill",
-  "description": "Netresearch AI skill for PHP 8.x modernization, type safety and legacy code upgrades",
-  "type": "ai-agent-skill",
-  "license": "MIT",
-  "authors": [
-    {
-      "name": "Netresearch DTT GmbH",
-      "homepage": "https://www.netresearch.de/",
-      "role": "Manufacturer"
+    "name": "netresearch/php-modernization-skill",
+    "description": "Netresearch AI skill for PHP 8.x modernization, type safety and legacy code upgrades",
+    "type": "ai-agent-skill",
+    "license": "(MIT AND CC-BY-SA-4.0)",
+    "authors": [
+        {
+            "name": "Netresearch DTT GmbH",
+            "homepage": "https://www.netresearch.de/",
+            "role": "Manufacturer"
+        }
+    ],
+    "require": {
+        "netresearch/composer-agent-skill-plugin": "*"
+    },
+    "extra": {
+        "ai-agent-skill": "skills/php-modernization/SKILL.md"
+    },
+    "replace": {
+        "netresearch/agent-php-modernization": "self.version"
+    },
+    "support": {
+        "issues": "https://github.com/netresearch/php-modernization-skill/issues",
+        "source": "https://github.com/netresearch/php-modernization-skill"
     }
-  ],
-  "require": {
-    "netresearch/composer-agent-skill-plugin": "*"
-  },
-  "extra": {
-    "ai-agent-skill": "skills/php-modernization/SKILL.md"
-  },
-  "replace": {
-    "netresearch/agent-php-modernization": "self.version"
-  },
-  "support": {
-    "issues": "https://github.com/netresearch/php-modernization-skill/issues",
-    "source": "https://github.com/netresearch/php-modernization-skill"
-  }
 }
