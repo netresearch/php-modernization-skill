@@ -7,15 +7,14 @@ skill_id: php-modernization
 mechanical:
   # === PHPSTAN CONFIGURATION ===
   - id: PM-01
-    type: file_exists
-    target: "{phpstan.neon,Build/phpstan.neon}"
+    type: command
+    command: "test -f phpstan.neon || test -f Build/phpstan.neon || test -f phpstan.neon.dist"
     severity: error
-    desc: "PHPStan configuration must exist"
+    desc: "PHPStan configuration must exist (phpstan.neon, Build/phpstan.neon, or phpstan.neon.dist)"
 
   - id: PM-02
-    type: regex
-    target: "{phpstan.neon,Build/phpstan.neon}"
-    pattern: 'level:\s*(9|1[0-9]|max)'
+    type: command
+    command: "grep -qlE 'level:\\s*(9|1[0-9]|max)' phpstan.neon Build/phpstan.neon phpstan.neon.dist 2>/dev/null"
     severity: error
     desc: "PHPStan level must be 9 or higher (or max)"
 
@@ -49,18 +48,18 @@ mechanical:
 
   # === STRICT TYPES DECLARATION ===
   - id: PM-07
-    type: regex
+    type: contains
     target: Classes/**/*.php
-    pattern: 'declare\s*\(\s*strict_types\s*=\s*1\s*\)'
+    pattern: "declare(strict_types=1)"
     severity: error
-    desc: "PHP files must declare strict_types=1 at the top"
+    desc: "PHP files must declare strict_types=1"
 
   - id: PM-08
-    type: regex
+    type: contains
     target: Tests/**/*.php
-    pattern: 'declare\s*\(\s*strict_types\s*=\s*1\s*\)'
+    pattern: "declare(strict_types=1)"
     severity: error
-    desc: "Test files must declare strict_types=1 at the top"
+    desc: "Test files must declare strict_types=1"
 
   # === RECTOR CONFIGURATION ===
   - id: PM-09
@@ -113,19 +112,19 @@ mechanical:
     desc: "Composer should have a Rector script"
 
   # === DEV DEPENDENCIES ===
+  # Note: command type checks both direct and transitive dependencies
+  # (e.g., via shared CI packages like netresearch/composer-patches-plugin)
   - id: PM-16
-    type: json_path
-    target: composer.json
-    pattern: '."require-dev"["phpstan/phpstan"]'
+    type: command
+    command: "composer show --dev 2>/dev/null | grep -q phpstan/phpstan"
     severity: error
-    desc: "PHPStan must be in require-dev"
+    desc: "PHPStan must be available as a dev dependency (direct or transitive)"
 
   - id: PM-17
-    type: json_path
-    target: composer.json
-    pattern: '."require-dev"["friendsofphp/php-cs-fixer"]'
+    type: command
+    command: "composer show --dev 2>/dev/null | grep -q friendsofphp/php-cs-fixer"
     severity: error
-    desc: "PHP-CS-Fixer must be in require-dev"
+    desc: "PHP-CS-Fixer must be available as a dev dependency (direct or transitive)"
 
   - id: PM-18
     type: json_path
