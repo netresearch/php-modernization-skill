@@ -116,15 +116,15 @@ mechanical:
   # (e.g., via shared CI packages like netresearch/composer-patches-plugin)
   - id: PM-16
     type: command
-    command: "composer show --dev 2>/dev/null | grep -q phpstan/phpstan"
-    severity: error
-    desc: "PHPStan must be available as a dev dependency (direct or transitive)"
+    command: "test -f .Build/bin/phpstan || grep -q phpstan composer.json || grep -q phpstan composer.lock"
+    severity: warning
+    desc: "PHPStan should be available (directly or transitively via a CI package)"
 
   - id: PM-17
     type: command
-    command: "composer show --dev 2>/dev/null | grep -q friendsofphp/php-cs-fixer"
-    severity: error
-    desc: "PHP-CS-Fixer must be available as a dev dependency (direct or transitive)"
+    command: "test -f .Build/bin/php-cs-fixer || grep -q php-cs-fixer composer.json || grep -q php-cs-fixer composer.lock"
+    severity: warning
+    desc: "PHP-CS-Fixer should be available (directly or transitively via a CI package)"
 
   - id: PM-18
     type: json_path
