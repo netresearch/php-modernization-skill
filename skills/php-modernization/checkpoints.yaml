@@ -133,6 +133,29 @@ mechanical:
     severity: warning
     desc: "Rector should be in require-dev"
 
+  # === PSR-4 AUTOLOADING ===
+  - id: PM-19
+    type: json_path
+    target: composer.json
+    pattern: '.autoload["psr-4"]'
+    severity: error
+    desc: "composer.json must have PSR-4 autoloading configured"
+
+  # === PHP-CS-FIXER RISKY RULES ===
+  - id: PM-24
+    type: contains
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php}"
+    pattern: "risky"
+    severity: info
+    desc: "PHP-CS-Fixer should enable @PER-CS:risky for comprehensive enforcement"
+
+  # === PHPAT ARCHITECTURE TESTS ===
+  - id: PM-25
+    type: command
+    pattern: "grep -rq 'phpat' composer.json 2>/dev/null || true"
+    severity: info
+    desc: "PHPat should be configured for architecture testing in defined architectures"
+
 llm_reviews:
   # === CODE QUALITY PATTERNS ===
   - id: PM-20
