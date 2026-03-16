@@ -25,24 +25,40 @@ This is an **Agent Skill** following the [open standard](https://agentskills.io)
 
 ## Installation
 
-### Option 1: Via Netresearch Marketplace (Recommended)
+### Marketplace (Recommended)
+
+Add the [Netresearch marketplace](https://github.com/netresearch/claude-code-marketplace) once, then browse and install skills:
 
 ```bash
+# Claude Code
 /plugin marketplace add netresearch/claude-code-marketplace
 ```
 
-### Option 2: Download Release
+### npx ([skills.sh](https://skills.sh))
 
-Download the [latest release](https://github.com/netresearch/php-modernization-skill/releases/latest) and extract to `~/.claude/skills/php-modernization-skill/`
-
-### Option 3: Composer (PHP projects)
+Install with any [Agent Skills](https://agentskills.io)-compatible agent:
 
 ```bash
-composer require netresearch/agent-php-modernization-skill
+npx skills add https://github.com/netresearch/php-modernization-skill --skill php-modernization
 ```
 
-**Requires:** [netresearch/composer-agent-skill-plugin](https://github.com/netresearch/composer-agent-skill-plugin)
+### Download Release
 
+Download the [latest release](https://github.com/netresearch/php-modernization-skill/releases/latest) and extract to your agent's skills directory.
+
+### Git Clone
+
+```bash
+git clone https://github.com/netresearch/php-modernization-skill.git
+```
+
+### Composer (PHP Projects)
+
+```bash
+composer require netresearch/php-modernization-skill
+```
+
+Requires [netresearch/composer-agent-skill-plugin](https://github.com/netresearch/composer-agent-skill-plugin).
 ## Usage
 
 This skill is automatically triggered when:
