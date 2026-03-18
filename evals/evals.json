@@ -1,0 +1,34 @@
+[
+  {
+    "name": "modernize-php-class",
+    "prompt": "Modernize this PHP class to use PHP 8.2 features",
+    "assertions": [
+      {
+        "type": "tool_use",
+        "tool": "Read",
+        "description": "Reads existing PHP class to analyze modernization opportunities"
+      },
+      {
+        "type": "content_contains",
+        "value": "readonly",
+        "description": "Suggests readonly properties or classes (PHP 8.2 feature)"
+      }
+    ]
+  },
+  {
+    "name": "configure-phpstan-level9",
+    "prompt": "Configure PHPStan level 9 for this project",
+    "assertions": [
+      {
+        "type": "tool_use",
+        "tool": "Glob",
+        "description": "Scans for existing PHPStan configuration"
+      },
+      {
+        "type": "content_contains",
+        "value": "level: 9",
+        "description": "Configures PHPStan at level 9"
+      }
+    ]
+  }
+]

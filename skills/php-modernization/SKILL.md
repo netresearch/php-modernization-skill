@@ -1,6 +1,19 @@
 ---
 name: php-modernization
-description: "Use when upgrading to PHP 8.1+, implementing type safety, configuring PHPStan/Rector/PHP-CS-Fixer, or modernizing PHP code with enums, DTOs, and readonly properties."
+description: "ALWAYS use for ANY PHP modernization task: upgrading PHP 8.1+, adding strict types, configuring PHPStan/Rector/PHP-CS-Fixer, refactoring to enums/DTOs/readonly, improving type safety, or reviewing PHP code quality. Triggers on: PHP upgrade, modernize, type safety, PHPStan, Rector, PHP-CS-Fixer, enum, DTO, readonly, strict_types."
+license: "(MIT AND CC-BY-SA-4.0)"
+compatibility: "Requires php 8.1+, composer."
+metadata:
+  version: "1.8.0"
+  repository: "https://github.com/netresearch/php-modernization-skill"
+  author: "Netresearch DTT GmbH"
+allowed-tools:
+  - "Bash(php:*)"
+  - "Bash(composer:*)"
+  - "Read"
+  - "Write"
+  - "Glob"
+  - "Grep"
 ---
 
 # PHP Modernization Skill
@@ -48,23 +61,9 @@ When planning PHP version upgrades or modernization projects, consult `reference
 
 ## Running Scripts
 
-### Project Verification
-
-To verify a PHP project meets modernization requirements:
-
-```bash
-scripts/verify-php-project.sh /path/to/project
-```
-
-This script checks:
-- PHPStan level compliance
-- PHP-CS-Fixer configuration
-- Type declaration coverage
-- DTO usage patterns
+Verify a project: `scripts/verify-php-project.sh /path/to/project`
 
 ## Required Tools
-
-When setting up a modernized PHP project, ensure these tools are configured:
 
 | Tool | Requirement |
 |------|-------------|
