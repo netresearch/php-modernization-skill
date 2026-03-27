@@ -141,6 +141,16 @@ mechanical:
     severity: error
     desc: "composer.json must have PSR-4 autoloading configured"
 
+  # === PHP-CS-FIXER COPYRIGHT HEADER ===
+  - id: PM-30
+    name: PHP-CS-Fixer configured with header_comment rule
+    type: regex
+    severity: info
+    path: "**/.php-cs-fixer.php"
+    pattern: "header_comment"
+    message: "Configure header_comment rule in php-cs-fixer for consistent copyright headers"
+    tags: [copyright, cs-fixer, headers]
+
   # === PHP-CS-FIXER RISKY RULES ===
   - id: PM-24
     type: contains
@@ -297,3 +307,31 @@ llm_reviews:
       processor interfaces.
     severity: info
     desc: "Factory patterns must have capability fallback; PHPStan baseline must shrink"
+
+  # === DRY / CODE DUPLICATION ===
+  - id: PM-29
+    name: No duplicated utility methods across classes
+    type: llm_review
+    severity: warning
+    domain: dry
+    prompt: |
+      Scan for duplicated utility methods across PHP classes:
+      1. Type coercion helpers (intVal, stringVal, intFrom) in multiple classes
+      2. Translation helpers (translate, getTranslation) in multiple classes
+      3. Encryption/key access methods duplicated across services
+      4. User extraction from $GLOBALS duplicated across controllers
+      If found, suggest extracting into shared traits in a Utility/ namespace.
+    tags: [dry, duplication, traits, refactoring]
+
+  # === TRAIT NAMESPACE ARCHITECTURE ===
+  - id: PM-31
+    name: Shared traits in Utility or dedicated namespace
+    type: llm_review
+    severity: warning
+    domain: architecture
+    prompt: |
+      Check that shared traits (used by classes in multiple namespaces)
+      are placed in a neutral namespace like Utility/ or Traits/.
+      A trait in Controller/ should not be used by Middleware/ or UserSettings/.
+      This prevents architecture layer violations detected by tools like PHPat.
+    tags: [traits, namespace, architecture, phpat]
