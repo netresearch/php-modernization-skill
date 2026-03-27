@@ -24,7 +24,9 @@ class ImageProcessor implements LoggerAwareInterface
     }
 
     /**
-     * Helper to narrow type for PHPStan (trait property is ?LoggerInterface)
+     * Narrow type for PHPStan — LoggerAwareTrait declares ?LoggerInterface.
+     * After construction, $this->logger is always set (NullLogger default),
+     * but the ?? fallback satisfies static analysis of the trait property type.
      */
     private function getLogger(): LoggerInterface
     {
@@ -121,6 +123,10 @@ Use factory classes for runtime library selection with graceful degradation.
 ### Correct Pattern
 
 ```php
+use Intervention\Image\ImageManager;
+use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
+use Intervention\Image\Drivers\Gd\Driver as GdDriver;
+
 class ImageManagerFactory
 {
     public function create(): ImageManager
@@ -151,15 +157,20 @@ services:
     factory: ['@Vendor\Extension\Service\ImageManagerFactory', 'create']
 ```
 
-### Generic Processor Interface
+### HTTP Processor Interface
 
 ```php
+use Psr\Http\Message\ServerRequestInterface;
+use Psr\Http\Message\ResponseInterface;
+
 interface ProcessorInterface
 {
     public function process(ServerRequestInterface $request): ResponseInterface;
     public function canProcess(ServerRequestInterface $request): bool;
 }
 ```
+
+> **Note:** For non-HTTP processing (e.g., image optimization), replace PSR-7 types with domain-specific parameters (e.g., `process(string $filePath): ProcessingResult`).
 
 This enables middleware-style decoupling where processors can be swapped, chained, or decorated without modifying consumers.
 
