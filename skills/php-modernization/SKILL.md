@@ -55,6 +55,10 @@ When implementing adapter registry patterns for multiple external services, cons
 
 When using Symfony DI, events, or modern framework patterns, consult `references/symfony-patterns.md` for architecture best practices.
 
+### TYPO3-Specific Patterns
+
+When implementing PSR-3 logging, PSR-14 events, factory patterns, or managing PHPStan baselines in TYPO3 extensions, consult `references/typo3-psr-patterns.md` for TYPO3-specific implementations.
+
 ### Migration Planning
 
 When planning PHP version upgrades or modernization projects, consult `references/migration-strategies.md` for assessment phases, compatibility checks, and migration workflows.
