@@ -242,3 +242,58 @@ llm_reviews:
       Suggest specific configuration improvements.
     severity: warning
     desc: "Verify PHPStan configuration follows best practices"
+
+  # === TYPO3-SPECIFIC PSR PATTERNS ===
+  - id: PM-26
+    domain: code-quality
+    prompt: |
+      Review the TYPO3 extension codebase for PSR-3 logging compliance.
+
+      Check for:
+      1. Classes implementing LoggerAwareInterface should use LoggerAwareTrait
+      2. Constructor should set $this->logger = new NullLogger() as default
+      3. A private getLogger(): LoggerInterface helper should exist to narrow
+         the nullable trait property for PHPStan
+      4. No nullable $logger properties with null checks scattered in methods
+      5. Logger should NOT be a required constructor parameter
+
+      Examine files in Classes/ directory. Report specific violations.
+    severity: warning
+    desc: "TYPO3 services must use LoggerAwareInterface with NullLogger default (not nullable)"
+
+  - id: PM-27
+    domain: code-quality
+    prompt: |
+      Review the TYPO3 extension codebase for PSR-14 event dispatch safety.
+
+      Check for:
+      1. Event dispatch calls that are NOT wrapped in try/catch for post-processing
+         or notification events (listener failures must not break main flow)
+      2. Validation events that correctly do NOT catch exceptions (listeners may
+         legitimately stop flow)
+      3. Caught exceptions should be logged with context (event class, exception)
+      4. Event classes should be final with readonly constructor properties
+
+      Examine files in Classes/ directory. Report unguarded dispatches that should
+      be guarded, and guarded dispatches that should not be.
+    severity: warning
+    desc: "PSR-14 event dispatch must be try/catch guarded for non-validation events"
+
+  - id: PM-28
+    domain: code-quality
+    prompt: |
+      Review the TYPO3 extension for factory pattern and PHPStan baseline practices.
+
+      Check for:
+      1. Factory classes that select implementations at runtime should have explicit
+         fallback chains (e.g., Imagick -> GD -> RuntimeException)
+      2. Services.yaml should wire factories correctly using the factory key
+      3. PHPStan baseline (phpstan-baseline.neon) should be shrinking, not growing
+      4. No new baseline entries should be added — issues should be fixed immediately
+      5. ProcessorInterface pattern: services with process() + canProcess() for
+         middleware-style decoupling
+
+      Report specific issues with factory wiring, baseline growth, or missing
+      processor interfaces.
+    severity: info
+    desc: "Factory patterns must have capability fallback; PHPStan baseline must shrink"
