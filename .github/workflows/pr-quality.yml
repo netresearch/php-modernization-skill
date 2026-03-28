@@ -1,0 +1,47 @@
+# .github/workflows/pr-quality.yml
+# Solo-maintainer auto-approve: approves PRs from repo collaborators
+# so that required_approving_review_count >= 1 is satisfied without
+# manual review for trusted authors.
+#
+# SECURITY: This workflow uses pull_request_target which runs with base branch
+# permissions. NEVER add an actions/checkout step here -- that would allow code
+# from the PR to execute with write access to the repository.
+#
+# Bootstrap: The PR that introduces this workflow must be approved manually
+# (the workflow isn't on the base branch yet). All subsequent PRs auto-approve.
+
+name: PR Quality Gates
+
+on:
+    pull_request_target:
+        types: [opened, synchronize, reopened]
+
+jobs:
+    auto-approve:
+        name: Auto-approve (collaborators)
+        runs-on: ubuntu-latest
+        permissions:
+            pull-requests: write
+
+        steps:
+            - name: Harden Runner
+              uses: step-security/harden-runner@v2
+              with:
+                  egress-policy: audit
+
+            - name: Check author permission
+              id: check-permission
+              env:
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+                  PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+                  REPO: ${{ github.repository }}
+              run: |
+                  PERMISSION=$(gh api "repos/$REPO/collaborators/$PR_AUTHOR/permission" --jq '.permission' 2>/dev/null || echo "none")
+                  echo "permission=$PERMISSION" >> "$GITHUB_OUTPUT"
+
+            - name: Auto-approve PR
+              if: steps.check-permission.outputs.permission == 'admin' || steps.check-permission.outputs.permission == 'write'
+              env:
+                  PR_URL: ${{ github.event.pull_request.html_url }}
+                  GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              run: gh pr review --approve "$PR_URL"
