@@ -393,7 +393,7 @@ return (new PhpCsFixer\Config())
 
 ### Deprecation Check
 
-PHP-CS-Fixer 3.90+ renamed several rule set aliases. Always check for deprecations:
+PHP-CS-Fixer 3.50.0+ renamed several rule set aliases. Always check for deprecations:
 
 ```bash
 vendor/bin/php-cs-fixer fix --dry-run 2>&1 | grep -A 20 "Detected deprecations"

@@ -518,13 +518,13 @@ readonly class Money
 When processing JSON arrays (e.g., LLM embedding vectors), use `list<float>` not `array<string, float>`:
 
 ```php
-// WRONG - array_map preserves string keys from getArray()
-/** @var array<string, float> $embedding */
+// If $rawData has string keys, this creates an associative array.
 $embedding = array_map(fn($v): float => (float) $v, $rawData);
 
-// CORRECT - normalize to sequential integer keys
-/** @var list<float> $embedding */
+// array_values() ensures a list by re-indexing to sequential integer keys.
+// Use assertions for type narrowing instead of @var annotations.
 $embedding = array_values(array_map(fn($v): float => (float) $v, $rawData));
+assert(array_is_list($embedding));
 ```
 
 PHPStan at level 10 distinguishes between `array<string, float>` and `list<float>`. JSON arrays always have integer keys.
