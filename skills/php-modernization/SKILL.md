@@ -43,6 +43,10 @@ When configuring PHPStan levels or understanding level requirements, consult `re
 
 When setting up PHPStan, PHPat, Rector, or PHP-CS-Fixer, consult `references/static-analysis-tools.md` for configuration examples and integration patterns.
 
+### PHP-CS-Fixer Deprecations
+
+When configuring or updating PHP-CS-Fixer, consult `references/php-cs-fixer-deprecations.md` for deprecated rule set aliases and their replacements. Always run `php-cs-fixer fix --dry-run 2>&1 | grep -A 20 "Detected deprecations"` to check for deprecated rules in `.php-cs-fixer.dist.php`.
+
 ### Type Safety
 
 When implementing type-safe code or migrating from arrays to DTOs, consult `references/type-safety.md` for type system strategies and best practices.
@@ -87,7 +91,7 @@ See `references/core-rules.md` for code examples and scoring criteria.
 ## Migration Checklist
 
 - [ ] `declare(strict_types=1)` in all files
-- [ ] PER Coding Style via PHP-CS-Fixer (`@PER-CS`)
+- [ ] PER Coding Style via PHP-CS-Fixer (`@PER-CS`) with no deprecated aliases
 - [ ] PHPStan level 9+ (level 10 for new projects)
 - [ ] PHPat architecture tests
 - [ ] Return types and parameter types on all methods

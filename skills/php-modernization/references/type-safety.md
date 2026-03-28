@@ -513,6 +513,22 @@ readonly class Money
 }
 ```
 
+## Embedding/Vector Type Annotations
+
+When processing JSON arrays (e.g., LLM embedding vectors), use `list<float>` not `array<string, float>`:
+
+```php
+// WRONG - array_map preserves string keys from getArray()
+/** @var array<string, float> $embedding */
+$embedding = array_map(fn($v): float => (float) $v, $rawData);
+
+// CORRECT - normalize to sequential integer keys
+/** @var list<float> $embedding */
+$embedding = array_values(array_map(fn($v): float => (float) $v, $rawData));
+```
+
+PHPStan at level 10 distinguishes between `array<string, float>` and `list<float>`. JSON arrays always have integer keys.
+
 ## Return Type Narrowing
 
 ```php
