@@ -166,6 +166,14 @@ mechanical:
     severity: info
     desc: "PHPat should be configured for architecture testing in defined architectures"
 
+  # === SINGLETON INTERFACE DEPRECATION ===
+  - id: PM-35
+    type: command
+    command: "! grep -rql 'SingletonInterface' Classes/ 2>/dev/null"
+    severity: warning
+    desc: "SingletonInterface is deprecated in TYPO3 v14. Migrate to proper DI scoping (Services.yaml shared: true) unless the class must be used with GeneralUtility::setSingletonInstance in tests."
+
+llm_reviews:
   # === READONLY CLASS STATIC PROPERTY CHECK ===
   - id: PM-32
     type: llm_review
@@ -177,16 +185,8 @@ mechanical:
       2. PHP 8.2+ readonly classes cannot have static properties
       3. Report each file and class where a readonly class declares a static property
       Only flag cases where the static property is inside the readonly class body, not in unrelated classes in the same file.
-    desc: "PHP 8.2+ readonly classes cannot have static properties (with default values). Remove static properties or remove the readonly class modifier."
+    desc: "PHP 8.2+ readonly classes cannot declare static properties. Remove static properties or remove the readonly class modifier."
 
-  # === SINGLETON INTERFACE DEPRECATION ===
-  - id: PM-35
-    type: command
-    command: "! grep -rql 'SingletonInterface' Classes/ 2>/dev/null"
-    severity: warning
-    desc: "SingletonInterface is deprecated in TYPO3 v14. Migrate to proper DI scoping (Services.yaml shared: true) unless the class must be used with GeneralUtility::setSingletonInstance in tests."
-
-llm_reviews:
   # === CODE QUALITY PATTERNS ===
   - id: PM-20
     domain: code-quality
@@ -394,8 +394,9 @@ llm_reviews:
       1. sodium_memzero($var) where $var was assigned from another variable
          (e.g., $key = $this->masterKey; sodium_memzero($key) — only zeroes
          the copy, not the original)
-      2. Any destructive function (sodium_memzero, openssl_pkey_free, etc.)
-         applied to a variable that is a COW reference to another value
+      2. Any destructive function on string or buffer data (for example,
+         sodium_memzero or similar zeroization routines) applied to a variable
+         that is a COW reference to another value
       3. Variables assigned via simple assignment ($a = $b) then modified
          destructively — the original $b is unaffected due to COW
       4. Suggest using references (&$var) or operating directly on the source
