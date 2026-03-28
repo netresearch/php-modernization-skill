@@ -168,15 +168,21 @@ mechanical:
 
   # === READONLY CLASS STATIC PROPERTY CHECK ===
   - id: PM-32
-    type: command
-    command: "! grep -rlPzo '(?s)readonly\\s+class.*?\\{' Classes/ 2>/dev/null | xargs -r grep -l 'private static\\|protected static\\|public static' 2>/dev/null"
+    type: llm_review
     severity: error
+    domain: code-quality
+    prompt: |
+      Review all PHP classes in Classes/ marked as `readonly class`:
+      1. Check if any readonly class contains static properties (private static, protected static, public static)
+      2. PHP 8.2+ readonly classes cannot have static properties
+      3. Report each file and class where a readonly class declares a static property
+      Only flag cases where the static property is inside the readonly class body, not in unrelated classes in the same file.
     desc: "PHP 8.2+ readonly classes cannot have static properties (with default values). Remove static properties or remove the readonly class modifier."
 
   # === SINGLETON INTERFACE DEPRECATION ===
   - id: PM-35
     type: command
-    command: "! grep -rl 'SingletonInterface' Classes/ 2>/dev/null | head -1"
+    command: "! grep -rql 'SingletonInterface' Classes/ 2>/dev/null"
     severity: warning
     desc: "SingletonInterface is deprecated in TYPO3 v14. Migrate to proper DI scoping (Services.yaml shared: true) unless the class must be used with GeneralUtility::setSingletonInstance in tests."
 
