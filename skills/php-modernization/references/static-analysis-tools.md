@@ -391,6 +391,16 @@ return (new PhpCsFixer\Config())
     ->setFinder($finder);
 ```
 
+### Deprecation Check
+
+PHP-CS-Fixer 3.50.0+ renamed several rule set aliases. Always check for deprecations:
+
+```bash
+vendor/bin/php-cs-fixer fix --dry-run 2>&1 | grep -A 20 "Detected deprecations"
+```
+
+See `references/php-cs-fixer-deprecations.md` for the full mapping of deprecated aliases to replacements.
+
 ### Usage
 
 ```bash

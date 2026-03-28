@@ -27,41 +27,23 @@ Modernize PHP applications to PHP 8.x with type safety, PSR compliance, and stat
 - **Static Analysis**: PHPStan (level 9+), PHPat, Rector, PHP-CS-Fixer
 - **Type Safety**: DTOs/VOs over arrays, generics via PHPDoc
 
-## Using Reference Documentation
+## Reference Documentation
 
-### PHP Version Features
+| Topic | Reference File |
+|-------|---------------|
+| PHP 8.0-8.5 features | `references/php8-features.md` |
+| PSR/PER compliance | `references/psr-per-compliance.md` |
+| PHPStan levels | `references/phpstan-compliance.md` |
+| Static analysis tools | `references/static-analysis-tools.md` |
+| PHP-CS-Fixer deprecations | `references/php-cs-fixer-deprecations.md` |
+| Type safety, DTOs | `references/type-safety.md` |
+| Request DTOs | `references/request-dtos.md` |
+| Adapter registry | `references/adapter-registry-pattern.md` |
+| Symfony patterns | `references/symfony-patterns.md` |
+| TYPO3 PSR patterns | `references/typo3-psr-patterns.md` |
+| Migration planning | `references/migration-strategies.md` |
 
-When implementing PHP 8.0-8.5 features (constructor promotion, readonly properties, enums, match expressions, attributes), consult `references/php8-features.md`.
-
-### Standards Compliance
-
-When ensuring PSR/PER compliance or configuring PHP-CS-Fixer with `@PER-CS`, consult `references/psr-per-compliance.md` for active PHP-FIG standards.
-
-When configuring PHPStan levels or understanding level requirements, consult `references/phpstan-compliance.md` for level overview and production configuration.
-
-### Static Analysis Tools
-
-When setting up PHPStan, PHPat, Rector, or PHP-CS-Fixer, consult `references/static-analysis-tools.md` for configuration examples and integration patterns.
-
-### Type Safety
-
-When implementing type-safe code or migrating from arrays to DTOs, consult `references/type-safety.md` for type system strategies and best practices.
-
-When creating request DTOs or handling safe integer conversion, consult `references/request-dtos.md` for DTO patterns and validation approaches.
-
-### Architecture Patterns
-
-When implementing adapter registry patterns for multiple external services, consult `references/adapter-registry-pattern.md` for dynamic adapter instantiation from database configuration.
-
-When using Symfony DI, events, or modern framework patterns, consult `references/symfony-patterns.md` for architecture best practices.
-
-### TYPO3-Specific Patterns
-
-When implementing PSR-3 logging, PSR-14 events, factory patterns, or managing PHPStan baselines in TYPO3 extensions, consult `references/typo3-psr-patterns.md` for TYPO3-specific implementations.
-
-### Migration Planning
-
-When planning PHP version upgrades or modernization projects, consult `references/migration-strategies.md` for assessment phases, compatibility checks, and migration workflows.
+Always run `vendor/bin/php-cs-fixer fix --dry-run 2>&1 | grep -A 20 "Detected deprecations"` to check for deprecated rules.
 
 ## Running Scripts
 
@@ -87,7 +69,7 @@ See `references/core-rules.md` for code examples and scoring criteria.
 ## Migration Checklist
 
 - [ ] `declare(strict_types=1)` in all files
-- [ ] PER Coding Style via PHP-CS-Fixer (`@PER-CS`)
+- [ ] PER Coding Style via PHP-CS-Fixer (`@PER-CS`) with no deprecated aliases
 - [ ] PHPStan level 9+ (level 10 for new projects)
 - [ ] PHPat architecture tests
 - [ ] Return types and parameter types on all methods
