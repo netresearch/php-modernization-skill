@@ -166,7 +166,27 @@ mechanical:
     severity: info
     desc: "PHPat should be configured for architecture testing in defined architectures"
 
+  # === SINGLETON INTERFACE DEPRECATION ===
+  - id: PM-35
+    type: command
+    command: "! grep -rql 'SingletonInterface' Classes/ 2>/dev/null"
+    severity: warning
+    desc: "SingletonInterface is deprecated in TYPO3 v14. Migrate to proper DI scoping (Services.yaml shared: true) unless the class must be used with GeneralUtility::setSingletonInstance in tests."
+
 llm_reviews:
+  # === READONLY CLASS STATIC PROPERTY CHECK ===
+  - id: PM-32
+    type: llm_review
+    severity: error
+    domain: code-quality
+    prompt: |
+      Review all PHP classes in Classes/ marked as `readonly class`:
+      1. Check if any readonly class contains static properties (private static, protected static, public static)
+      2. PHP 8.2+ readonly classes cannot have static properties
+      3. Report each file and class where a readonly class declares a static property
+      Only flag cases where the static property is inside the readonly class body, not in unrelated classes in the same file.
+    desc: "PHP 8.2+ readonly classes cannot declare static properties. Remove static properties or remove the readonly class modifier."
+
   # === CODE QUALITY PATTERNS ===
   - id: PM-20
     domain: code-quality
@@ -335,3 +355,74 @@ llm_reviews:
       A trait in Controller/ should not be used by Middleware/ or UserSettings/.
       This prevents architecture layer violations detected by tools like PHPat.
     tags: [traits, namespace, architecture, phpat]
+
+  # === MAKEINSTANCE TO DEPENDENCY INJECTION ===
+  - id: PM-33
+    name: GeneralUtility::makeInstance() in DI-managed classes
+    type: llm_review
+    severity: warning
+    domain: code-quality
+    prompt: |
+      Review the codebase for GeneralUtility::makeInstance() calls in classes
+      that are registered in Configuration/Services.yaml (or Services.php).
+
+      Classes managed by the DI container should use constructor injection instead
+      of GeneralUtility::makeInstance(). Check for:
+      1. Classes listed in Services.yaml that call GeneralUtility::makeInstance()
+      2. Suggest constructor injection for each dependency resolved via makeInstance()
+      3. EXCEPTION: Scheduler task classes extending AbstractTask — these are
+         unserialized by the TYPO3 scheduler, so constructor DI is incompatible.
+         Do NOT flag makeInstance() in AbstractTask subclasses.
+      4. Also acceptable: makeInstance() for value objects or non-service classes
+         that are not in the DI container (e.g., DataHandler, FlashMessage).
+
+      Report specific files and line numbers where makeInstance() should be
+      replaced with constructor injection.
+    tags: [di, dependency-injection, makeinstance, typo3, services]
+
+  # === COPY-ON-WRITE AWARENESS FOR DESTRUCTIVE OPERATIONS ===
+  - id: PM-34
+    name: Copy-on-write safety for destructive memory operations
+    type: llm_review
+    severity: error
+    domain: code-quality
+    prompt: |
+      Review the codebase for destructive in-place memory operations that may
+      be affected by PHP's copy-on-write (COW) semantics.
+
+      Check for patterns like:
+      1. sodium_memzero($var) where $var was assigned from another variable
+         (e.g., $key = $this->masterKey; sodium_memzero($key) — only zeroes
+         the copy, not the original)
+      2. Any destructive function on string or buffer data (for example,
+         sodium_memzero or similar zeroization routines) applied to a variable
+         that is a COW reference to another value
+      3. Variables assigned via simple assignment ($a = $b) then modified
+         destructively — the original $b is unaffected due to COW
+      4. Suggest using references (&$var) or operating directly on the source
+         variable when the intent is to destroy the original data
+
+      This is critical for security-sensitive code handling encryption keys,
+      passwords, or other secrets where memory cleanup matters.
+    tags: [cow, copy-on-write, sodium, security, memory]
+
+  # === SINGLETON INTERFACE DEPRECATION (LLM companion to PM-35) ===
+  - id: PM-36
+    name: SingletonInterface deprecated in TYPO3 v14
+    type: llm_review
+    severity: warning
+    domain: code-quality
+    prompt: |
+      Review the codebase for uses of TYPO3\CMS\Core\SingletonInterface.
+
+      Check for:
+      1. Classes implementing SingletonInterface — this is deprecated in TYPO3 v14
+      2. Suggest migration to proper DI container scoping (shared: true in Services.yaml)
+      3. EXCEPTION: Classes that must be used with GeneralUtility::setSingletonInstance()
+         in test fixtures. These may need to keep the interface temporarily until
+         the test setup is refactored to use proper DI container overrides.
+      4. Check if the singleton behavior is actually needed or if the class can
+         simply be a regular shared service (which is the DI container default).
+
+      Report specific files implementing SingletonInterface and migration path.
+    tags: [singleton, typo3, deprecation, di, v14]
