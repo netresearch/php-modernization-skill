@@ -4,7 +4,7 @@ description: "Use when working with ANY PHP modernization task: upgrading PHP 8.
 license: "(MIT AND CC-BY-SA-4.0)"
 compatibility: "Requires php 8.1+, composer."
 metadata:
-  version: "1.11.0"
+  version: "1.12.0"
   repository: "https://github.com/netresearch/php-modernization-skill"
   author: "Netresearch DTT GmbH"
 allowed-tools:
@@ -39,6 +39,7 @@ Modernize PHP applications to PHP 8.x with type safety, PSR compliance, and stat
 | Type safety, DTOs | `references/type-safety.md` |
 | Request DTOs | `references/request-dtos.md` |
 | Adapter registry | `references/adapter-registry-pattern.md` |
+| Multi-version adapters | `references/multi-version-adapters.md` |
 | Symfony patterns | `references/symfony-patterns.md` |
 | TYPO3 PSR patterns | `references/typo3-psr-patterns.md` |
 | Migration planning | `references/migration-strategies.md` |
