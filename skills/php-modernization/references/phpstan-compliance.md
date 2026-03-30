@@ -311,11 +311,11 @@ public function process(): void
 
 ```php
 // This ignore is needed on v2 but errors on v4 (method exists in v4):
-/** @phpstan-ignore method.notFound */
+// @phpstan-ignore-next-line method.notFound
 $image->encodeByExtension('webp');
 
 // This ignore is needed on v4 but errors on v2 (method exists in v2):
-/** @phpstan-ignore method.notFound */
+// @phpstan-ignore-next-line method.notFound
 $image->encode('webp', 80);
 ```
 

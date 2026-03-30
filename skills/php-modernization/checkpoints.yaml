@@ -176,7 +176,7 @@ mechanical:
   # === MULTI-VERSION LIBRARY ADAPTERS ===
   - id: PM-37
     type: command
-    command: "! grep -rqlP '(method_exists|function_exists)' Classes/ 2>/dev/null || grep -rqlP '@phpstan-ignore method\\.dynamicName' Classes/ 2>/dev/null"
+    command: "! find Classes -type f -name '*.php' -exec sh -c 'grep -Eq \"(method_exists|function_exists)\" \"$1\" && ! grep -Eq \"@phpstan-ignore method\\.dynamicName\" \"$1\"' sh {} \\; -print -quit | grep -q ."
     severity: info
     desc: "Classes using method_exists() for version detection should use adapter pattern with dynamic dispatch (@phpstan-ignore method.dynamicName)"
 

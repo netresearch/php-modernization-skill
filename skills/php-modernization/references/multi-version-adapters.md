@@ -114,7 +114,7 @@ final class InterventionImageAdapter implements ImageManagerInterface
             return (string) $encoded;
         }
 
-        // v2: $image->encode('webp', 80)->getEncoded()
+        // v2: $image->encode('webp', 80) returns an Intervention\Image\Image
         $method = 'encode';
         // @phpstan-ignore method.dynamicName
         $encoded = $image->{$method}($format, $quality);
@@ -229,19 +229,19 @@ are version-specific vs. universal in your adapter's PHPDoc.
 | Problem | Solution |
 |---------|----------|
 | `method_exists()` narrowed on typed param | Use `object` parameter type |
-| `@phpstan-ignore` for v2 method errors on v4 | Isolate in adapter with dynamic dispatch |
+| `@phpstan-ignore-next-line` for v2 method errors on v4 | Isolate in adapter with dynamic dispatch |
 | `@phpstan-ignore-next-line` is version-specific | Use `method.dynamicName` identifier (fires on all versions) |
 | Library class not found in one version | Never import library classes in consumer code |
 
 ### Version-Specific vs. Version-Independent Ignores
 
 ```php
-// VERSION-SPECIFIC (breaks on the other version):
-/** @phpstan-ignore method.notFound */    // only needed when method missing
-/** @phpstan-ignore argument.type */      // only needed when signature differs
+// VERSION-SPECIFIC INLINE IGNORES (break on the other version):
+// @phpstan-ignore-next-line method.notFound   // only needed when method missing
+// @phpstan-ignore-next-line argument.type     // only needed when signature differs
 
-// VERSION-INDEPENDENT (safe on all versions):
-// @phpstan-ignore method.dynamicName     // always fires for $obj->{$var}()
+// VERSION-INDEPENDENT INLINE IGNORE (safe on all versions):
+// @phpstan-ignore-next-line method.dynamicName // always fires for $obj->{$var}()
 ```
 
 ## Testing
