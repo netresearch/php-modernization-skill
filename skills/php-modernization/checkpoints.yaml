@@ -173,6 +173,13 @@ mechanical:
     severity: warning
     desc: "SingletonInterface is deprecated in TYPO3 v14. Migrate to proper DI scoping (Services.yaml shared: true) unless the class must be used with GeneralUtility::setSingletonInstance in tests."
 
+  # === MULTI-VERSION LIBRARY ADAPTERS ===
+  - id: PM-37
+    type: command
+    command: "! find Classes -type f -name '*.php' -exec sh -c 'grep -Eq \"(method_exists|function_exists)\" \"$1\" && ! grep -Eq \"@phpstan-ignore method\\.dynamicName\" \"$1\"' sh {} \\; -print -quit | grep -q ."
+    severity: info
+    desc: "Classes using method_exists() for version detection should use adapter pattern with dynamic dispatch (@phpstan-ignore method.dynamicName)"
+
 llm_reviews:
   # === READONLY CLASS STATIC PROPERTY CHECK ===
   - id: PM-32
@@ -426,3 +433,33 @@ llm_reviews:
 
       Report specific files implementing SingletonInterface and migration path.
     tags: [singleton, typo3, deprecation, di, v14]
+
+  # === MULTI-VERSION LIBRARY ADAPTER PATTERN ===
+  - id: PM-38
+    name: Multi-version library compatibility via adapter pattern
+    type: llm_review
+    severity: warning
+    domain: code-quality
+    prompt: |
+      Review the codebase for direct usage of libraries that support multiple
+      major versions (check composer.json for "^X || ^Y" constraints).
+
+      Check for:
+      1. Direct library class usage in service classes instead of through an adapter interface
+      2. method_exists() or function_exists() checks on typed library parameters
+         (PHPStan narrows these, making the check ineffective for static analysis)
+      3. Version-specific @phpstan-ignore tags (method.notFound, argument.type) that
+         would fail on the other supported version
+      4. Missing adapter interface — consumer classes should depend on a project-owned
+         interface, not the library class directly
+
+      Correct pattern:
+      - Define an interface with unified method signatures
+      - Create adapter class accepting `object` (not typed library class)
+      - Use dynamic dispatch ($obj->{$method}()) with @phpstan-ignore method.dynamicName
+      - Wire interface to adapter in Services.yaml
+      - Consumer classes depend only on the interface
+
+      Report specific files where library classes are used directly and suggest
+      adapter extraction.
+    tags: [adapter, multi-version, phpstan, compatibility, di]

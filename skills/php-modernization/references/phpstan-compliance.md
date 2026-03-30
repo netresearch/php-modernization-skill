@@ -288,6 +288,66 @@ abstract class AbstractRepository
 }
 ```
 
+## Multi-Version Dependencies
+
+When code must support multiple major versions of a library (e.g.,
+`"intervention/image": "^2.0 || ^4.0"`), PHPStan creates unique challenges:
+
+### Problem: `method_exists()` Gets Narrowed
+
+```php
+// PHPStan knows ImageManager's exact methods from the installed version.
+// method_exists() check is treated as always-true or always-false.
+public function __construct(private readonly ImageManager $manager) {}
+
+public function process(): void
+{
+    // PHPStan ignores this check — it already knows the class shape
+    if (method_exists($this->manager, 'read')) { ... }
+}
+```
+
+### Problem: Version-Specific Ignores
+
+```php
+// This ignore is needed on v2 but errors on v4 (method exists in v4):
+// @phpstan-ignore-next-line method.notFound
+$image->encodeByExtension('webp');
+
+// This ignore is needed on v4 but errors on v2 (method exists in v2):
+// @phpstan-ignore-next-line method.notFound
+$image->encode('webp', 80);
+```
+
+### Solution: Adapter with `object` Type
+
+Isolate version detection in an adapter class that uses `object` parameter
+type and dynamic method dispatch:
+
+```php
+final class LibraryAdapter implements LibraryInterface
+{
+    private readonly bool $isV4;
+
+    public function __construct(private readonly object $library)
+    {
+        $this->isV4 = method_exists($library, 'v4OnlyMethod');
+    }
+
+    public function doWork(): mixed
+    {
+        $method = $this->isV4 ? 'newMethod' : 'oldMethod';
+        // @phpstan-ignore method.dynamicName
+        return $this->library->{$method}();
+    }
+}
+```
+
+The `method.dynamicName` ignore is **version-independent** — it fires
+on all versions because the method name is always a variable.
+
+See `multi-version-adapters.md` for the full pattern with DI wiring.
+
 ## Ignoring Errors
 
 ### Inline Ignores

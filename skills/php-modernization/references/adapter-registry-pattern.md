@@ -532,6 +532,7 @@ final class ProviderAdapterRegistryTest extends TestCase
 
 ## Related References
 
+- `multi-version-adapters.md` - Adapter pattern for multi-version library compatibility
 - `symfony-patterns.md` - Dependency injection patterns
 - `type-safety.md` - Interface and type declarations
 - Security Audit Skill - `api-key-encryption.md` for credential handling
