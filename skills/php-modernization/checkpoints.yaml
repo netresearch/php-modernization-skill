@@ -180,6 +180,35 @@ mechanical:
     severity: info
     desc: "Classes using method_exists() for version detection should use adapter pattern with dynamic dispatch (@phpstan-ignore method.dynamicName)"
 
+  # === DOCBLOCK QUALITY ===
+  - id: PM-50
+    type: regex_not
+    target: Classes/**/*.php
+    pattern: '\*/\n\s{4}/\*\*'
+    severity: warning
+    desc: "Avoid duplicate consecutive docblocks between methods — merge @return/@param into the main docblock"
+
+  # === PHPSTAN BEST PRACTICES ===
+  - id: PM-51
+    type: regex_not
+    target: "{Classes,Tests}/**/*.php"
+    pattern: '@phpstan-ignore-next-line'
+    severity: warning
+    desc: "Use @phpstan-ignore with specific identifier (e.g., // @phpstan-ignore argument.type) instead of @phpstan-ignore-next-line"
+
+  - id: PM-52
+    type: regex_not
+    target: Classes/**/*.php
+    pattern: '\(string\)\s*\$(?:this->arguments|GLOBALS)\b'
+    severity: warning
+    desc: "Avoid (string) cast on mixed — use assert(is_string()) or is_string() guard for proper type narrowing"
+
+  - id: PM-53
+    type: command
+    command: "for f in phpstan.neon phpstan.neon.dist Build/phpstan.neon; do if [ -f \"$f\" ]; then level=$(sed -n 's/^[[:space:]]*level:[[:space:]]*//p' \"$f\" 2>/dev/null); case \"$level\" in 10|max) exit 0 ;; esac; echo \"WARN: $f uses PHPStan level '$level' — level 10 (max) recommended\" && exit 1; fi; done; exit 0"
+    severity: warning
+    desc: "Projects should target PHPStan level 10 (max) for full strict typing (not gated on PHP version — verify applicability)"
+
 llm_reviews:
   # === READONLY CLASS STATIC PROPERTY CHECK ===
   - id: PM-32
@@ -463,3 +492,30 @@ llm_reviews:
       Report specific files where library classes are used directly and suggest
       adapter extraction.
     tags: [adapter, multi-version, phpstan, compatibility, di]
+
+  # === TYPE NARROWING PATTERNS ===
+  - id: PM-80
+    type: llm_review
+    severity: warning
+    domain: code-quality
+    prompt: |
+      Review the PHP codebase for type narrowing patterns that bypass static analysis:
+
+      1. (string) or (int) casts on mixed-type variables instead of assert(is_string())
+         or is_string() guards — casts silence PHPStan without proving the type
+      2. @var annotations used to override inferred types instead of proper instanceof
+         checks or is_array() guards
+      3. @phpstan-ignore-next-line used to suppress errors that could be resolved with
+         proper type narrowing (assert, instanceof, is_*() guards)
+      4. Broad exception catches (catch (\Throwable)) where specific exception types
+         would provide better type information in the catch block
+
+      Correct patterns:
+      - assert(is_string($value)) narrows type for both runtime and static analysis
+      - if (!$obj instanceof Foo) { throw ... } narrows type in subsequent code
+      - is_array($data) in if-guard narrows type in the branch
+      - Specific catch types provide typed exception properties
+
+      Report specific files and patterns where type narrowing should replace
+      casts, annotations, or ignore directives.
+    tags: [type-narrowing, phpstan, assert, instanceof, casts]
