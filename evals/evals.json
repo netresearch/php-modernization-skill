@@ -1,33 +1,417 @@
 [
   {
     "name": "modernize-php-class",
-    "prompt": "Modernize this PHP class to use PHP 8.2 features",
+    "prompt": "Modernize this PHP class to use PHP 8.2 features:\n\n```php\n<?php\nclass User {\n    private int $id;\n    private string $name;\n    private string $email;\n    \n    public function __construct(int $id, string $name, string $email) {\n        $this->id = $id;\n        $this->name = $name;\n        $this->email = $email;\n    }\n    \n    public function getId(): int { return $this->id; }\n    public function getName(): string { return $this->name; }\n    public function getEmail(): string { return $this->email; }\n}\n```",
     "assertions": [
-      {
-        "type": "tool_use",
-        "tool": "Read",
-        "description": "Reads existing PHP class to analyze modernization opportunities"
-      },
       {
         "type": "content_contains",
         "value": "readonly",
-        "description": "Suggests readonly properties or classes (PHP 8.2 feature)"
+        "description": "Uses readonly class or readonly properties (PHP 8.2)"
+      },
+      {
+        "type": "content_contains",
+        "value": "strict_types",
+        "description": "Adds declare(strict_types=1)"
+      },
+      {
+        "type": "content_contains",
+        "value": "public function __construct(",
+        "description": "Uses constructor property promotion"
       }
     ]
   },
   {
     "name": "configure-phpstan-level9",
-    "prompt": "Configure PHPStan level 9 for this project",
+    "prompt": "Configure PHPStan for a PHP project. The project has source code in src/ and tests in tests/. Show me the phpstan.neon configuration.",
     "assertions": [
       {
-        "type": "tool_use",
-        "tool": "Glob",
-        "description": "Scans for existing PHPStan configuration"
+        "type": "content_contains",
+        "value": "level",
+        "description": "Specifies PHPStan level"
+      },
+      {
+        "type": "content_regex",
+        "value": "level:\\s*(9|10|max)",
+        "description": "Configures PHPStan at level 9 or higher"
       },
       {
         "type": "content_contains",
-        "value": "level: 9",
-        "description": "Configures PHPStan at level 9"
+        "value": "treatPhpDocTypesAsCertain: false",
+        "description": "Disables trusting PHPDoc types over runtime"
+      }
+    ]
+  },
+  {
+    "name": "add-strict-types",
+    "prompt": "Review this PHP file and fix the issues:\n\n```php\n<?php\nnamespace App\\Service;\n\nclass Calculator {\n    public function add($a, $b) {\n        return $a + $b;\n    }\n}\n```",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "declare(strict_types=1)",
+        "description": "Adds strict_types declaration as first statement"
+      },
+      {
+        "type": "content_regex",
+        "value": "function add\\((int|float)",
+        "description": "Adds parameter type declarations"
+      },
+      {
+        "type": "content_regex",
+        "value": "\\):\\s*(int|float)",
+        "description": "Adds return type declaration"
+      }
+    ]
+  },
+  {
+    "name": "constants-to-enum",
+    "prompt": "Refactor this PHP class to use modern PHP 8.1+ features:\n\n```php\n<?php\nclass OrderStatus {\n    const STATUS_PENDING = 'pending';\n    const STATUS_PROCESSING = 'processing';\n    const STATUS_SHIPPED = 'shipped';\n    const STATUS_DELIVERED = 'delivered';\n    const STATUS_CANCELLED = 'cancelled';\n    \n    public static function isValid(string $status): bool {\n        return in_array($status, [\n            self::STATUS_PENDING,\n            self::STATUS_PROCESSING,\n            self::STATUS_SHIPPED,\n            self::STATUS_DELIVERED,\n            self::STATUS_CANCELLED,\n        ]);\n    }\n    \n    public static function getLabel(string $status): string {\n        switch ($status) {\n            case self::STATUS_PENDING: return 'Pending';\n            case self::STATUS_PROCESSING: return 'Processing';\n            case self::STATUS_SHIPPED: return 'Shipped';\n            case self::STATUS_DELIVERED: return 'Delivered';\n            case self::STATUS_CANCELLED: return 'Cancelled';\n            default: return 'Unknown';\n        }\n    }\n}\n```",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "enum",
+        "description": "Converts class constants to a backed enum"
+      },
+      {
+        "type": "content_contains",
+        "value": "case",
+        "description": "Uses enum cases instead of class constants"
+      },
+      {
+        "type": "content_contains",
+        "value": "string",
+        "description": "Uses string-backed enum"
+      },
+      {
+        "type": "content_contains",
+        "value": "match",
+        "description": "Uses match expression instead of switch"
+      }
+    ]
+  },
+  {
+    "name": "array-to-dto",
+    "prompt": "Refactor this PHP method to use DTOs instead of arrays:\n\n```php\n<?php\ndeclare(strict_types=1);\n\nclass UserService {\n    public function createUser(array $data): array {\n        // validate\n        if (empty($data['name']) || empty($data['email'])) {\n            throw new \\InvalidArgumentException('Missing required fields');\n        }\n        \n        return [\n            'id' => rand(1, 1000),\n            'name' => $data['name'],\n            'email' => $data['email'],\n            'created_at' => date('Y-m-d H:i:s'),\n        ];\n    }\n}\n```",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "readonly",
+        "description": "Uses readonly class/properties for DTO"
+      },
+      {
+        "type": "content_contains",
+        "value": "class",
+        "description": "Creates a DTO class instead of returning arrays"
+      },
+      {
+        "type": "content_regex",
+        "value": "(DTO|Dto|Data|Request|Response)",
+        "description": "Names the DTO class appropriately"
+      }
+    ]
+  },
+  {
+    "name": "configure-rector",
+    "prompt": "Create a Rector configuration for a PHP 8.3 project with src/ and tests/ directories. Include code quality, dead code removal, and type declaration rules.",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "RectorConfig",
+        "description": "Uses RectorConfig for configuration"
+      },
+      {
+        "type": "content_contains",
+        "value": "LevelSetList",
+        "description": "Uses LevelSetList for PHP version upgrades"
+      },
+      {
+        "type": "content_regex",
+        "value": "(DEAD_CODE|DeadCode)",
+        "description": "Includes dead code removal rules"
+      },
+      {
+        "type": "content_regex",
+        "value": "(CODE_QUALITY|CodeQuality)",
+        "description": "Includes code quality rules"
+      }
+    ]
+  },
+  {
+    "name": "configure-php-cs-fixer",
+    "prompt": "Create a PHP-CS-Fixer configuration for a modern PHP project. The code is in src/ and tests/ directories.",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "@PER-CS",
+        "description": "Uses @PER-CS ruleset (not deprecated @PSR12)"
+      },
+      {
+        "type": "content_contains",
+        "value": "strict_types",
+        "description": "Enforces strict_types declaration"
+      },
+      {
+        "type": "content_contains",
+        "value": "Finder",
+        "description": "Uses Finder to specify directories"
+      }
+    ]
+  },
+  {
+    "name": "switch-to-match",
+    "prompt": "Modernize this PHP code to use PHP 8.0+ features:\n\n```php\n<?php\ndeclare(strict_types=1);\n\nclass HttpStatusMapper {\n    public function getStatusText(int $code): string {\n        switch ($code) {\n            case 200:\n                return 'OK';\n            case 201:\n                return 'Created';\n            case 400:\n                return 'Bad Request';\n            case 404:\n                return 'Not Found';\n            case 500:\n                return 'Internal Server Error';\n            default:\n                return 'Unknown';\n        }\n    }\n    \n    public function getCategory(int $code): string {\n        if ($code >= 200 && $code < 300) {\n            return 'success';\n        } elseif ($code >= 300 && $code < 400) {\n            return 'redirect';\n        } elseif ($code >= 400 && $code < 500) {\n            return 'client_error';\n        } elseif ($code >= 500) {\n            return 'server_error';\n        }\n        return 'unknown';\n    }\n}\n```",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "match",
+        "description": "Uses match expression instead of switch"
+      },
+      {
+        "type": "content_regex",
+        "value": "=>",
+        "description": "Uses arrow syntax in match expression"
+      }
+    ]
+  },
+  {
+    "name": "readonly-properties",
+    "prompt": "Refactor this PHP class to use PHP 8.1+ readonly properties and constructor promotion:\n\n```php\n<?php\ndeclare(strict_types=1);\n\nclass Product {\n    private int $id;\n    private string $name;\n    private float $price;\n    private string $sku;\n    private ?string $description;\n    \n    public function __construct(\n        int $id,\n        string $name,\n        float $price,\n        string $sku,\n        ?string $description = null\n    ) {\n        $this->id = $id;\n        $this->name = $name;\n        $this->price = $price;\n        $this->sku = $sku;\n        $this->description = $description;\n    }\n    \n    public function getId(): int { return $this->id; }\n    public function getName(): string { return $this->name; }\n    public function getPrice(): float { return $this->price; }\n    public function getSku(): string { return $this->sku; }\n    public function getDescription(): ?string { return $this->description; }\n}\n```",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "readonly",
+        "description": "Uses readonly keyword"
+      },
+      {
+        "type": "content_regex",
+        "value": "public (readonly )?function __construct\\(",
+        "description": "Uses constructor property promotion"
+      },
+      {
+        "type": "content_regex",
+        "value": "(public|private|protected) readonly",
+        "description": "Applies readonly modifier to promoted properties"
+      }
+    ]
+  },
+  {
+    "name": "psr-interface-typehint",
+    "prompt": "Review and fix the dependency injection in this PHP class to follow PSR standards:\n\n```php\n<?php\ndeclare(strict_types=1);\n\nuse GuzzleHttp\\Client;\nuse Monolog\\Logger;\nuse Symfony\\Component\\Cache\\Adapter\\RedisAdapter;\n\nclass ApiService {\n    public function __construct(\n        private Client $httpClient,\n        private Logger $logger,\n        private RedisAdapter $cache,\n    ) {}\n    \n    public function fetch(string $url): array {\n        $this->logger->info('Fetching: ' . $url);\n        $response = $this->httpClient->get($url);\n        return json_decode($response->getBody()->getContents(), true);\n    }\n}\n```",
+    "assertions": [
+      {
+        "type": "content_regex",
+        "value": "(ClientInterface|RequestFactoryInterface|HttpClientInterface|Psr\\\\Http)",
+        "description": "Type-hints against PSR HTTP interface instead of Guzzle concrete"
+      },
+      {
+        "type": "content_regex",
+        "value": "(LoggerInterface|Psr\\\\Log)",
+        "description": "Type-hints against PSR-3 LoggerInterface instead of Monolog"
+      },
+      {
+        "type": "content_regex",
+        "value": "(CacheInterface|CacheItemPoolInterface|Psr\\\\Cache|Psr\\\\SimpleCache)",
+        "description": "Type-hints against PSR cache interface instead of Redis adapter"
+      }
+    ]
+  },
+  {
+    "name": "type-safe-collection",
+    "prompt": "Create a type-safe PHP collection class for User objects that supports iteration and counting. Use modern PHP 8.1+ features and PHPDoc generics.",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "strict_types",
+        "description": "Declares strict_types"
+      },
+      {
+        "type": "content_regex",
+        "value": "@template|@implements|@extends",
+        "description": "Uses PHPDoc generic annotations for type safety"
+      },
+      {
+        "type": "content_regex",
+        "value": "(IteratorAggregate|Iterator|Traversable)",
+        "description": "Implements iteration interface"
+      },
+      {
+        "type": "content_contains",
+        "value": "Countable",
+        "description": "Implements Countable interface"
+      }
+    ]
+  },
+  {
+    "name": "value-object-pattern",
+    "prompt": "Create a type-safe Email value object in PHP 8.2+ that validates the email format, is immutable, and supports equality comparison.",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "readonly",
+        "description": "Uses readonly for immutability"
+      },
+      {
+        "type": "content_contains",
+        "value": "strict_types",
+        "description": "Declares strict_types"
+      },
+      {
+        "type": "content_regex",
+        "value": "(filter_var|FILTER_VALIDATE_EMAIL|preg_match)",
+        "description": "Validates email format"
+      },
+      {
+        "type": "content_regex",
+        "value": "(private function __construct|private readonly)",
+        "description": "Uses private constructor or private property for controlled instantiation"
+      }
+    ]
+  },
+  {
+    "name": "phpstan-baseline-strategy",
+    "prompt": "Our project has 200+ PHPStan errors at level 9. What is the recommended strategy to adopt PHPStan level 9 without fixing all errors at once?",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "baseline",
+        "description": "Recommends PHPStan baseline strategy"
+      },
+      {
+        "type": "content_regex",
+        "value": "(generate-baseline|phpstan-baseline\\.neon)",
+        "description": "Explains how to generate and use baseline"
+      },
+      {
+        "type": "content_regex",
+        "value": "(shrink|reduce|decrease|fewer|less)",
+        "description": "Emphasizes reducing baseline over time"
+      }
+    ]
+  },
+  {
+    "name": "migration-assessment",
+    "prompt": "We have a PHP 7.4 project and want to upgrade to PHP 8.2. What steps should we follow and what tools should we use?",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "Rector",
+        "description": "Recommends Rector for automated refactoring"
+      },
+      {
+        "type": "content_regex",
+        "value": "(PHPCompatibility|php-compatibility|phpcs)",
+        "description": "Recommends compatibility checking tool"
+      },
+      {
+        "type": "content_regex",
+        "value": "(strict_types|declare)",
+        "description": "Mentions adding strict_types declarations"
+      },
+      {
+        "type": "content_contains",
+        "value": "PHPStan",
+        "description": "Recommends PHPStan for static analysis"
+      }
+    ]
+  },
+  {
+    "name": "nullsafe-operator",
+    "prompt": "Refactor this PHP code to use modern null handling:\n\n```php\n<?php\ndeclare(strict_types=1);\n\nclass OrderProcessor {\n    public function getShippingCountry(?Order $order): ?string {\n        if ($order === null) {\n            return null;\n        }\n        $address = $order->getShippingAddress();\n        if ($address === null) {\n            return null;\n        }\n        $country = $address->getCountry();\n        if ($country === null) {\n            return null;\n        }\n        return $country->getCode();\n    }\n}\n```",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "?->",
+        "description": "Uses nullsafe operator"
+      }
+    ]
+  },
+  {
+    "name": "named-arguments",
+    "prompt": "Refactor this PHP code to use named arguments for clarity:\n\n```php\n<?php\ndeclare(strict_types=1);\n\nclass CookieFactory {\n    public function create(): void {\n        setcookie('session_id', $token, time() + 3600, '/', '', true, true);\n        setcookie('preferences', $prefs, time() + 86400, '/', '.example.com', true, false);\n    }\n}\n```",
+    "assertions": [
+      {
+        "type": "content_regex",
+        "value": "(name:|value:|expires:|path:|domain:|secure:|httponly:)",
+        "description": "Uses named arguments for setcookie parameters"
+      }
+    ]
+  },
+  {
+    "name": "sensitive-parameter-attribute",
+    "prompt": "Add proper security attributes to this PHP authentication method:\n\n```php\n<?php\ndeclare(strict_types=1);\n\nclass AuthService {\n    public function authenticate(string $username, string $password): bool {\n        return password_verify($password, $this->getHash($username));\n    }\n    \n    public function changePassword(string $userId, string $oldPassword, string $newPassword): void {\n        if (!$this->authenticate($userId, $oldPassword)) {\n            throw new \\RuntimeException('Invalid credentials');\n        }\n        $this->updateHash($userId, password_hash($newPassword, PASSWORD_DEFAULT));\n    }\n}\n```",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "SensitiveParameter",
+        "description": "Uses #[\\SensitiveParameter] attribute on password params (PHP 8.2)"
+      }
+    ]
+  },
+  {
+    "name": "override-attribute",
+    "prompt": "Add PHP 8.3 safety attributes to this child class:\n\n```php\n<?php\ndeclare(strict_types=1);\n\nabstract class AbstractProcessor {\n    abstract public function process(array $data): array;\n    public function validate(array $data): bool { return !empty($data); }\n}\n\nclass JsonProcessor extends AbstractProcessor {\n    public function process(array $data): array {\n        return array_map('json_encode', $data);\n    }\n    \n    public function validate(array $data): bool {\n        foreach ($data as $item) {\n            if (!is_array($item) && !is_scalar($item)) {\n                return false;\n            }\n        }\n        return parent::validate($data);\n    }\n}\n```",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "#[Override]",
+        "description": "Uses #[Override] attribute on overridden methods (PHP 8.3)"
+      }
+    ]
+  },
+  {
+    "name": "composer-scripts-qa",
+    "prompt": "Set up composer.json scripts section for a PHP project quality assurance pipeline with PHP-CS-Fixer, PHPStan, and Rector.",
+    "assertions": [
+      {
+        "type": "content_regex",
+        "value": "(cs:fix|cs:check|fix:cs|php-cs-fixer)",
+        "description": "Includes PHP-CS-Fixer script"
+      },
+      {
+        "type": "content_regex",
+        "value": "(phpstan|analyse|analyze|stan)",
+        "description": "Includes PHPStan script"
+      },
+      {
+        "type": "content_regex",
+        "value": "(rector|refactor)",
+        "description": "Includes Rector script"
+      }
+    ]
+  },
+  {
+    "name": "typed-class-constants",
+    "prompt": "Modernize these PHP class constants to use PHP 8.3 typed constants:\n\n```php\n<?php\ndeclare(strict_types=1);\n\nclass AppConfig {\n    const APP_NAME = 'MyApp';\n    const MAX_RETRIES = 3;\n    const ALLOWED_HOSTS = ['localhost', 'example.com'];\n    const TAX_RATE = 0.21;\n    const DEBUG = false;\n}\n```",
+    "assertions": [
+      {
+        "type": "content_regex",
+        "value": "const string",
+        "description": "Uses typed string constants (PHP 8.3)"
+      },
+      {
+        "type": "content_regex",
+        "value": "const int",
+        "description": "Uses typed int constants (PHP 8.3)"
+      }
+    ]
+  },
+  {
+    "name": "phpat-architecture-test",
+    "prompt": "Create a PHPat architecture test that ensures the Domain layer does not depend on Infrastructure, and that DTOs are final and readonly.",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "PHPat",
+        "description": "Uses PHPat for architecture testing"
+      },
+      {
+        "type": "content_contains",
+        "value": "Selector",
+        "description": "Uses PHPat Selector for class matching"
+      },
+      {
+        "type": "content_contains",
+        "value": "shouldNotDependOn",
+        "description": "Defines dependency constraint rules"
       }
     ]
   }
