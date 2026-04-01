@@ -4,7 +4,7 @@ description: "Use when working with ANY PHP modernization task: upgrading PHP 8.
 license: "(MIT AND CC-BY-SA-4.0)"
 compatibility: "Requires php 8.1+, composer."
 metadata:
-  version: "1.12.0"
+  version: "1.13.0"
   repository: "https://github.com/netresearch/php-modernization-skill"
   author: "Netresearch DTT GmbH"
 allowed-tools:
@@ -22,10 +22,11 @@ Modernize PHP applications to PHP 8.x with type safety, PSR compliance, and stat
 
 ## Expertise Areas
 
-- **PHP 8.x**: Constructor promotion, readonly, enums, match, attributes, union types
-- **PSR/PER Compliance**: Active PHP-FIG standards
-- **Static Analysis**: PHPStan (level 9+), PHPat, Rector, PHP-CS-Fixer
-- **Type Safety**: DTOs/VOs over arrays, generics via PHPDoc
+- **PHP 8.x**: Constructor promotion, readonly, enums, match, attributes, union/intersection types, `#[Override]`, typed constants, `#[SensitiveParameter]`, property hooks
+- **PSR/PER Compliance**: Active PHP-FIG standards (PSR-3/4/6/7/11/14/15/16/17/18/20, PER-CS)
+- **Static Analysis**: PHPStan (level 9+, `treatPhpDocTypesAsCertain: false`), PHPat, Rector, PHP-CS-Fixer
+- **Type Safety**: DTOs/VOs over arrays, generics via PHPDoc, copy-on-write awareness
+- **Pitfalls**: DOMDocument UTF-8 encoding, PHP-CS-Fixer deprecated aliases
 
 ## Reference Documentation
 
@@ -71,12 +72,15 @@ See `references/core-rules.md` for code examples and scoring criteria.
 
 - [ ] `declare(strict_types=1)` in all files
 - [ ] PER Coding Style via PHP-CS-Fixer (`@PER-CS`) with no deprecated aliases
-- [ ] PHPStan level 9+ (level 10 for new projects)
-- [ ] PHPat architecture tests
+- [ ] PHPStan level 9+ (`treatPhpDocTypesAsCertain: false`, level 10 for new projects)
+- [ ] PHPat architecture tests for layer boundaries
 - [ ] Return types and parameter types on all methods
 - [ ] DTOs for data transfer, no array params/returns
 - [ ] Backed enums for all status/type values
-- [ ] Type-hint against PSR interfaces
+- [ ] Type-hint against PSR interfaces, not implementations
+- [ ] `#[Override]` on overridden methods (PHP 8.3+)
+- [ ] `#[SensitiveParameter]` on password/secret params (PHP 8.2+)
+- [ ] Typed class constants (PHP 8.3+)
 
 ---
 
