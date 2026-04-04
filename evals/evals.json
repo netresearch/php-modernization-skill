@@ -321,6 +321,11 @@
         "type": "content_contains",
         "value": "?->",
         "description": "Uses nullsafe operator"
+      },
+      {
+        "type": "content_contains",
+        "value": "getCode",
+        "description": "Chains nullsafe calls to reach getCode()"
       }
     ]
   },
@@ -332,6 +337,11 @@
         "type": "content_regex",
         "value": "(name:|value:|expires:|path:|domain:|secure:|httponly:)",
         "description": "Uses named arguments for setcookie parameters"
+      },
+      {
+        "type": "content_contains",
+        "value": "setcookie",
+        "description": "Refactors setcookie calls with named arguments"
       }
     ]
   },
@@ -343,6 +353,11 @@
         "type": "content_contains",
         "value": "SensitiveParameter",
         "description": "Uses #[\\SensitiveParameter] attribute on password params (PHP 8.2)"
+      },
+      {
+        "type": "content_contains",
+        "value": "password",
+        "description": "Applies SensitiveParameter to password parameters"
       }
     ]
   },
@@ -354,6 +369,11 @@
         "type": "content_contains",
         "value": "#[Override]",
         "description": "Uses #[Override] attribute on overridden methods (PHP 8.3)"
+      },
+      {
+        "type": "content_contains",
+        "value": "process",
+        "description": "Applies #[Override] to overridden process and validate methods"
       }
     ]
   },
