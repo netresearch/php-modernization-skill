@@ -1,6 +1,6 @@
 ---
 name: php-modernization
-description: "Use when working with ANY PHP modernization task: upgrading PHP 8.1+, adding strict types, configuring PHPStan/Rector/PHP-CS-Fixer, refactoring to enums/DTOs/readonly, improving type safety, or reviewing PHP code quality. Triggers on: PHP upgrade, modernize, type safety, PHPStan, Rector, PHP-CS-Fixer, enum, DTO, readonly, strict_types."
+description: "Use when working with ANY PHP modernization task: upgrading PHP 8.1+ (TYPO3 v14.3 LTS accepts 8.2-8.5), adding strict types, configuring PHPStan/Rector/PHP-CS-Fixer, refactoring to enums/DTOs/readonly/property hooks (PHP 8.4), improving type safety, reviewing PHP code quality. Triggers: PHP upgrade, modernize, type safety, PHPStan, Rector, enum, DTO, readonly, strict_types, PHP 8.5."
 license: "(MIT AND CC-BY-SA-4.0)"
 compatibility: "Requires php 8.1+, composer."
 metadata:
