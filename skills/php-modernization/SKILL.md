@@ -4,7 +4,7 @@ description: "Use when working with ANY PHP modernization task: upgrading PHP 8.
 license: "(MIT AND CC-BY-SA-4.0)"
 compatibility: "Requires php 8.1+, composer."
 metadata:
-  version: "1.14.0"
+  version: "1.15.0"
   repository: "https://github.com/netresearch/php-modernization-skill"
   author: "Netresearch DTT GmbH"
 allowed-tools:
