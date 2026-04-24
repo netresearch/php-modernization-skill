@@ -14,7 +14,7 @@ mechanical:
 
   - id: PM-02
     type: command
-    command: "grep -qlE 'level:[[:space:]]*(9|1[0-9]|max)' phpstan.neon Build/phpstan.neon Build/phpstan/phpstan.neon phpstan.neon.dist 2>/dev/null"
+    command: 'for f in phpstan.neon Build/phpstan.neon Build/phpstan/phpstan.neon phpstan.neon.dist; do [ -f "$f" ] && grep -qE "^[[:space:]]*level:[[:space:]]*(9|1[0-9]|max)([[:space:]]|$)" "$f" && exit 0; done; exit 1'
     severity: error
     desc: "PHPStan level must be 9 or higher (or max)"
 
