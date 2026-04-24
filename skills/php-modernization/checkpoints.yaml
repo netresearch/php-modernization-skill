@@ -126,12 +126,15 @@ mechanical:
     severity: warning
     desc: "PHP-CS-Fixer should be available (directly or transitively via a CI package)"
 
+  # Rector can be a direct require-dev OR pulled transitively via the
+  # netresearch/typo3-ci-workflows meta-package. Same pattern as TT-64
+  # in typo3-testing-skill PR #63.
   - id: PM-18
     type: json_path
     target: composer.json
-    pattern: '."require-dev"["rector/rector"]'
+    pattern: '.["require-dev"]["rector/rector"] // .["require-dev"]["netresearch/typo3-ci-workflows"]'
     severity: warning
-    desc: "Rector should be in require-dev"
+    desc: "Rector should be in require-dev (also satisfied transitively via netresearch/typo3-ci-workflows)"
 
   # === PSR-4 AUTOLOADING ===
   - id: PM-19
@@ -142,14 +145,15 @@ mechanical:
     desc: "composer.json must have PSR-4 autoloading configured"
 
   # === PHP-CS-FIXER COPYRIGHT HEADER ===
+  # Schema fix: previous definition used unrecognised `name`/`path`/`message`
+  # keys instead of the standard `desc`/`target`. The runner saw an empty
+  # `target` and emitted "Target file not found:" with no path.
   - id: PM-30
-    name: PHP-CS-Fixer configured with header_comment rule
     type: regex
-    severity: info
-    path: "**/.php-cs-fixer.php"
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php}"
     pattern: "header_comment"
-    message: "Configure header_comment rule in php-cs-fixer for consistent copyright headers"
-    tags: [copyright, cs-fixer, headers]
+    severity: info
+    desc: "PHP-CS-Fixer should configure the header_comment rule for consistent copyright headers across all PHP files"
 
   # === PHP-CS-FIXER RISKY RULES ===
   - id: PM-24
