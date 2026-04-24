@@ -8,19 +8,19 @@ mechanical:
   # === PHPSTAN CONFIGURATION ===
   - id: PM-01
     type: command
-    command: "test -f phpstan.neon || test -f Build/phpstan.neon || test -f phpstan.neon.dist"
+    command: "test -f phpstan.neon || test -f Build/phpstan.neon || test -f Build/phpstan/phpstan.neon || test -f phpstan.neon.dist"
     severity: error
-    desc: "PHPStan configuration must exist (phpstan.neon, Build/phpstan.neon, or phpstan.neon.dist)"
+    desc: "PHPStan configuration must exist (phpstan.neon, Build/phpstan.neon, Build/phpstan/phpstan.neon, or phpstan.neon.dist)"
 
   - id: PM-02
     type: command
-    command: "grep -qlE 'level:\\s*(9|1[0-9]|max)' phpstan.neon Build/phpstan.neon phpstan.neon.dist 2>/dev/null"
+    command: "grep -qlE 'level:[[:space:]]*(9|1[0-9]|max)' phpstan.neon Build/phpstan.neon Build/phpstan/phpstan.neon phpstan.neon.dist 2>/dev/null"
     severity: error
     desc: "PHPStan level must be 9 or higher (or max)"
 
   - id: PM-03
     type: contains
-    target: "{phpstan.neon,Build/phpstan.neon}"
+    target: "{phpstan.neon,Build/phpstan.neon,Build/phpstan/phpstan.neon,phpstan.neon.dist}"
     pattern: "treatPhpDocTypesAsCertain: false"
     severity: warning
     desc: "PHPStan should not trust PHPDoc types over runtime"
@@ -64,27 +64,27 @@ mechanical:
   # === RECTOR CONFIGURATION ===
   - id: PM-09
     type: file_exists
-    target: "{rector.php,Build/rector.php}"
+    target: "{rector.php,Build/rector.php,Build/rector/rector.php}"
     severity: warning
     desc: "Rector configuration should exist for automated refactoring"
 
   - id: PM-10
     type: contains
-    target: "{rector.php,Build/rector.php}"
+    target: "{rector.php,Build/rector.php,Build/rector/rector.php}"
     pattern: "LevelSetList"
     severity: warning
     desc: "Rector should use LevelSetList for PHP version upgrades"
 
   - id: PM-11
     type: contains
-    target: "{rector.php,Build/rector.php}"
+    target: "{rector.php,Build/rector.php,Build/rector/rector.php}"
     pattern: "SetList::DEAD_CODE"
     severity: info
     desc: "Rector should include DeadCodeSet rules"
 
   - id: PM-12
     type: contains
-    target: "{rector.php,Build/rector.php}"
+    target: "{rector.php,Build/rector.php,Build/rector/rector.php}"
     pattern: "SetList::CODE_QUALITY"
     severity: info
     desc: "Rector should include CodeQualitySetList rules"
