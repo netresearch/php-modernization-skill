@@ -50,10 +50,12 @@ Middleware composes by nesting. Each middleware receives a handler representing 
 
 declare(strict_types=1);
 
+use Psr\Http\Message\ResponseFactoryInterface;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Psr\Http\Server\MiddlewareInterface;
 use Psr\Http\Server\RequestHandlerInterface;
+use Psr\Log\LoggerInterface;
 
 final readonly class ExceptionToResponseMiddleware implements MiddlewareInterface
 {
@@ -66,10 +68,21 @@ final readonly class ExceptionToResponseMiddleware implements MiddlewareInterfac
         try {
             return $handler->handle($request);
         } catch (DomainException $e) {
-            return $this->responses->problem(422, $e->getMessage());
+            return $this->problem(422, $e->getMessage());
         } catch (\Throwable $e) {
-            return $this->responses->problem(500, 'Internal Server Error');
+            return $this->problem(500, 'Internal Server Error');
         }
+    }
+
+    private function problem(int $status, string $title): ResponseInterface
+    {
+        $response = $this->responses->createResponse($status);
+        $response->getBody()->write(json_encode([
+            'type'  => 'about:blank',
+            'title' => $title,
+        ], JSON_THROW_ON_ERROR));
+
+        return $response->withHeader('Content-Type', 'application/problem+json');
     }
 }
 
