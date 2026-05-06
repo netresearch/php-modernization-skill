@@ -1,0 +1,137 @@
+# Reusable workflow for the php-modernization skill agent harness.
+#
+# Consumers should pin third-party actions to a SHA in production. The major
+# tags below (@v2, @v3, @v4) are convenient defaults but allow upstream
+# changes through; replace with `<owner>/<repo>@<sha> # <tag>` for SLSA-grade
+# supply-chain hygiene.
+#
+# Usage from a caller workflow:
+#
+#   jobs:
+#     php-modernization:
+#       uses: netresearch/php-modernization-skill/.github/workflows/php-modernization.yml@main
+#       with:
+#         php-version: "8.3"
+#         enable-sarif: true
+#         enable-infection-diff: true
+---
+name: php-modernization
+
+"on":
+  workflow_call:
+    inputs:
+      php-version:
+        description: PHP version for the verifier and orchestrator runs
+        required: false
+        default: "8.3"
+        type: string
+      enable-sarif:
+        description: Emit SARIF and upload to GitHub code scanning
+        required: false
+        default: false
+        type: boolean
+      enable-infection-diff:
+        description: Run Infection in PR diff-mode against the base ref
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+  pull-requests: write
+  security-events: write
+
+jobs:
+  verify:
+    name: Verify and orchestrate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          # Infection diff-mode needs the base branch in history.
+          fetch-depth: 0
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ inputs.php-version }}
+          coverage: none
+          tools: composer:v2
+
+      - name: Install composer dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Install uv
+        # Installs uv to $HOME/.local/bin. Alternative: astral-sh/setup-uv@v6.
+        run: |
+          curl -LsSf https://astral.sh/uv/install.sh | sh
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run verifier (JSON)
+        id: verify-json
+        run: |
+          uv run skills/php-modernization/scripts/verify_php_project.py \
+            --root . --format json | tee php-modernization-report.json
+
+      - name: Run verifier (SARIF)
+        if: ${{ inputs.enable-sarif }}
+        run: |
+          uv run skills/php-modernization/scripts/verify_php_project.py \
+            --root . --format sarif | tee php-modernization.sarif
+
+      - name: Upload SARIF to code scanning
+        if: ${{ inputs.enable-sarif }}
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: php-modernization.sarif
+          category: php-modernization
+
+      - name: Run orchestrator (dry-run)
+        if: ${{ inputs.enable-infection-diff && github.event_name == 'pull_request' }}
+        run: |
+          uv run skills/php-modernization/scripts/modernize_loop.py \
+            --mode dry-run \
+            --git-diff-base=origin/${{ github.base_ref }} \
+            | tee modernize-loop.json
+
+      - name: Run orchestrator (dry-run, no infection)
+        if: ${{ !inputs.enable-infection-diff || github.event_name != 'pull_request' }}
+        run: |
+          uv run skills/php-modernization/scripts/modernize_loop.py \
+            --mode dry-run \
+            --tools php-cs-fixer,rector,phpstan \
+            | tee modernize-loop.json
+
+      - name: Upload artifacts
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: php-modernization-${{ github.run_id }}
+          path: |
+            php-modernization-report.json
+            php-modernization.sarif
+            modernize-loop.json
+            .build/php-modernization/
+          if-no-files-found: ignore
+
+      - name: PR summary comment
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          uv run skills/php-modernization/scripts/verify_php_project.py \
+            --root . --format json --summary --no-cache > php-modernization-summary.json
+
+          status=$(python3 -c 'import json,sys; print(json.load(open("php-modernization-summary.json")).get("summary",{}).get("status","fail"))')
+          if [ "$status" = "fail" ]; then
+            {
+              echo "### php-modernization verifier — failures detected"
+              echo
+              echo '```json'
+              cat php-modernization-summary.json
+              echo '```'
+            } > php-modernization-comment.md
+            gh pr comment "${{ github.event.pull_request.number }}" \
+              --body-file php-modernization-comment.md
+          fi

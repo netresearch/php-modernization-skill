@@ -1,6 +1,11 @@
 # Checkpoints for php-modernization skill
 # Verifies PHP code quality tools and modern PHP patterns
 
+# DEPRECATED CHECKPOINT IDs (relocated to typo3-conformance / typo3-extension-upgrade skills):
+#   PM-26, PM-27, PM-28, PM-33, PM-35, PM-36
+# These IDs MUST NOT be reused. They were TYPO3-specific and have been moved
+# to the TYPO3 skill set as part of the v2.x agent-harness refocus.
+
 version: 1
 skill_id: php-modernization
 
@@ -49,14 +54,14 @@ mechanical:
   # === STRICT TYPES DECLARATION ===
   - id: PM-07
     type: contains
-    target: Classes/**/*.php
+    target: "{src,Classes}/**/*.php"
     pattern: "declare(strict_types=1)"
     severity: error
     desc: "PHP files must declare strict_types=1"
 
   - id: PM-08
     type: contains
-    target: Tests/**/*.php
+    target: "{tests,Tests}/**/*.php"
     pattern: "declare(strict_types=1)"
     severity: error
     desc: "Test files must declare strict_types=1"
@@ -166,28 +171,21 @@ mechanical:
   # === PHPAT ARCHITECTURE TESTS ===
   - id: PM-25
     type: command
-    pattern: "grep -rq 'phpat' composer.json 2>/dev/null || true"
+    command: "grep -rq 'phpat' composer.json 2>/dev/null || grep -rq 'phpat' composer.lock 2>/dev/null"
     severity: info
     desc: "PHPat should be configured for architecture testing in defined architectures"
-
-  # === SINGLETON INTERFACE DEPRECATION ===
-  - id: PM-35
-    type: command
-    command: "! grep -rql 'SingletonInterface' Classes/ 2>/dev/null"
-    severity: warning
-    desc: "SingletonInterface is deprecated in TYPO3 v14. Migrate to proper DI scoping (Services.yaml shared: true) unless the class must be used with GeneralUtility::setSingletonInstance in tests."
 
   # === MULTI-VERSION LIBRARY ADAPTERS ===
   - id: PM-37
     type: command
-    command: "! find Classes -type f -name '*.php' -exec sh -c 'grep -Eq \"(method_exists|function_exists)\" \"$1\" && ! grep -Eq \"@phpstan-ignore method\\.dynamicName\" \"$1\"' sh {} \\; -print -quit | grep -q ."
+    command: "! find src Classes -type f -name '*.php' 2>/dev/null -exec sh -c 'grep -Eq \"(method_exists|function_exists)\" \"$1\" && ! grep -Eq \"@phpstan-ignore method\\.dynamicName\" \"$1\"' sh {} \\; -print -quit | grep -q ."
     severity: info
     desc: "Classes using method_exists() for version detection should use adapter pattern with dynamic dispatch (@phpstan-ignore method.dynamicName)"
 
   # === DOCBLOCK QUALITY ===
   - id: PM-50
     type: regex_not
-    target: Classes/**/*.php
+    target: "{src,Classes}/**/*.php"
     pattern: '\*/\n\s{4}/\*\*'
     severity: warning
     desc: "Avoid duplicate consecutive docblocks between methods — merge @return/@param into the main docblock"
@@ -195,14 +193,14 @@ mechanical:
   # === PHPSTAN BEST PRACTICES ===
   - id: PM-51
     type: regex_not
-    target: "{Classes,Tests}/**/*.php"
+    target: "{src,Classes,tests,Tests}/**/*.php"
     pattern: '@phpstan-ignore-next-line'
     severity: warning
     desc: "Use @phpstan-ignore with specific identifier (e.g., // @phpstan-ignore argument.type) instead of @phpstan-ignore-next-line"
 
   - id: PM-52
     type: regex_not
-    target: Classes/**/*.php
+    target: "{src,Classes}/**/*.php"
     pattern: '\(string\)\s*\$(?:this->arguments|GLOBALS)\b'
     severity: warning
     desc: "Avoid (string) cast on mixed — use assert(is_string()) or is_string() guard for proper type narrowing"
@@ -212,6 +210,13 @@ mechanical:
     command: "for f in phpstan.neon phpstan.neon.dist Build/phpstan.neon; do if [ -f \"$f\" ]; then level=$(sed -n 's/^[[:space:]]*level:[[:space:]]*//p' \"$f\" 2>/dev/null); case \"$level\" in 10|max) exit 0 ;; esac; echo \"WARN: $f uses PHPStan level '$level' — level 10 (max) recommended\" && exit 1; fi; done; exit 0"
     severity: warning
     desc: "Projects should target PHPStan level 10 (max) for full strict typing (not gated on PHP version — verify applicability)"
+
+  # === IMMUTABILITY BOUNDARIES (guardrail) ===
+  - id: PM-39
+    type: command
+    command: "! grep -rlE '^(final\\s+)?readonly\\s+class' src/ Classes/ 2>/dev/null | xargs -r grep -lE '^use\\s+Doctrine\\\\ORM\\\\Mapping' 2>/dev/null | grep -q ."
+    severity: error
+    desc: "readonly classes must not be Doctrine entities — Doctrine requires post-hydration property assignment. See references/immutability-boundaries.md"
 
 llm_reviews:
   # === READONLY CLASS STATIC PROPERTY CHECK ===
@@ -313,61 +318,6 @@ llm_reviews:
     severity: warning
     desc: "Verify PHPStan configuration follows best practices"
 
-  # === TYPO3-SPECIFIC PSR PATTERNS ===
-  - id: PM-26
-    domain: code-quality
-    prompt: |
-      Review the TYPO3 extension codebase for PSR-3 logging compliance.
-
-      Check for:
-      1. Classes implementing LoggerAwareInterface should use LoggerAwareTrait
-      2. Constructor should set $this->logger = new NullLogger() as default
-      3. A private getLogger(): LoggerInterface helper should exist to narrow
-         the nullable trait property for PHPStan
-      4. No nullable $logger properties with null checks scattered in methods
-      5. Logger should NOT be a required constructor parameter
-
-      Examine files in Classes/ directory. Report specific violations.
-    severity: warning
-    desc: "TYPO3 services must use LoggerAwareInterface with NullLogger default (not nullable)"
-
-  - id: PM-27
-    domain: code-quality
-    prompt: |
-      Review the TYPO3 extension codebase for PSR-14 event dispatch safety.
-
-      Check for:
-      1. Event dispatch calls that are NOT wrapped in try/catch for post-processing
-         or notification events (listener failures must not break main flow)
-      2. Validation events that correctly do NOT catch exceptions (listeners may
-         legitimately stop flow)
-      3. Caught exceptions should be logged with context (event class, exception)
-      4. Event classes should be final with readonly constructor properties
-
-      Examine files in Classes/ directory. Report unguarded dispatches that should
-      be guarded, and guarded dispatches that should not be.
-    severity: warning
-    desc: "PSR-14 event dispatch must be try/catch guarded for non-validation events"
-
-  - id: PM-28
-    domain: code-quality
-    prompt: |
-      Review the TYPO3 extension for factory pattern and PHPStan baseline practices.
-
-      Check for:
-      1. Factory classes that select implementations at runtime should have explicit
-         fallback chains (e.g., Imagick -> GD -> RuntimeException)
-      2. Services.yaml should wire factories correctly using the factory key
-      3. PHPStan baseline (phpstan-baseline.neon) should be shrinking, not growing
-      4. No new baseline entries should be added — issues should be fixed immediately
-      5. ProcessorInterface pattern: services with process() + canProcess() for
-         middleware-style decoupling
-
-      Report specific issues with factory wiring, baseline growth, or missing
-      processor interfaces.
-    severity: info
-    desc: "Factory patterns must have capability fallback; PHPStan baseline must shrink"
-
   # === DRY / CODE DUPLICATION ===
   - id: PM-29
     name: No duplicated utility methods across classes
@@ -396,30 +346,6 @@ llm_reviews:
       This prevents architecture layer violations detected by tools like PHPat.
     tags: [traits, namespace, architecture, phpat]
 
-  # === MAKEINSTANCE TO DEPENDENCY INJECTION ===
-  - id: PM-33
-    name: GeneralUtility::makeInstance() in DI-managed classes
-    type: llm_review
-    severity: warning
-    domain: code-quality
-    prompt: |
-      Review the codebase for GeneralUtility::makeInstance() calls in classes
-      that are registered in Configuration/Services.yaml (or Services.php).
-
-      Classes managed by the DI container should use constructor injection instead
-      of GeneralUtility::makeInstance(). Check for:
-      1. Classes listed in Services.yaml that call GeneralUtility::makeInstance()
-      2. Suggest constructor injection for each dependency resolved via makeInstance()
-      3. EXCEPTION: Scheduler task classes extending AbstractTask — these are
-         unserialized by the TYPO3 scheduler, so constructor DI is incompatible.
-         Do NOT flag makeInstance() in AbstractTask subclasses.
-      4. Also acceptable: makeInstance() for value objects or non-service classes
-         that are not in the DI container (e.g., DataHandler, FlashMessage).
-
-      Report specific files and line numbers where makeInstance() should be
-      replaced with constructor injection.
-    tags: [di, dependency-injection, makeinstance, typo3, services]
-
   # === COPY-ON-WRITE AWARENESS FOR DESTRUCTIVE OPERATIONS ===
   - id: PM-34
     name: Copy-on-write safety for destructive memory operations
@@ -445,27 +371,6 @@ llm_reviews:
       This is critical for security-sensitive code handling encryption keys,
       passwords, or other secrets where memory cleanup matters.
     tags: [cow, copy-on-write, sodium, security, memory]
-
-  # === SINGLETON INTERFACE DEPRECATION (LLM companion to PM-35) ===
-  - id: PM-36
-    name: SingletonInterface deprecated in TYPO3 v14
-    type: llm_review
-    severity: warning
-    domain: code-quality
-    prompt: |
-      Review the codebase for uses of TYPO3\CMS\Core\SingletonInterface.
-
-      Check for:
-      1. Classes implementing SingletonInterface — this is deprecated in TYPO3 v14
-      2. Suggest migration to proper DI container scoping (shared: true in Services.yaml)
-      3. EXCEPTION: Classes that must be used with GeneralUtility::setSingletonInstance()
-         in test fixtures. These may need to keep the interface temporarily until
-         the test setup is refactored to use proper DI container overrides.
-      4. Check if the singleton behavior is actually needed or if the class can
-         simply be a regular shared service (which is the DI container default).
-
-      Report specific files implementing SingletonInterface and migration path.
-    tags: [singleton, typo3, deprecation, di, v14]
 
   # === MULTI-VERSION LIBRARY ADAPTER PATTERN ===
   - id: PM-38
@@ -523,3 +428,35 @@ llm_reviews:
       Report specific files and patterns where type narrowing should replace
       casts, annotations, or ignore directives.
     tags: [type-narrowing, phpstan, assert, instanceof, casts]
+
+  # === IMMUTABILITY BOUNDARIES (LLM companion to PM-39) ===
+  - id: PM-40
+    type: llm_review
+    domain: code-quality
+    severity: error
+    prompt: |
+      Review the codebase for `readonly class` or `final readonly class` declarations.
+      Flag any class that is ALSO one of:
+      1. Annotated with #[ORM\Entity], #[ORM\Embeddable], or #[ORM\MappedSuperclass]
+      2. Implements a Form-bound interface (e.g., extends Symfony AbstractType bound model)
+      3. Implements __unserialize / Serializable / is restored via session/cache
+      4. Used as a hydration target by a deserializer (Symfony Serializer, JMS, Symfony ObjectMapper)
+      readonly is correct for DTOs, value objects, events, and command/query objects.
+      readonly is INCORRECT for entities, hydration targets, and any class needing post-construct property assignment.
+      Report specific files violating this boundary.
+    desc: "readonly is incorrect on entities, form-bound models, and deserialization targets"
+
+  # === MUTATION-SCORE GUARDRAIL ===
+  - id: PM-41
+    type: llm_review
+    domain: testing
+    severity: warning
+    prompt: |
+      If `infection.json` or `infection.json5` exists, evaluate whether the project follows
+      the recommended Infection strategy (see references/mutation-testing.md):
+      1. Diff-mode (--git-diff-base) configured for PR runs
+      2. --min-msi threshold set (>= 70 baseline, >= 80 for new code)
+      3. Excluded paths cover legitimate non-test surface (logging, debug-only, generated code)
+      4. CI invokes Infection on PR diff, not full codebase per push
+      Report deviations and suggest configuration improvements.
+    desc: "Infection should run in diff-mode for PRs with explicit MSI threshold"
