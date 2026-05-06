@@ -1,0 +1,182 @@
+{
+  "agent_actions": [],
+  "archetype": "generic-composer",
+  "checks": [
+    {
+      "category": "phpstan",
+      "evidence": [
+        "phpstan.neon"
+      ],
+      "id": "PM-01",
+      "message": "PHPStan configuration found at phpstan.neon",
+      "severity": "error",
+      "status": "pass"
+    },
+    {
+      "category": "phpstan",
+      "evidence": [
+        "phpstan.neon"
+      ],
+      "id": "PM-02",
+      "message": "PHPStan level is 'max' (>= 9 / max)",
+      "severity": "error",
+      "status": "pass"
+    },
+    {
+      "category": "phpstan",
+      "evidence": [
+        "phpstan.neon"
+      ],
+      "id": "PM-03",
+      "message": "treatPhpDocTypesAsCertain is set to false",
+      "severity": "warning",
+      "status": "pass"
+    },
+    {
+      "category": "php-cs-fixer",
+      "evidence": [
+        ".php-cs-fixer.dist.php"
+      ],
+      "id": "PM-04",
+      "message": "PHP-CS-Fixer config found at .php-cs-fixer.dist.php",
+      "severity": "error",
+      "status": "pass"
+    },
+    {
+      "category": "php-cs-fixer",
+      "evidence": [
+        ".php-cs-fixer.dist.php"
+      ],
+      "id": "PM-05",
+      "message": "@PER-CS ruleset is enabled",
+      "severity": "error",
+      "status": "pass"
+    },
+    {
+      "category": "rector",
+      "evidence": [
+        "rector.php"
+      ],
+      "id": "PM-09",
+      "message": "Rector config found at rector.php",
+      "severity": "warning",
+      "status": "pass"
+    },
+    {
+      "category": "composer",
+      "evidence": [
+        "composer.json"
+      ],
+      "id": "PM-13",
+      "message": "composer script 'cs:fix' is defined",
+      "severity": "warning",
+      "status": "pass"
+    },
+    {
+      "category": "composer",
+      "evidence": [
+        "composer.json"
+      ],
+      "id": "PM-14",
+      "message": "composer script 'phpstan' is defined",
+      "severity": "warning",
+      "status": "pass"
+    },
+    {
+      "category": "composer",
+      "evidence": [
+        "composer.json"
+      ],
+      "id": "PM-15",
+      "message": "composer script 'rector' is defined",
+      "severity": "info",
+      "status": "pass"
+    },
+    {
+      "category": "dependencies",
+      "evidence": [],
+      "id": "PM-16",
+      "message": "PHPStan is available (binary or composer dependency)",
+      "severity": "warning",
+      "status": "pass"
+    },
+    {
+      "category": "dependencies",
+      "evidence": [],
+      "id": "PM-17",
+      "message": "PHP-CS-Fixer is available (binary or composer dependency)",
+      "severity": "warning",
+      "status": "pass"
+    },
+    {
+      "category": "composer",
+      "evidence": [
+        "composer.json"
+      ],
+      "id": "PM-19",
+      "message": "PSR-4 autoload defined (1 namespace mapping(s))",
+      "severity": "error",
+      "status": "pass"
+    },
+    {
+      "category": "architecture",
+      "evidence": [],
+      "id": "PM-25",
+      "message": "phpat is referenced in composer dependencies",
+      "severity": "info",
+      "status": "pass"
+    },
+    {
+      "category": "phpstan",
+      "evidence": [
+        "phpstan.neon"
+      ],
+      "id": "PM-53",
+      "message": "PHPStan level is 'max' (max)",
+      "severity": "warning",
+      "status": "pass"
+    }
+  ],
+  "environment": {
+    "composer_json": true,
+    "composer_lock": false,
+    "php_runtime": "<NORMALIZED>",
+    "php_version_constraint": "^8.3"
+  },
+  "generated_at": "<NORMALIZED>",
+  "project_root": "<NORMALIZED>",
+  "schema_version": "1.0.0",
+  "skill": "php-modernization",
+  "skill_version": "1.16.0",
+  "summary": {
+    "errors": 0,
+    "info": 0,
+    "status": "pass",
+    "warnings": 0
+  },
+  "tool_runs": [],
+  "tooling": {
+    "composer_audit_supported": false,
+    "infection": {
+      "configured": false
+    },
+    "php_cs_fixer": {
+      "config_file": ".php-cs-fixer.dist.php",
+      "configured": true,
+      "ruleset_includes_per_cs": true
+    },
+    "phpat": {
+      "configured": true
+    },
+    "phpstan": {
+      "baseline": null,
+      "config_file": "phpstan.neon",
+      "configured": true,
+      "level": "max"
+    },
+    "rector": {
+      "config_file": "rector.php",
+      "configured": true
+    }
+  }
+}

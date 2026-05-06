@@ -1,0 +1,19 @@
+{
+    "name": "fixtures/generic-composer-minimal",
+    "description": "Minimal generic Composer project for verifier regression tests.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "Fixtures\\GenericComposerMinimal\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Fixtures\\GenericComposerMinimal\\Tests\\": "tests/"
+        }
+    }
+}
