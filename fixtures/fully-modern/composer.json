@@ -10,7 +10,7 @@
         "phpstan/phpstan": "^2.0",
         "friendsofphp/php-cs-fixer": "^3.64",
         "rector/rector": "^2.0",
-        "phpat/phpat": "^0.10"
+        "phpat/phpat": "^0.12"
     },
     "autoload": {
         "psr-4": {
