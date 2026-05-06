@@ -34,7 +34,9 @@ from typing import Any
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 FIXTURES_DIR = REPO_ROOT / "fixtures"
-VERIFIER = REPO_ROOT / "skills" / "php-modernization" / "scripts" / "verify_php_project.py"
+VERIFIER = (
+    REPO_ROOT / "skills" / "php-modernization" / "scripts" / "verify_php_project.py"
+)
 NORMALIZED = "<NORMALIZED>"
 
 # Fields whose values vary per run/host. Replaced with NORMALIZED placeholder.
@@ -42,9 +44,7 @@ TOP_LEVEL_VOLATILE_FIELDS: tuple[str, ...] = (
     "generated_at",
     "project_root",
 )
-ENVIRONMENT_VOLATILE_FIELDS: tuple[str, ...] = (
-    "php_runtime",
-)
+ENVIRONMENT_VOLATILE_FIELDS: tuple[str, ...] = ("php_runtime",)
 
 
 def discover_fixtures() -> list[Path]:
@@ -217,9 +217,7 @@ def select_fixtures(name: str | None) -> list[Path]:
     matched = [f for f in all_fixtures if f.name == name]
     if not matched:
         available = ", ".join(f.name for f in all_fixtures) or "(none)"
-        sys.stderr.write(
-            f"no fixture named {name!r} (available: {available})\n"
-        )
+        sys.stderr.write(f"no fixture named {name!r} (available: {available})\n")
         raise SystemExit(2)
     return matched
 
