@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/netresearch/php-modernization-skill/schemas/project-profile.schema.json",
+  "title": "PHP Modernization Project Profile",
+  "description": "Output schema for skills/php-modernization/scripts/introspect.py — cheap first-touch project shape (no subprocess invocations beyond `php --version`).",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "skill",
+    "generated_at",
+    "project_root",
+    "archetype",
+    "php_version_constraint",
+    "php_runtime",
+    "tooling",
+    "autoload_psr4",
+    "baselines"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Semantic version of this schema (e.g. \"1.0.0\")."
+    },
+    "skill": {
+      "type": "string",
+      "const": "php-modernization"
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp (e.g. 2026-05-06T12:34:56Z)."
+    },
+    "project_root": {
+      "type": "string",
+      "description": "Absolute path to the analyzed project root."
+    },
+    "archetype": {
+      "type": "string",
+      "enum": [
+        "generic-composer",
+        "typo3-extension",
+        "symfony-app",
+        "monorepo-package",
+        "unknown"
+      ]
+    },
+    "php_version_constraint": {
+      "type": "string",
+      "description": "From composer.json config.platform.php OR require.php; \"unknown\" when neither is set."
+    },
+    "php_runtime": {
+      "type": "string",
+      "description": "Output of `php -r 'echo PHP_VERSION;'`, or \"unknown\" if php is missing."
+    },
+    "tooling": {
+      "type": "object",
+      "description": "Boolean fingerprints for known tools. Detection is best-effort (substring match against composer.json/composer.lock).",
+      "required": [
+        "phpstan",
+        "rector",
+        "php_cs_fixer",
+        "phpat",
+        "infection",
+        "psalm",
+        "composer_audit_supported"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "phpstan": { "type": "boolean" },
+        "rector": { "type": "boolean" },
+        "php_cs_fixer": { "type": "boolean" },
+        "phpat": { "type": "boolean" },
+        "infection": { "type": "boolean" },
+        "psalm": { "type": "boolean" },
+        "composer_audit_supported": { "type": "boolean" }
+      }
+    },
+    "autoload_psr4": {
+      "type": "object",
+      "description": "Mirror of composer.json::autoload.psr-4 (namespace → path or paths). Empty object if missing.",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" },
+          { "type": "array", "items": { "type": "string" } }
+        ]
+      }
+    },
+    "baselines": {
+      "type": "object",
+      "required": ["phpstan", "psalm"],
+      "additionalProperties": false,
+      "properties": {
+        "phpstan": {
+          "type": "boolean",
+          "description": "True if a phpstan-baseline.neon is present at any common path."
+        },
+        "psalm": {
+          "type": "boolean",
+          "description": "True if a psalm-baseline.xml is present at any common path."
+        }
+      }
+    }
+  }
+}

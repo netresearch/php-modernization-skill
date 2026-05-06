@@ -25,14 +25,26 @@ import re
 import shutil
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-SCHEMA_VERSION = "1.0.0"
-SKILL_ID = "php-modernization"
-SKILL_VERSION = "1.16.0"
+# Sibling-import the shared module. PEP 723 scripts launched via `uv run`
+# don't add their own directory to sys.path, so we add it explicitly.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from _common import (  # noqa: E402
+    SCHEMA_VERSION,
+    SKILL_ID,
+    SKILL_VERSION,
+    composer_dep_mentions,
+    detect_archetype,
+    php_version_constraint,
+    read_composer_json,
+    text_contains,
+)
+
 SARIF_VERSION = "2.1.0"
 SARIF_SCHEMA_URI = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/cos02/schemas/sarif-schema-2.1.0.json"
 
@@ -160,52 +172,6 @@ def find_first_existing(root: Path, candidates: Iterable[str]) -> Path | None:
     return None
 
 
-def detect_archetype(root: Path) -> str:
-    if (root / "ext_emconf.php").is_file():
-        return "typo3-extension"
-    if (root / "Configuration" / "Services.yaml").is_file():
-        return "typo3-extension"
-    if (root / "bin" / "console").is_file() and (
-        root / "config" / "bundles.php"
-    ).is_file():
-        return "symfony-app"
-    packages_dir = root / "packages"
-    if packages_dir.is_dir():
-        nested = sum(
-            1
-            for child in packages_dir.iterdir()
-            if child.is_dir() and (child / "composer.json").is_file()
-        )
-        if nested >= 2:
-            return "monorepo-package"
-    if (
-        (root / "composer.json").is_file()
-        and (root / "src").is_dir()
-        and (root / "tests").is_dir()
-    ):
-        return "generic-composer"
-    return "unknown"
-
-
-def read_composer_json(root: Path) -> dict[str, Any] | None:
-    p = root / "composer.json"
-    if not p.is_file():
-        return None
-    try:
-        return json.loads(p.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        return None
-
-
-def php_version_constraint(composer: dict[str, Any] | None) -> str:
-    if not composer:
-        return "unknown"
-    require = composer.get("require") or {}
-    if isinstance(require, dict) and "php" in require:
-        return str(require["php"])
-    return "unknown"
-
-
 def detect_php_runtime() -> str:
     php = shutil.which("php")
     if not php:
@@ -256,13 +222,6 @@ def composer_has_script(
     return None
 
 
-def text_contains(path: Path, needle: str) -> bool:
-    try:
-        return needle in path.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        return False
-
-
 def find_in_files(root: Path, files: Iterable[str], needle: str) -> Path | None:
     for rel in files:
         p = root / rel
@@ -301,15 +260,6 @@ def has_infection_binary(root: Path) -> Path | None:
         if p.is_file():
             return p
     return None
-
-
-def composer_dep_mentions(root: Path, needle: str) -> bool:
-    """True if `needle` appears as a substring in composer.json or composer.lock."""
-    for rel in ("composer.json", "composer.lock"):
-        p = root / rel
-        if p.is_file() and text_contains(p, needle):
-            return True
-    return False
 
 
 # ---------------------------------------------------------------------------
@@ -1226,6 +1176,78 @@ def to_sarif(report: Report) -> dict[str, Any]:
     }
 
 
+def to_junit(report: Report) -> str:
+    """Render the report as JUnit XML 2.x.
+
+    Mapping:
+    - severity=error  → <failure type="error">
+    - severity=warning → <failure type="warning">  (counted as suite-level errors)
+    - status=skipped  → <skipped/>
+    Uncategorised checks (status=pass) are still emitted as passing testcases.
+    """
+    checks = report.checks
+    failure_count = sum(
+        1 for c in checks if c.status == "fail" and c.severity == "error"
+    )
+    error_count = sum(
+        1 for c in checks if c.status == "fail" and c.severity == "warning"
+    )
+    skipped_count = sum(1 for c in checks if c.status == "skipped")
+    total = len(checks)
+
+    testsuites = ET.Element(
+        "testsuites",
+        {
+            "name": "php-modernization",
+            "tests": str(total),
+            "failures": str(failure_count),
+            "errors": str(error_count),
+            "time": "0",
+        },
+    )
+    testsuite = ET.SubElement(
+        testsuites,
+        "testsuite",
+        {
+            "name": "checks",
+            "tests": str(total),
+            "failures": str(failure_count),
+            "errors": str(error_count),
+            "skipped": str(skipped_count),
+            "time": "0",
+            "timestamp": report.generated_at,
+        },
+    )
+    for c in checks:
+        # name combines id with truncated message; classname carries the category.
+        msg = c.message or ""
+        truncated = msg[:80]
+        testcase = ET.SubElement(
+            testsuite,
+            "testcase",
+            {
+                "classname": f"php-modernization.{c.category}",
+                "name": f"{c.id}: {truncated}",
+                "time": "0",
+            },
+        )
+        if c.status == "skipped":
+            ET.SubElement(testcase, "skipped")
+        elif c.status == "fail":
+            failure = ET.SubElement(
+                testcase,
+                "failure",
+                {"type": c.severity, "message": msg},
+            )
+            if c.evidence:
+                failure.text = "\n".join(c.evidence)
+
+    # Pretty-print for human readability; ElementTree.indent is stdlib (3.9+).
+    ET.indent(testsuites, space="  ")
+    body = ET.tostring(testsuites, encoding="unicode")
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + body + "\n"
+
+
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -1241,7 +1263,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     parser.add_argument(
         "--format",
-        choices=("json", "sarif"),
+        choices=("json", "sarif", "junit"),
         default="json",
         help="Output format (default: json)",
     )
@@ -1307,6 +1329,9 @@ def main(argv: list[str] | None = None) -> int:
         # SARIF emission uses the typed Report; rebuild from dict for fidelity.
         report = _report_from_dict(report_dict)
         sys.stdout.write(json.dumps(to_sarif(report), indent=2) + "\n")
+    elif args.format == "junit":
+        report = _report_from_dict(report_dict)
+        sys.stdout.write(to_junit(report))
     else:
         sys.stdout.write(json.dumps(report_dict, indent=2) + "\n")
 

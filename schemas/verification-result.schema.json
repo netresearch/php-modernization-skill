@@ -1,0 +1,159 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/netresearch/php-modernization-skill/schemas/verification-result.schema.json",
+  "title": "PHP Modernization Verification Result",
+  "description": "Output schema for skills/php-modernization/scripts/verify_php_project.py --format json. Stable contract; checkpoint IDs are never renumbered.",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "skill",
+    "skill_version",
+    "generated_at",
+    "project_root",
+    "archetype",
+    "summary"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "type": "string",
+      "description": "Semantic version of this schema (e.g. \"1.0.0\")."
+    },
+    "skill": {
+      "type": "string",
+      "const": "php-modernization"
+    },
+    "skill_version": {
+      "type": "string",
+      "description": "Version of the php-modernization skill that produced this report."
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO-8601 UTC timestamp (e.g. 2026-05-06T12:34:56Z)."
+    },
+    "project_root": {
+      "type": "string",
+      "description": "Absolute path to the analyzed project root."
+    },
+    "archetype": {
+      "type": "string",
+      "enum": [
+        "generic-composer",
+        "typo3-extension",
+        "symfony-app",
+        "monorepo-package",
+        "unknown"
+      ]
+    },
+    "summary": {
+      "type": "object",
+      "required": ["status", "errors", "warnings", "info"],
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "string", "enum": ["pass", "warn", "fail"] },
+        "errors": { "type": "integer", "minimum": 0 },
+        "warnings": { "type": "integer", "minimum": 0 },
+        "info": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "php_version_constraint": { "type": "string" },
+        "php_runtime": { "type": "string" },
+        "composer_json": { "type": "boolean" },
+        "composer_lock": { "type": "boolean" }
+      }
+    },
+    "tooling": {
+      "type": "object",
+      "description": "Detected tool fingerprints. Keys vary as tools are added; consumers should treat unknown keys as informational.",
+      "additionalProperties": true
+    },
+    "checks": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/check" }
+    },
+    "agent_actions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/agent_action" }
+    },
+    "tool_runs": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/tool_run" }
+    }
+  },
+  "$defs": {
+    "check": {
+      "type": "object",
+      "required": ["id", "category", "severity", "status", "message"],
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^PM-[0-9]{2,3}$",
+          "description": "Stable checkpoint identifier; never renumbered."
+        },
+        "category": { "type": "string" },
+        "severity": {
+          "type": "string",
+          "enum": ["error", "warning", "info"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "fail", "skipped"]
+        },
+        "message": { "type": "string" },
+        "evidence": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": []
+        }
+      }
+    },
+    "agent_action": {
+      "type": "object",
+      "required": [
+        "action",
+        "checkpoint",
+        "target",
+        "operation",
+        "rationale"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "type": "string",
+          "enum": ["edit_file", "run_orchestrator", "read_reference"]
+        },
+        "checkpoint": {
+          "type": "string",
+          "pattern": "^PM-[0-9]{2,3}$"
+        },
+        "target": { "type": "string" },
+        "operation": { "type": "string" },
+        "rationale": { "type": "string" },
+        "confirm_required": { "type": "boolean", "default": false }
+      }
+    },
+    "tool_run": {
+      "type": "object",
+      "required": ["tool", "status", "command"],
+      "additionalProperties": false,
+      "properties": {
+        "tool": { "type": "string" },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "fail", "skipped", "timeout", "error"]
+        },
+        "exit_code": {
+          "type": ["integer", "null"]
+        },
+        "command": { "type": "string" },
+        "artifact": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

@@ -4,7 +4,7 @@ description: "Use when modernizing PHP code: PHP 8.1-8.5 features, PSR/PHP-FIG/P
 license: "(MIT AND CC-BY-SA-4.0)"
 compatibility: "Requires php 8.1+, composer."
 metadata:
-  version: "1.16.0"
+  version: "1.17.0"
   repository: "https://github.com/netresearch/php-modernization-skill"
   author: "Netresearch DTT GmbH"
 allowed-tools:
@@ -25,7 +25,7 @@ Modernize PHP to current standards: PHP 8.1-8.5, PSR/PHP-FIG, PER-CS, PHPStan ma
 
 ## Agent contract
 
-1. **Discover**: `uv run skills/php-modernization/scripts/verify_php_project.py --root . --summary` — returns archetype, tooling, findings, `agent_actions[]`.
+1. **Discover**: `uv run skills/php-modernization/scripts/introspect.py` for cheap project shape, OR `uv run skills/php-modernization/scripts/verify_php_project.py --root . --summary` for full verification with `agent_actions[]`.
 2. **Drill**: `... --check PM-XX` for one finding. Use full output only when triaging >3 findings.
 3. **Apply**: `uv run skills/php-modernization/scripts/modernize_loop.py --mode dry-run` — review transcript before applying.
 4. **References**: load on demand from the table below; do not pre-load.
