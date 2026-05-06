@@ -460,3 +460,20 @@ llm_reviews:
       4. CI invokes Infection on PR diff, not full codebase per push
       Report deviations and suggest configuration improvements.
     desc: "Infection should run in diff-mode for PRs with explicit MSI threshold"
+
+  # === API PLATFORM RESOURCE/ENTITY SEPARATION ===
+  - id: PM-42
+    type: llm_review
+    domain: code-quality
+    severity: warning
+    prompt: |
+      If composer.json depends on `api-platform/core` or `api-platform/symfony`,
+      review the codebase for proper separation of API resources and Doctrine entities:
+      1. Classes annotated `#[ApiResource]` that ALSO have Doctrine mapping
+         attributes (`#[ORM\Entity]`) — flag as a tight coupling that prevents
+         making the API resource `readonly` and complicates evolution.
+      2. State providers/processors that are not constructor-injected — flag.
+      3. Input/Output DTOs that are arrays instead of typed classes — flag.
+      4. API resources that are mutable when they could be `final readonly` — flag.
+      Reference `references/api-platform-edges.md` for the recommended split.
+    desc: "API resources should be readonly DTOs, separate from Doctrine entities"

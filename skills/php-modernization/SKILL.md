@@ -46,6 +46,7 @@ Modernize PHP to current standards: PHP 8.1-8.5, PSR/PHP-FIG, PER-CS, PHPStan ma
 | Multi-version compat | `references/multi-version-adapters.md` |
 | Symfony as PSR exemplar | `references/symfony-patterns.md` |
 | Doctrine edges | `references/doctrine-modernization-edges.md` |
+| API Platform edges | `references/api-platform-edges.md` |
 | Immutability boundaries | `references/immutability-boundaries.md` |
 | Mutation testing | `references/mutation-testing.md` |
 | Migration planning | `references/migration-strategies.md` |
