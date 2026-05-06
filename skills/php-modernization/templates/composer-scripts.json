@@ -1,5 +1,4 @@
 {
-  "_comment": "Drop-in composer scripts for php-modernization. Paste contents into the `scripts` block of your composer.json. Aliases (cs:check, rector:check) match the verifier's expectations (PM-13/14/15) and align with skill orchestrator commands. The `skill:*` entries call the verifier and introspector directly via uv — keep them if you want pre-commit / CI parity with the skill harness.",
   "cs:fix": "vendor/bin/php-cs-fixer fix",
   "cs:check": "vendor/bin/php-cs-fixer fix --dry-run --diff",
   "phpstan": "vendor/bin/phpstan analyse --no-progress",
@@ -10,5 +9,5 @@
   "skill:inspect": "uv run skills/php-modernization/scripts/introspect.py --root .",
   "skill:verify": "uv run skills/php-modernization/scripts/verify_php_project.py --root . --format json",
   "skill:fix": ["@cs:fix", "@rector"],
-  "skill:qa": ["@skill:inspect", "@skill:verify", "@phpstan"]
+  "skill:qa": ["@skill:inspect", "@cs:check", "@phpstan", "@skill:verify"]
 }

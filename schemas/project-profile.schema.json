@@ -51,7 +51,7 @@
     },
     "php_runtime": {
       "type": "string",
-      "description": "Output of `php -r 'echo PHP_VERSION;'`, or \"unknown\" if php is missing."
+      "description": "Detected PHP runtime version (e.g. \"8.4.5\") parsed from the first line of `php --version`, or \"unknown\" if php is missing or the output is not parseable."
     },
     "tooling": {
       "type": "object",

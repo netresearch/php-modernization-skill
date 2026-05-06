@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -46,14 +47,23 @@ PSALM_BASELINE_CANDIDATES: tuple[str, ...] = (
 )
 
 
+_PHP_VERSION_RE = re.compile(r"PHP\s+(\d+\.\d+\.\d+)")
+
+
 def _detect_php_runtime() -> str:
-    """Return the installed PHP runtime version, or "unknown" if php missing."""
+    """Return the installed PHP runtime version, or "unknown" if php missing.
+
+    Uses ``php --version`` (faster and more conventional than ``php -r``)
+    and parses the leading line, e.g. ``PHP 8.4.5 (cli) (built: ...)``.
+    Returns ``"unknown"`` if php is missing, the call fails, or the output
+    does not match the expected pattern (e.g. heavily-customised builds).
+    """
     php = shutil.which("php")
     if not php:
         return "unknown"
     try:
         completed = subprocess.run(
-            [php, "-r", "echo PHP_VERSION;"],
+            [php, "--version"],
             capture_output=True,
             text=True,
             check=False,
@@ -62,7 +72,11 @@ def _detect_php_runtime() -> str:
     except (subprocess.TimeoutExpired, OSError):
         return "unknown"
     out = (completed.stdout or "").strip()
-    return out if out else "unknown"
+    if not out:
+        return "unknown"
+    first_line = out.splitlines()[0]
+    match = _PHP_VERSION_RE.search(first_line)
+    return match.group(1) if match else "unknown"
 
 
 def _autoload_psr4(composer: dict[str, Any] | None) -> dict[str, Any]:

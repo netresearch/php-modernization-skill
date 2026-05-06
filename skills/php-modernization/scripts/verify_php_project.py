@@ -1180,18 +1180,22 @@ def to_junit(report: Report) -> str:
     """Render the report as JUnit XML 2.x.
 
     Mapping:
-    - severity=error  → <failure type="error">
-    - severity=warning → <failure type="warning">  (counted as suite-level errors)
-    - status=skipped  → <skipped/>
+    - severity=error   → <failure type="error">
+    - severity=warning → <failure type="warning">
+    - status=skipped   → <skipped/>
     Uncategorised checks (status=pass) are still emitted as passing testcases.
+
+    Suite-level attribute semantics match the emitted children:
+    - ``failures`` = total count of <failure> elements (every failed check
+      regardless of severity, since all failures are rendered as <failure>).
+    - ``errors``   = 0 — we never emit <error> children. JUnit reserves
+      <error> for unexpected runtime crashes; assertion failures are
+      <failure>. Severity is preserved on the failure's ``type`` attribute.
+    - ``tests``    = total checks. ``skipped`` = count of skipped checks.
     """
     checks = report.checks
-    failure_count = sum(
-        1 for c in checks if c.status == "fail" and c.severity == "error"
-    )
-    error_count = sum(
-        1 for c in checks if c.status == "fail" and c.severity == "warning"
-    )
+    failure_count = sum(1 for c in checks if c.status == "fail")
+    error_count = 0  # we never emit <error>; assertion-style failures use <failure>
     skipped_count = sum(1 for c in checks if c.status == "skipped")
     total = len(checks)
 
