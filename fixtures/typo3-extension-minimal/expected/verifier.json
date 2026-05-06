@@ -1,0 +1,253 @@
+{
+  "agent_actions": [
+    {
+      "action": "edit_file",
+      "checkpoint": "PM-01",
+      "confirm_required": false,
+      "operation": "create_phpstan_config",
+      "rationale": "PHPStan must be configured (phpstan.neon or phpstan.neon.dist)",
+      "target": "phpstan.neon"
+    },
+    {
+      "action": "edit_file",
+      "checkpoint": "PM-04",
+      "confirm_required": false,
+      "operation": "create_php_cs_fixer_config",
+      "rationale": "PHP-CS-Fixer must be configured to enforce coding standards",
+      "target": ".php-cs-fixer.dist.php"
+    },
+    {
+      "action": "edit_file",
+      "checkpoint": "PM-09",
+      "confirm_required": false,
+      "operation": "create_rector_config",
+      "rationale": "Rector enables automated refactoring for PHP version upgrades",
+      "target": "rector.php"
+    },
+    {
+      "action": "edit_file",
+      "checkpoint": "PM-13",
+      "confirm_required": false,
+      "operation": "add_cs_fix_script",
+      "rationale": "Coding-standards fix script makes the toolchain runnable via composer",
+      "target": "composer.json"
+    },
+    {
+      "action": "edit_file",
+      "checkpoint": "PM-14",
+      "confirm_required": false,
+      "operation": "add_phpstan_script",
+      "rationale": "PHPStan script makes static analysis runnable via composer",
+      "target": "composer.json"
+    },
+    {
+      "action": "edit_file",
+      "checkpoint": "PM-15",
+      "confirm_required": false,
+      "operation": "add_rector_script",
+      "rationale": "Rector script makes automated refactoring runnable via composer",
+      "target": "composer.json"
+    },
+    {
+      "action": "edit_file",
+      "checkpoint": "PM-16",
+      "confirm_required": false,
+      "operation": "require_dev_phpstan",
+      "rationale": "Add phpstan/phpstan to require-dev or rely on a transitive CI package",
+      "target": "composer.json"
+    },
+    {
+      "action": "edit_file",
+      "checkpoint": "PM-17",
+      "confirm_required": false,
+      "operation": "require_dev_php_cs_fixer",
+      "rationale": "Add friendsofphp/php-cs-fixer to require-dev or rely on a transitive CI package",
+      "target": "composer.json"
+    },
+    {
+      "action": "read_reference",
+      "checkpoint": "PM-25",
+      "confirm_required": false,
+      "operation": "introduce_phpat",
+      "rationale": "phpat enforces architectural rules in CI",
+      "target": "skills/php-modernization/references/static-analysis-tools.md"
+    }
+  ],
+  "archetype": "typo3-extension",
+  "checks": [
+    {
+      "category": "phpstan",
+      "evidence": [
+        "phpstan.neon",
+        "phpstan.neon.dist",
+        "Build/phpstan.neon",
+        "Build/phpstan/phpstan.neon"
+      ],
+      "id": "PM-01",
+      "message": "PHPStan configuration is missing",
+      "severity": "error",
+      "status": "fail"
+    },
+    {
+      "category": "phpstan",
+      "evidence": [],
+      "id": "PM-02",
+      "message": "PHPStan configuration not found; level cannot be evaluated",
+      "severity": "error",
+      "status": "skipped"
+    },
+    {
+      "category": "phpstan",
+      "evidence": [],
+      "id": "PM-03",
+      "message": "PHPStan configuration not found",
+      "severity": "warning",
+      "status": "skipped"
+    },
+    {
+      "category": "php-cs-fixer",
+      "evidence": [
+        ".php-cs-fixer.php",
+        ".php-cs-fixer.dist.php"
+      ],
+      "id": "PM-04",
+      "message": "PHP-CS-Fixer configuration is missing",
+      "severity": "error",
+      "status": "fail"
+    },
+    {
+      "category": "php-cs-fixer",
+      "evidence": [],
+      "id": "PM-05",
+      "message": "PHP-CS-Fixer configuration not found",
+      "severity": "error",
+      "status": "skipped"
+    },
+    {
+      "category": "rector",
+      "evidence": [
+        "rector.php",
+        "Build/rector.php",
+        "Build/rector/rector.php"
+      ],
+      "id": "PM-09",
+      "message": "Rector configuration is missing",
+      "severity": "warning",
+      "status": "fail"
+    },
+    {
+      "category": "composer",
+      "evidence": [
+        "composer.json"
+      ],
+      "id": "PM-13",
+      "message": "No coding-standards fix script (cs:fix/fix:cs/php:cs:fix) found in composer.json",
+      "severity": "warning",
+      "status": "fail"
+    },
+    {
+      "category": "composer",
+      "evidence": [
+        "composer.json"
+      ],
+      "id": "PM-14",
+      "message": "No PHPStan script (phpstan/analyse/analyze) found in composer.json",
+      "severity": "warning",
+      "status": "fail"
+    },
+    {
+      "category": "composer",
+      "evidence": [
+        "composer.json"
+      ],
+      "id": "PM-15",
+      "message": "No Rector script (rector/refactor) found in composer.json",
+      "severity": "info",
+      "status": "fail"
+    },
+    {
+      "category": "dependencies",
+      "evidence": [],
+      "id": "PM-16",
+      "message": "PHPStan is not available \u2014 neither binary nor composer dependency detected",
+      "severity": "warning",
+      "status": "fail"
+    },
+    {
+      "category": "dependencies",
+      "evidence": [],
+      "id": "PM-17",
+      "message": "PHP-CS-Fixer is not available \u2014 neither binary nor composer dependency detected",
+      "severity": "warning",
+      "status": "fail"
+    },
+    {
+      "category": "composer",
+      "evidence": [
+        "composer.json"
+      ],
+      "id": "PM-19",
+      "message": "PSR-4 autoload defined (1 namespace mapping(s))",
+      "severity": "error",
+      "status": "pass"
+    },
+    {
+      "category": "architecture",
+      "evidence": [],
+      "id": "PM-25",
+      "message": "phpat is not configured \u2014 architecture tests recommended",
+      "severity": "info",
+      "status": "fail"
+    },
+    {
+      "category": "phpstan",
+      "evidence": [],
+      "id": "PM-53",
+      "message": "PHPStan configuration not found",
+      "severity": "warning",
+      "status": "skipped"
+    }
+  ],
+  "environment": {
+    "composer_json": true,
+    "composer_lock": false,
+    "php_runtime": "<NORMALIZED>",
+    "php_version_constraint": "^8.2"
+  },
+  "generated_at": "<NORMALIZED>",
+  "project_root": "<NORMALIZED>",
+  "schema_version": "1.0.0",
+  "skill": "php-modernization",
+  "skill_version": "1.17.0",
+  "summary": {
+    "errors": 2,
+    "info": 2,
+    "status": "fail",
+    "warnings": 5
+  },
+  "tool_runs": [],
+  "tooling": {
+    "composer_audit_supported": false,
+    "infection": {
+      "configured": false
+    },
+    "php_cs_fixer": {
+      "config_file": null,
+      "configured": false,
+      "ruleset_includes_per_cs": false
+    },
+    "phpat": {
+      "configured": false
+    },
+    "phpstan": {
+      "baseline": null,
+      "config_file": null,
+      "configured": false,
+      "level": null
+    },
+    "rector": {
+      "config_file": null,
+      "configured": false
+    }
+  }
+}

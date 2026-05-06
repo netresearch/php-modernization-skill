@@ -1,0 +1,25 @@
+{
+    "name": "fixtures/fully-modern",
+    "description": "Positive-control fixture: passes all mechanical verifier checks.",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.3"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.0",
+        "friendsofphp/php-cs-fixer": "^3.64",
+        "rector/rector": "^2.0",
+        "phpat/phpat": "^0.10"
+    },
+    "autoload": {
+        "psr-4": {
+            "Fixtures\\FullyModern\\": "src/"
+        }
+    },
+    "scripts": {
+        "cs:fix": "php-cs-fixer fix",
+        "phpstan": "phpstan analyse",
+        "rector": "rector process"
+    }
+}

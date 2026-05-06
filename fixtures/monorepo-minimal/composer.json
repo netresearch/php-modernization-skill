@@ -1,0 +1,18 @@
+{
+    "name": "fixtures/monorepo-minimal",
+    "description": "Monorepo fixture with packages/ subdirectories for verifier regression tests.",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "Fixtures\\MonorepoMinimal\\": "src/"
+        }
+    },
+    "repositories": [
+        {"type": "path", "url": "packages/foo"},
+        {"type": "path", "url": "packages/bar"}
+    ]
+}
