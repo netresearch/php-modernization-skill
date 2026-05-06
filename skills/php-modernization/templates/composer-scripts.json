@@ -1,0 +1,13 @@
+{
+  "cs:fix": "vendor/bin/php-cs-fixer fix",
+  "cs:check": "vendor/bin/php-cs-fixer fix --dry-run --diff",
+  "phpstan": "vendor/bin/phpstan analyse --no-progress",
+  "rector": "vendor/bin/rector process",
+  "rector:check": "vendor/bin/rector process --dry-run",
+  "phpat": "vendor/bin/phpstan analyse",
+  "audit": "composer audit --locked",
+  "skill:inspect": "uv run skills/php-modernization/scripts/introspect.py --root .",
+  "skill:verify": "uv run skills/php-modernization/scripts/verify_php_project.py --root . --format json",
+  "skill:fix": ["@cs:fix", "@rector"],
+  "skill:qa": ["@skill:inspect", "@cs:check", "@phpstan", "@skill:verify"]
+}
