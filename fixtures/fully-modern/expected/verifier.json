@@ -147,7 +147,7 @@
   "project_root": "<NORMALIZED>",
   "schema_version": "1.0.0",
   "skill": "php-modernization",
-  "skill_version": "1.16.0",
+  "skill_version": "1.17.0",
   "summary": {
     "errors": 0,
     "info": 0,
