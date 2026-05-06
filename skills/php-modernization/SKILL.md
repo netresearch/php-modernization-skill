@@ -4,7 +4,7 @@ description: "Use when modernizing PHP code: PHP 8.1-8.5 features, PSR/PHP-FIG/P
 license: "(MIT AND CC-BY-SA-4.0)"
 compatibility: "Requires php 8.1+, composer."
 metadata:
-  version: "1.17.0"
+  version: "1.17.1"
   repository: "https://github.com/netresearch/php-modernization-skill"
   author: "Netresearch DTT GmbH"
 allowed-tools:
@@ -45,6 +45,7 @@ Modernize PHP to current standards: PHP 8.1-8.5, PSR/PHP-FIG, PER-CS, PHPStan ma
 | Adapter / registry | `references/adapter-registry-pattern.md` |
 | Multi-version compat | `references/multi-version-adapters.md` |
 | Symfony as PSR exemplar | `references/symfony-patterns.md` |
+| PSR-15 middleware architecture | `references/psr15-middleware-architecture.md` |
 | Doctrine edges | `references/doctrine-modernization-edges.md` |
 | API Platform edges | `references/api-platform-edges.md` |
 | Immutability boundaries | `references/immutability-boundaries.md` |
