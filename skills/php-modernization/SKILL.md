@@ -25,12 +25,10 @@ Modernize PHP to current standards: PHP 8.1-8.5, PSR/PHP-FIG, PER-CS, PHPStan ma
 
 ## Agent contract
 
-When invoked, follow this decision flow:
-
-1. **Discover state**: Run `uv run skills/php-modernization/scripts/verify_php_project.py --root . --format json --summary` first. This returns archetype, tooling status, top findings, and `agent_actions[]`.
-2. **Drill in only when needed**: For a specific finding, run `... --check PM-XX` for full detail. Do not load full `--format json` output unless triaging more than 3 findings.
-3. **Apply changes via the orchestrator**: For Rector/PHP-CS-Fixer/PHPStan workflows, run `uv run skills/php-modernization/scripts/modernize_loop.py --mode dry-run`. Review the structured transcript before applying.
-4. **Read references on demand**: Use the routing table below. Do not pre-load references.
+1. **Discover**: `uv run skills/php-modernization/scripts/verify_php_project.py --root . --summary` — returns archetype, tooling, findings, `agent_actions[]`.
+2. **Drill**: `... --check PM-XX` for one finding. Use full output only when triaging >3 findings.
+3. **Apply**: `uv run skills/php-modernization/scripts/modernize_loop.py --mode dry-run` — review transcript before applying.
+4. **References**: load on demand from the table below; do not pre-load.
 
 ## Reference routing
 
@@ -54,30 +52,30 @@ When invoked, follow this decision flow:
 
 ## Hard guardrails
 
-- **Never** apply `readonly` to a Doctrine `#[ORM\Entity]`, `#[ORM\Embeddable]`, or `#[ORM\MappedSuperclass]` — see `references/immutability-boundaries.md`.
-- **Never** run Rector transforms without `--dry-run` first and reviewing the diff.
-- **Never** raise PHPStan level without regenerating + committing the baseline in the same change. Baseline policy is shrink, not delete.
-- **Never** apply blanket `final` to test-double targets or framework extension points without confirmation.
-- **Never** edit `@generated` files or files under `var/cache/`, `vendor/`, `node_modules/`, `.Build/`.
+- Never apply `readonly` to Doctrine entities/embeddables/mapped-superclasses — see `references/immutability-boundaries.md`.
+- Never run Rector without `--dry-run` first.
+- Never raise PHPStan level without regenerating + committing the baseline in the same change. Shrink, never delete.
+- Never apply blanket `final` to mock targets or extension points without confirmation.
+- Never edit `@generated` files or files under `var/cache/`, `vendor/`, `node_modules/`, `.Build/`.
 
-## Required tooling baseline
+## Tooling baseline
 
-PHPStan level 9 min (10/max recommended). PHP-CS-Fixer `@PER-CS`, no deprecated aliases. Rector with version-set matching project PHP. PHPat where layer boundaries exist. `composer audit` on every verify run. Infection in PR-diff mode (recommended).
+PHPStan ≥9 (10 recommended). PHP-CS-Fixer `@PER-CS`. Rector with version-set matching project PHP. PHPat where layer boundaries exist. `composer audit` on every run. Infection in PR-diff mode.
 
-## Migration checklist (used by the orchestrator)
+## Migration checklist
 
 - [ ] `declare(strict_types=1)` everywhere
-- [ ] PER Coding Style (`@PER-CS`), no deprecated aliases
-- [ ] PHPStan level 9+ (`treatPhpDocTypesAsCertain: false`); level 10 for new projects
-- [ ] PHPat tests for layer boundaries
+- [ ] `@PER-CS`, no deprecated aliases
+- [ ] PHPStan ≥9 (`treatPhpDocTypesAsCertain: false`); 10 for new projects
+- [ ] PHPat for layer boundaries
 - [ ] Return + parameter types on all methods
-- [ ] DTOs over arrays; backed enums over status constants
-- [ ] PSR interfaces in type-hints, not implementations
+- [ ] DTOs over arrays; backed enums over constants
+- [ ] PSR interfaces in type-hints
 - [ ] `#[Override]` (8.3+), `#[SensitiveParameter]` (8.2+), typed constants (8.3+)
 - [ ] readonly on DTOs/VOs/events only — see `references/immutability-boundaries.md`
-- [ ] PHP 8.4 property hooks where mutable state needs validation
-- [ ] `array_find` / `array_any` / `array_all` over manual loops (PHP 8.4)
-- [ ] Pipe operator `|>` for transform pipelines (PHP 8.5)
+- [ ] Property hooks (8.4) for validated mutable state
+- [ ] `array_find` / `array_any` / `array_all` over manual loops (8.4)
+- [ ] Pipe `|>` for transform pipelines (8.5)
 
 ---
 
