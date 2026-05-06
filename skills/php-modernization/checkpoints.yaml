@@ -214,9 +214,9 @@ mechanical:
   # === IMMUTABILITY BOUNDARIES (guardrail) ===
   - id: PM-39
     type: command
-    command: "! grep -rlE '^(final\\s+)?readonly\\s+class' src/ Classes/ 2>/dev/null | xargs -r grep -lE '^use\\s+Doctrine\\\\ORM\\\\Mapping' 2>/dev/null | grep -q ."
+    command: "! grep -rlE '^(final\\s+)?readonly\\s+class' src/ Classes/ 2>/dev/null | xargs -r grep -lE '#\\[(ORM\\\\)?Entity|#\\[(ORM\\\\)?MappedSuperclass' 2>/dev/null | grep -q ."
     severity: error
-    desc: "readonly classes must not be Doctrine entities — Doctrine requires post-hydration property assignment. See references/immutability-boundaries.md"
+    desc: "readonly must not be applied to Doctrine entities or mapped-superclasses (Doctrine hydrates them via reflection-bypassing the constructor). Embeddables are a nuanced case — see references/doctrine-modernization-edges.md"
 
 llm_reviews:
   # === READONLY CLASS STATIC PROPERTY CHECK ===

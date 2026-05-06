@@ -52,7 +52,7 @@ Modernize PHP to current standards: PHP 8.1-8.5, PSR/PHP-FIG, PER-CS, PHPStan ma
 
 ## Hard guardrails
 
-- Never apply `readonly` to Doctrine entities/embeddables/mapped-superclasses — see `references/immutability-boundaries.md`.
+- Never apply `readonly` to Doctrine entities or mapped-superclasses (embeddables are a nuanced case, ORM 3.x dependent — see `references/doctrine-modernization-edges.md`).
 - Never run Rector without `--dry-run` first.
 - Never raise PHPStan level without regenerating + committing the baseline in the same change. Shrink, never delete.
 - Never apply blanket `final` to mock targets or extension points without confirmation.

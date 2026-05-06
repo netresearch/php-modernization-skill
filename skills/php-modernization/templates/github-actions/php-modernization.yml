@@ -1,19 +1,17 @@
-# Reusable workflow for the php-modernization skill agent harness.
+# TEMPLATE: copy this file to your project's .github/workflows/ and adjust as
+# needed. It is NOT yet published as a reusable workflow at
+# netresearch/php-modernization-skill/.github/workflows/* — that lives in the
+# typo3-ci-workflows meta-package or can be added there once stable.
 #
 # Consumers should pin third-party actions to a SHA in production. The major
-# tags below (@v2, @v3, @v4) are convenient defaults but allow upstream
+# tags below (@v2, @v3, @v4, @v6) are convenient defaults but allow upstream
 # changes through; replace with `<owner>/<repo>@<sha> # <tag>` for SLSA-grade
 # supply-chain hygiene.
 #
-# Usage from a caller workflow:
-#
-#   jobs:
-#     php-modernization:
-#       uses: netresearch/php-modernization-skill/.github/workflows/php-modernization.yml@main
-#       with:
-#         php-version: "8.3"
-#         enable-sarif: true
-#         enable-infection-diff: true
+# Local consumption:
+#   cp skills/php-modernization/templates/github-actions/php-modernization.yml \
+#     .github/workflows/php-modernization.yml
+#   # then edit `php-version` to match your project's PHP requirement.
 ---
 name: php-modernization
 
@@ -63,10 +61,9 @@ jobs:
         run: composer install --no-interaction --prefer-dist --no-progress
 
       - name: Install uv
-        # Installs uv to $HOME/.local/bin. Alternative: astral-sh/setup-uv@v6.
-        run: |
-          curl -LsSf https://astral.sh/uv/install.sh | sh
-          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
 
       - name: Run verifier (JSON)
         id: verify-json

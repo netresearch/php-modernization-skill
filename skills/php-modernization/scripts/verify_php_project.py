@@ -5,10 +5,14 @@
 # ///
 """PHP modernization verifier — agent-harness primary discovery tool.
 
-Evaluates mechanical checkpoints (PM-XX IDs) declared in checkpoints.yaml and
-emits a stable JSON or SARIF 2.1.0 report consumable by other tooling and by
-the LLM agent that orchestrates fixes. Exit code: 0 on pass/warn, 1 on fail.
+Implements a curated subset of the mechanical checkpoints (PM-XX IDs) defined
+in checkpoints.yaml — the ones that benefit from a structured Python evaluator
+(JSON+SARIF output, archetype detection, agent_actions[]). The full checkpoint
+catalog (including LLM reviews) is in checkpoints.yaml; this verifier does not
+read or parse that file dynamically. Checkpoint IDs are deliberately mirrored
+so that findings cross-reference cleanly.
 
+Emits stable JSON 1.0.0 or SARIF 2.1.0. Exit code: 0 on pass/warn, 1 on fail.
 The JSON schema is a public contract; checkpoint IDs are never renumbered.
 """
 
@@ -777,7 +781,7 @@ _ACTION_BY_CHECKPOINT: dict[str, dict[str, Any]] = {
 }
 
 
-def build_actions(checks: Iterable[Check]) -> list[AgentAction]:
+def build_actions(checks: Iterable[Check], tooling: Tooling) -> list[AgentAction]:
     out: list[AgentAction] = []
     for c in checks:
         if c.status != "fail":
@@ -785,11 +789,18 @@ def build_actions(checks: Iterable[Check]) -> list[AgentAction]:
         spec = _ACTION_BY_CHECKPOINT.get(c.id)
         if spec is None:
             continue
+        target = spec["target"]
+        if c.id in {"PM-02", "PM-03", "PM-53"} and tooling.phpstan.get("config_file"):
+            target = tooling.phpstan["config_file"]
+        elif c.id in {"PM-04", "PM-05"} and tooling.php_cs_fixer.get("config_file"):
+            target = tooling.php_cs_fixer["config_file"]
+        elif c.id == "PM-09" and tooling.rector.get("config_file"):
+            target = tooling.rector["config_file"]
         out.append(
             AgentAction(
                 action=spec["action"],
                 checkpoint=c.id,
-                target=spec["target"],
+                target=target,
                 operation=spec["operation"],
                 rationale=spec["rationale"],
                 confirm_required=bool(spec["confirm_required"]),
@@ -1058,7 +1069,7 @@ def evaluate(root: Path, *, run_tools: bool) -> Report:
         composer_lock=(root / "composer.lock").is_file(),
     )
 
-    actions = build_actions(checks)
+    actions = build_actions(checks, tooling)
 
     tool_runs: list[ToolRun] = []
     if run_tools:
