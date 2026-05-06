@@ -20,13 +20,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Iterable
 
 SCHEMA_VERSION = "1.0.0"
 ARTIFACT_DIR = Path(".build/php-modernization")
@@ -170,7 +169,9 @@ def run_php_cs_fixer(root: Path, *, mode: str) -> ToolResult:
     # In dry-run: php-cs-fixer exits 8 when changes are needed; treat as fail.
     if mode == "apply":
         status = "pass" if rc == 0 else "fail"
-        summary = "all files fixed" if rc == 0 else f"php-cs-fixer apply failed (exit {rc})"
+        summary = (
+            "all files fixed" if rc == 0 else f"php-cs-fixer apply failed (exit {rc})"
+        )
     else:
         status = "pass" if rc == 0 else "fail"
         summary = _summary_for_dry_run_finding("php-cs-fixer", rc)
@@ -328,7 +329,11 @@ def run_infection_diff(root: Path, *, git_diff_base: str) -> ToolResult:
             summary=err,
         )
     status = "pass" if rc == 0 else "fail"
-    summary = "infection diff: MSI threshold met" if rc == 0 else f"infection diff: below MSI (exit {rc})"
+    summary = (
+        "infection diff: MSI threshold met"
+        if rc == 0
+        else f"infection diff: below MSI (exit {rc})"
+    )
     return ToolResult(
         tool="infection-diff",
         status=status,
@@ -447,7 +452,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="store_true",
         help="Required when --mode=apply; explicit acknowledgment that files will be mutated",
     )
-    parser.add_argument("--root", default=".", help="Project root (default: current directory)")
+    parser.add_argument(
+        "--root", default=".", help="Project root (default: current directory)"
+    )
     parser.add_argument(
         "--tools",
         type=parse_tools,
@@ -490,7 +497,9 @@ def main(argv: list[str] | None = None) -> int:
     pr_mode = args.git_diff_base is not None
     required = required_tools(transcript.tools_invoked, pr_mode=pr_mode)
     failing_required = [
-        r for r in transcript.results if r.tool in required and r.status not in {"pass", "missing", "skipped"}
+        r
+        for r in transcript.results
+        if r.tool in required and r.status not in {"pass", "missing", "skipped"}
     ]
     return 1 if failing_required else 0
 

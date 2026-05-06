@@ -30,9 +30,7 @@ SCHEMA_VERSION = "1.0.0"
 SKILL_ID = "php-modernization"
 SKILL_VERSION = "1.16.0"
 SARIF_VERSION = "2.1.0"
-SARIF_SCHEMA_URI = (
-    "https://docs.oasis-open.org/sarif/sarif/v2.1.0/cos02/schemas/sarif-schema-2.1.0.json"
-)
+SARIF_SCHEMA_URI = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/cos02/schemas/sarif-schema-2.1.0.json"
 
 DEFAULT_CACHE_PATH = Path(".build/php-modernization/last-run.json")
 ARTIFACT_DIR = Path(".build/php-modernization")
@@ -163,7 +161,9 @@ def detect_archetype(root: Path) -> str:
         return "typo3-extension"
     if (root / "Configuration" / "Services.yaml").is_file():
         return "typo3-extension"
-    if (root / "bin" / "console").is_file() and (root / "config" / "bundles.php").is_file():
+    if (root / "bin" / "console").is_file() and (
+        root / "config" / "bundles.php"
+    ).is_file():
         return "symfony-app"
     packages_dir = root / "packages"
     if packages_dir.is_dir():
@@ -174,7 +174,11 @@ def detect_archetype(root: Path) -> str:
         )
         if nested >= 2:
             return "monorepo-package"
-    if (root / "composer.json").is_file() and (root / "src").is_dir() and (root / "tests").is_dir():
+    if (
+        (root / "composer.json").is_file()
+        and (root / "src").is_dir()
+        and (root / "tests").is_dir()
+    ):
         return "generic-composer"
     return "unknown"
 
@@ -234,7 +238,9 @@ def phpstan_level_meets_threshold(level_token: str | None) -> bool:
     return False
 
 
-def composer_has_script(composer: dict[str, Any] | None, names: Iterable[str]) -> str | None:
+def composer_has_script(
+    composer: dict[str, Any] | None, names: Iterable[str]
+) -> str | None:
     if not composer:
         return None
     scripts = composer.get("scripts") or {}
@@ -568,7 +574,9 @@ def check_pm16(root: Path) -> Check:
 
 
 def check_pm17(root: Path) -> Check:
-    if has_php_cs_fixer_binary(root) is not None or composer_dep_mentions(root, "php-cs-fixer"):
+    if has_php_cs_fixer_binary(root) is not None or composer_dep_mentions(
+        root, "php-cs-fixer"
+    ):
         return Check(
             id="PM-17",
             category="dependencies",
@@ -1037,7 +1045,10 @@ def evaluate(root: Path, *, run_tools: bool) -> Report:
             or (root / "infection.json5").is_file()
         },
         composer_audit_supported=(root / "composer.lock").is_file()
-        and (shutil.which("composer") is not None or (root / "vendor/bin/composer").is_file()),
+        and (
+            shutil.which("composer") is not None
+            or (root / "vendor/bin/composer").is_file()
+        ),
     )
 
     environment = Environment(
@@ -1106,11 +1117,17 @@ def report_to_dict(report: Report) -> dict[str, Any]:
     return asdict(report)
 
 
-def filter_to_checkpoint(report_dict: dict[str, Any], checkpoint_id: str) -> dict[str, Any]:
+def filter_to_checkpoint(
+    report_dict: dict[str, Any], checkpoint_id: str
+) -> dict[str, Any]:
     filtered = dict(report_dict)
-    filtered["checks"] = [c for c in report_dict.get("checks", []) if c.get("id") == checkpoint_id]
+    filtered["checks"] = [
+        c for c in report_dict.get("checks", []) if c.get("id") == checkpoint_id
+    ]
     filtered["agent_actions"] = [
-        a for a in report_dict.get("agent_actions", []) if a.get("checkpoint") == checkpoint_id
+        a
+        for a in report_dict.get("agent_actions", [])
+        if a.get("checkpoint") == checkpoint_id
     ]
     return filtered
 
@@ -1118,7 +1135,12 @@ def filter_to_checkpoint(report_dict: dict[str, Any], checkpoint_id: str) -> dic
 def summarize(report_dict: dict[str, Any]) -> dict[str, Any]:
     summarized = dict(report_dict)
     failed = [c for c in report_dict.get("checks", []) if c.get("status") == "fail"]
-    failed.sort(key=lambda c: (_SEVERITY_ORDER.get(c.get("severity", "info"), 9), c.get("id", "")))
+    failed.sort(
+        key=lambda c: (
+            _SEVERITY_ORDER.get(c.get("severity", "info"), 9),
+            c.get("id", ""),
+        )
+    )
     summarized["checks"] = failed[:3]
     summarized["agent_actions"] = report_dict.get("agent_actions", [])[:3]
     summarized["tool_runs"] = []
@@ -1203,7 +1225,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         prog="verify_php_project",
         description="Mechanical PHP modernization verifier (php-modernization skill).",
     )
-    parser.add_argument("--root", default=".", help="Project root (default: current directory)")
+    parser.add_argument(
+        "--root", default=".", help="Project root (default: current directory)"
+    )
     parser.add_argument(
         "--format",
         choices=("json", "sarif"),
@@ -1245,7 +1269,11 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"error: --root {args.root!r} is not a directory\n")
         return 2
 
-    cache_path = root / args.cache_file if not os.path.isabs(args.cache_file) else Path(args.cache_file)
+    cache_path = (
+        root / args.cache_file
+        if not os.path.isabs(args.cache_file)
+        else Path(args.cache_file)
+    )
     flags = {"no_tools": bool(args.no_tools)}
     signature = cache_signature(root)
 
@@ -1304,7 +1332,9 @@ def _report_from_dict(d: dict[str, Any]) -> Report:
             php_cs_fixer=tooling.get("php_cs_fixer", {}),
             phpat=tooling.get("phpat", {}),
             infection=tooling.get("infection", {}),
-            composer_audit_supported=bool(tooling.get("composer_audit_supported", False)),
+            composer_audit_supported=bool(
+                tooling.get("composer_audit_supported", False)
+            ),
         ),
         checks=[Check(**c) for c in d.get("checks", [])],
         agent_actions=[AgentAction(**a) for a in d.get("agent_actions", [])],
