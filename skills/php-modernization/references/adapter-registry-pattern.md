@@ -1,35 +1,35 @@
 # Adapter Registry Pattern
 
-**Source:** nr_llm Extension - ProviderAdapterRegistry
-**Purpose:** Dynamic adapter instantiation from database configuration
+**Purpose:** Dynamic adapter instantiation from runtime configuration
 
 ## Overview
 
-The Adapter Registry pattern separates PHP implementation classes (Adapters) from database configuration records (Providers/Entities). This allows runtime selection of implementation based on database configuration.
+The Adapter Registry pattern separates PHP implementation classes (Adapters) from configuration records (Providers). This allows runtime selection of an implementation based on configuration loaded from any source (database, config file, environment).
 
 ## When to Use
 
 - Integrating with multiple external services (APIs, SDKs)
 - Supporting multiple implementations of the same interface
-- Dynamic provider selection based on database configuration
+- Dynamic provider selection based on configuration
 - Clean separation between protocol logic and connection credentials
+- Multi-version library compatibility (see also `multi-version-adapters.md`)
 
 ## Terminology
 
 | Term | Description | Example |
 |------|-------------|---------|
-| **Adapter** | PHP class implementing protocol | `OpenAiAdapter`, `AnthropicAdapter` |
-| **Provider** | Database entity with credentials | Row in `tx_ext_provider` table |
-| **Registry** | Maps provider type to adapter class | `ProviderAdapterRegistry` |
+| **Adapter** | PHP class implementing protocol | `GdAdapter`, `ImagickAdapter` |
+| **Provider** | Configuration record with credentials/options | Row in DB, config struct, env-loaded DTO |
+| **Registry** | Maps provider type string → adapter class | `ImagingAdapterRegistry` |
 
 ## Pattern Structure
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│ ProviderAdapterRegistry                                      │
+│ AdapterRegistry                                              │
 │ ─────────────────────────                                   │
 │ Maps adapter_type string → PHP Adapter class                │
-│ Creates configured adapter instances from Provider entities │
+│ Creates configured adapter instances from Provider records  │
 └──────────────────────────┬──────────────────────────────────┘
                            │ creates
                            ▼
@@ -37,15 +37,15 @@ The Adapter Registry pattern separates PHP implementation classes (Adapters) fro
 │ AdapterInterface                                             │
 │ ─────────────────                                           │
 │ Common contract for all adapters                            │
-│ configure(), execute(), etc.                                │
+│ configure(), execute(), supports()                          │
 └─────────────────────────────────────────────────────────────┘
            ▲                    ▲                    ▲
            │                    │                    │
 ┌──────────┴─────┐  ┌──────────┴─────┐  ┌──────────┴─────┐
-│ OpenAiAdapter  │  │AnthropicAdapter│  │ CustomAdapter  │
+│ GdAdapter      │  │ ImagickAdapter │  │ VipsAdapter    │
 │                │  │                │  │                │
 │ adapter_type:  │  │ adapter_type:  │  │ adapter_type:  │
-│ "openai"       │  │ "anthropic"    │  │ "custom"       │
+│ "gd"           │  │ "imagick"      │  │ "vips"         │
 └────────────────┘  └────────────────┘  └────────────────┘
 ```
 
@@ -57,19 +57,19 @@ The Adapter Registry pattern separates PHP implementation classes (Adapters) fro
 <?php
 declare(strict_types=1);
 
-namespace Vendor\Extension\Provider;
+namespace App\Imaging;
 
 interface AdapterInterface
 {
     /**
-     * Configure adapter with provider settings
+     * Configure adapter with provider settings.
      *
      * @param array<string, mixed> $config
      */
     public function configure(array $config): void;
 
     /**
-     * Check if adapter supports a capability
+     * Check if adapter supports a capability.
      */
     public function supports(string $capability): bool;
 }
@@ -81,108 +81,72 @@ interface AdapterInterface
 <?php
 declare(strict_types=1);
 
-namespace Vendor\Extension\Provider\Adapter;
+namespace App\Imaging\Adapter;
 
-use Vendor\Extension\Provider\AdapterInterface;
-use TYPO3\CMS\Core\Http\RequestFactory;
+use App\Imaging\AdapterInterface;
+use Psr\Http\Client\ClientInterface;
 
-final class OpenAiAdapter implements AdapterInterface
+final class GdAdapter implements AdapterInterface
 {
-    private string $endpoint = 'https://api.openai.com/v1';
-    private string $apiKey = '';
-    private string $model = 'gpt-4o';
+    private int $quality = 85;
+    private string $tmpDir = '/tmp';
     private int $timeout = 30;
 
     public function __construct(
-        private readonly RequestFactory $requestFactory,
+        private readonly ClientInterface $httpClient,
     ) {}
 
     public function configure(array $config): void
     {
-        if (isset($config['endpoint']) && $config['endpoint'] !== '') {
-            $this->endpoint = rtrim($config['endpoint'], '/');
-        }
-        $this->apiKey = $config['apiKey'] ?? '';
-        $this->model = $config['model'] ?? 'gpt-4o';
-        $this->timeout = (int)($config['timeout'] ?? 30);
+        $this->quality = (int) ($config['quality'] ?? 85);
+        $this->tmpDir = (string) ($config['tmpDir'] ?? '/tmp');
+        $this->timeout = (int) ($config['timeout'] ?? 30);
     }
 
     public function supports(string $capability): bool
     {
-        return in_array($capability, ['chat', 'completion', 'embedding', 'vision'], true);
+        return in_array($capability, ['resize', 'crop', 'jpeg', 'png'], true);
     }
 
     /**
-     * @param array<int, array{role: string, content: string}> $messages
-     * @return array<string, mixed>
+     * @return array{path: string, width: int, height: int}
      */
-    public function chat(array $messages): array
+    public function resize(string $sourcePath, int $width, int $height): array
     {
-        $response = $this->requestFactory->request(
-            $this->endpoint . '/chat/completions',
-            'POST',
-            [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $this->apiKey,
-                    'Content-Type' => 'application/json',
-                ],
-                'json' => [
-                    'model' => $this->model,
-                    'messages' => $messages,
-                ],
-                'timeout' => $this->timeout,
-            ]
-        );
+        // GD-based resize implementation
+        $img = imagecreatefromstring(file_get_contents($sourcePath));
+        $resized = imagescale($img, $width, $height);
+        $outPath = $this->tmpDir . '/' . uniqid('img_', true) . '.jpg';
+        imagejpeg($resized, $outPath, $this->quality);
 
-        return json_decode($response->getBody()->getContents(), true);
+        return ['path' => $outPath, 'width' => $width, 'height' => $height];
     }
 }
 ```
 
-### Provider Entity (Database Record)
+### Provider Record (Configuration DTO)
 
 ```php
 <?php
 declare(strict_types=1);
 
-namespace Vendor\Extension\Domain\Model;
+namespace App\Imaging\Config;
 
-use TYPO3\CMS\Extbase\DomainObject\AbstractEntity;
-
-class Provider extends AbstractEntity
+final class ImagingProvider
 {
-    public const ADAPTER_OPENAI = 'openai';
-    public const ADAPTER_ANTHROPIC = 'anthropic';
-    public const ADAPTER_GEMINI = 'gemini';
-    public const ADAPTER_CUSTOM = 'custom';
+    public const ADAPTER_GD = 'gd';
+    public const ADAPTER_IMAGICK = 'imagick';
+    public const ADAPTER_VIPS = 'vips';
 
-    protected string $identifier = '';
-    protected string $name = '';
-    protected string $adapterType = self::ADAPTER_OPENAI;
-    protected string $endpointUrl = '';
-    protected string $apiKey = '';  // Stored encrypted
-    protected int $timeout = 30;
-    protected bool $isActive = true;
-
-    public function getAdapterType(): string
-    {
-        return $this->adapterType;
-    }
-
-    public function getEndpointUrl(): string
-    {
-        return $this->endpointUrl;
-    }
-
-    public function getApiKey(): string
-    {
-        return $this->apiKey;
-    }
-
-    public function getTimeout(): int
-    {
-        return $this->timeout;
-    }
+    public function __construct(
+        public readonly string $identifier,
+        public readonly string $name,
+        public readonly string $adapterType,
+        public readonly int $quality = 85,
+        public readonly string $tmpDir = '/tmp',
+        public readonly int $timeout = 30,
+        public readonly bool $isActive = true,
+    ) {}
 }
 ```
 
@@ -192,97 +156,63 @@ class Provider extends AbstractEntity
 <?php
 declare(strict_types=1);
 
-namespace Vendor\Extension\Provider;
+namespace App\Imaging;
 
+use App\Imaging\Adapter\GdAdapter;
+use App\Imaging\Adapter\ImagickAdapter;
+use App\Imaging\Adapter\VipsAdapter;
+use App\Imaging\Config\ImagingProvider;
 use Psr\Container\ContainerInterface;
-use Vendor\Extension\Domain\Model\Model;
-use Vendor\Extension\Domain\Model\Provider;
-use Vendor\Extension\Provider\Adapter\AnthropicAdapter;
-use Vendor\Extension\Provider\Adapter\CustomAdapter;
-use Vendor\Extension\Provider\Adapter\GeminiAdapter;
-use Vendor\Extension\Provider\Adapter\OpenAiAdapter;
-use Vendor\Extension\Security\ProviderEncryptionServiceInterface;
 
-final class ProviderAdapterRegistry
+final class ImagingAdapterRegistry
 {
     /**
-     * Maps adapter_type string to PHP adapter class
+     * Maps adapter_type string to adapter class
      *
      * @var array<string, class-string<AdapterInterface>>
      */
     private const array ADAPTER_MAP = [
-        Provider::ADAPTER_OPENAI => OpenAiAdapter::class,
-        Provider::ADAPTER_ANTHROPIC => AnthropicAdapter::class,
-        Provider::ADAPTER_GEMINI => GeminiAdapter::class,
-        Provider::ADAPTER_CUSTOM => CustomAdapter::class,
+        ImagingProvider::ADAPTER_GD      => GdAdapter::class,
+        ImagingProvider::ADAPTER_IMAGICK => ImagickAdapter::class,
+        ImagingProvider::ADAPTER_VIPS    => VipsAdapter::class,
     ];
 
     public function __construct(
         private readonly ContainerInterface $container,
-        private readonly ProviderEncryptionServiceInterface $encryptionService,
     ) {}
 
     /**
-     * Get list of available adapter types
-     *
-     * @return array<string>
+     * @return list<string>
      */
     public function getAvailableAdapterTypes(): array
     {
         return array_keys(self::ADAPTER_MAP);
     }
 
-    /**
-     * Check if adapter type is supported
-     */
     public function hasAdapterType(string $adapterType): bool
     {
         return isset(self::ADAPTER_MAP[$adapterType]);
     }
 
     /**
-     * Create adapter instance from Provider entity
+     * Create adapter instance from a provider record.
      *
      * @throws \InvalidArgumentException If adapter type unknown
      */
-    public function createAdapterFromProvider(Provider $provider): AdapterInterface
+    public function createAdapterFromProvider(ImagingProvider $provider): AdapterInterface
     {
-        $adapterClass = self::ADAPTER_MAP[$provider->getAdapterType()]
+        $adapterClass = self::ADAPTER_MAP[$provider->adapterType]
             ?? throw new \InvalidArgumentException(
-                sprintf('Unknown adapter type: %s', $provider->getAdapterType())
+                sprintf('Unknown adapter type: %s', $provider->adapterType)
             );
 
         /** @var AdapterInterface $adapter */
         $adapter = $this->container->get($adapterClass);
 
         $adapter->configure([
-            'endpoint' => $provider->getEndpointUrl(),
-            'apiKey' => $this->encryptionService->decrypt($provider->getApiKey()),
-            'timeout' => $provider->getTimeout(),
-        ]);
-
-        return $adapter;
-    }
-
-    /**
-     * Create adapter from Model entity (which has Provider relation)
-     *
-     * @throws \InvalidArgumentException If model has no provider
-     */
-    public function createAdapterFromModel(Model $model): AdapterInterface
-    {
-        $provider = $model->getProvider();
-        if ($provider === null) {
-            throw new \InvalidArgumentException(
-                sprintf('Model "%s" has no provider assigned', $model->getName())
-            );
-        }
-
-        $adapter = $this->createAdapterFromProvider($provider);
-
-        // Configure with model-specific settings
-        $adapter->configure([
-            'model' => $model->getModelId(),
+            'quality' => $provider->quality,
+            'tmpDir'  => $provider->tmpDir,
+            'timeout' => $provider->timeout,
         ]);
 
         return $adapter;
@@ -290,24 +220,27 @@ final class ProviderAdapterRegistry
 }
 ```
 
-### Services.yaml Configuration
+### DI container configuration
+
+Wire the registry as a public service and each adapter under its FQCN. The exact format depends on the framework (Symfony YAML/PHP, Laminas, PHP-DI, Pimple, custom). The registry must receive a PSR-11 `ContainerInterface`. Each adapter must be retrievable by its class name.
 
 ```yaml
+# Example: Symfony-style services file
 services:
   _defaults:
     autowire: true
     autoconfigure: true
     public: false
 
-  Vendor\Extension\Provider\ProviderAdapterRegistry:
+  App\Imaging\ImagingAdapterRegistry:
     public: true
 
-  # Register all adapters
-  Vendor\Extension\Provider\Adapter\OpenAiAdapter: ~
-  Vendor\Extension\Provider\Adapter\AnthropicAdapter: ~
-  Vendor\Extension\Provider\Adapter\GeminiAdapter: ~
-  Vendor\Extension\Provider\Adapter\CustomAdapter: ~
+  App\Imaging\Adapter\GdAdapter: ~
+  App\Imaging\Adapter\ImagickAdapter: ~
+  App\Imaging\Adapter\VipsAdapter: ~
 ```
+
+For other DI containers, perform the equivalent factory wiring: register the registry as a service that receives the container, and ensure each adapter class is resolvable by FQCN.
 
 ## Usage Examples
 
@@ -317,32 +250,33 @@ services:
 <?php
 declare(strict_types=1);
 
-namespace Vendor\Extension\Service;
+namespace App\Service;
 
-use Vendor\Extension\Domain\Repository\ConfigurationRepository;
-use Vendor\Extension\Provider\ProviderAdapterRegistry;
+use App\Imaging\Config\ImagingProviderRepository;
+use App\Imaging\ImagingAdapterRegistry;
 
-final class LlmService
+final class ThumbnailService
 {
     public function __construct(
-        private readonly ConfigurationRepository $configurationRepository,
-        private readonly ProviderAdapterRegistry $adapterRegistry,
+        private readonly ImagingProviderRepository $providerRepository,
+        private readonly ImagingAdapterRegistry $adapterRegistry,
     ) {}
 
     /**
-     * @param array<int, array{role: string, content: string}> $messages
-     * @return array<string, mixed>
+     * @return array{path: string, width: int, height: int}
      */
-    public function chat(string $configurationIdentifier, array $messages): array
+    public function makeThumbnail(string $providerId, string $sourcePath, int $w, int $h): array
     {
-        $config = $this->configurationRepository->findByIdentifier($configurationIdentifier);
-        if ($config === null) {
-            throw new \InvalidArgumentException('Configuration not found: ' . $configurationIdentifier);
+        $provider = $this->providerRepository->findByIdentifier($providerId)
+            ?? throw new \InvalidArgumentException('Provider not found: ' . $providerId);
+
+        $adapter = $this->adapterRegistry->createAdapterFromProvider($provider);
+
+        if (!$adapter->supports('resize')) {
+            throw new \RuntimeException('Adapter does not support resize');
         }
 
-        $adapter = $this->adapterRegistry->createAdapterFromModel($config->getModel());
-
-        return $adapter->chat($messages);
+        return $adapter->resize($sourcePath, $w, $h);
     }
 }
 ```
@@ -353,45 +287,41 @@ final class LlmService
 <?php
 declare(strict_types=1);
 
-namespace Vendor\Extension\Controller\Backend;
+namespace App\Controller;
 
+use App\Imaging\Config\ImagingProviderRepository;
+use App\Imaging\ImagingAdapterRegistry;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
-use TYPO3\CMS\Core\Http\JsonResponse;
-use Vendor\Extension\Domain\Repository\ProviderRepository;
-use Vendor\Extension\Provider\ProviderAdapterRegistry;
 
 final class ProviderController
 {
     public function __construct(
-        private readonly ProviderRepository $providerRepository,
-        private readonly ProviderAdapterRegistry $adapterRegistry,
+        private readonly ImagingProviderRepository $providerRepository,
+        private readonly ImagingAdapterRegistry $adapterRegistry,
+        private readonly ResponseFactory $responseFactory,
     ) {}
 
     public function testConnectionAction(ServerRequestInterface $request): ResponseInterface
     {
-        $providerUid = (int)($request->getParsedBody()['provider'] ?? 0);
-        $provider = $this->providerRepository->findByUid($providerUid);
+        $providerId = (string) ($request->getParsedBody()['provider'] ?? '');
+        $provider = $this->providerRepository->findByIdentifier($providerId);
 
         if ($provider === null) {
-            return new JsonResponse(['success' => false, 'message' => 'Provider not found'], 404);
+            return $this->responseFactory->jsonError('Provider not found', 404);
         }
 
         try {
             $adapter = $this->adapterRegistry->createAdapterFromProvider($provider);
-            // Perform a lightweight API call to verify connection
-            $result = $adapter->testConnection();
-
-            return new JsonResponse([
-                'success' => true,
-                'message' => 'Connection successful',
-                'models' => $result['models'] ?? [],
+            return $this->responseFactory->json([
+                'success'      => true,
+                'capabilities' => array_filter(
+                    ['resize', 'crop', 'jpeg', 'png', 'webp', 'avif'],
+                    static fn (string $cap): bool => $adapter->supports($cap),
+                ),
             ]);
-        } catch (\Exception $e) {
-            return new JsonResponse([
-                'success' => false,
-                'message' => $e->getMessage(),
-            ], 400);
+        } catch (\Throwable $e) {
+            return $this->responseFactory->jsonError($e->getMessage(), 400);
         }
     }
 }
@@ -405,11 +335,11 @@ final class ProviderController
 <?php
 declare(strict_types=1);
 
-namespace Vendor\Extension\Provider\Adapter;
+namespace App\Imaging\Adapter;
 
-use Vendor\Extension\Provider\AdapterInterface;
+use App\Imaging\AdapterInterface;
 
-final class MistralAdapter implements AdapterInterface
+final class WebpAdapter implements AdapterInterface
 {
     // Implement interface...
 }
@@ -418,48 +348,30 @@ final class MistralAdapter implements AdapterInterface
 ### 2. Add to Provider Constants
 
 ```php
-// In Provider entity
-public const ADAPTER_MISTRAL = 'mistral';
+// In ImagingProvider
+public const ADAPTER_WEBP = 'webp';
 ```
 
 ### 3. Update Registry Map
 
 ```php
-// In ProviderAdapterRegistry
+// In ImagingAdapterRegistry
 private const array ADAPTER_MAP = [
     // ... existing adapters
-    Provider::ADAPTER_MISTRAL => MistralAdapter::class,
+    ImagingProvider::ADAPTER_WEBP => WebpAdapter::class,
 ];
 ```
 
-### 4. Register in Services.yaml
+### 4. Register in DI container
 
-```yaml
-Vendor\Extension\Provider\Adapter\MistralAdapter: ~
-```
-
-### 5. Update TCA Select Items
-
-```php
-// In TCA for tx_ext_provider
-'adapter_type' => [
-    'config' => [
-        'type' => 'select',
-        'renderType' => 'selectSingle',
-        'items' => [
-            // ... existing items
-            ['label' => 'Mistral', 'value' => 'mistral'],
-        ],
-    ],
-],
-```
+Add the new adapter to your container configuration (services file, factory wiring, etc.) so the registry can resolve it via the PSR-11 container.
 
 ## Benefits
 
 | Benefit | Description |
 |---------|-------------|
 | **Separation of Concerns** | Protocol logic separate from configuration |
-| **Runtime Flexibility** | Select implementation via database config |
+| **Runtime Flexibility** | Select implementation via configuration |
 | **Testability** | Mock adapters easily in tests |
 | **Extensibility** | Add new adapters without changing existing code |
 | **Type Safety** | Interface ensures consistent API across adapters |
@@ -470,51 +382,54 @@ Vendor\Extension\Provider\Adapter\MistralAdapter: ~
 <?php
 declare(strict_types=1);
 
-namespace Vendor\Extension\Tests\Unit\Provider;
+namespace App\Tests\Imaging;
 
+use App\Imaging\Adapter\GdAdapter;
+use App\Imaging\Config\ImagingProvider;
+use App\Imaging\ImagingAdapterRegistry;
 use PHPUnit\Framework\TestCase;
 use Psr\Container\ContainerInterface;
-use Vendor\Extension\Domain\Model\Provider;
-use Vendor\Extension\Provider\Adapter\OpenAiAdapter;
-use Vendor\Extension\Provider\ProviderAdapterRegistry;
-use Vendor\Extension\Security\ProviderEncryptionServiceInterface;
 
-final class ProviderAdapterRegistryTest extends TestCase
+final class ImagingAdapterRegistryTest extends TestCase
 {
     public function testCreatesCorrectAdapterForProviderType(): void
     {
-        $mockAdapter = $this->createMock(OpenAiAdapter::class);
+        $mockAdapter = $this->createMock(GdAdapter::class);
+        $mockAdapter->expects(self::once())
+            ->method('configure')
+            ->with(self::callback(static fn (array $cfg): bool
+                => $cfg['quality'] === 90 && $cfg['timeout'] === 60));
 
         $container = $this->createMock(ContainerInterface::class);
         $container->method('get')
-            ->with(OpenAiAdapter::class)
+            ->with(GdAdapter::class)
             ->willReturn($mockAdapter);
 
-        $encryption = $this->createMock(ProviderEncryptionServiceInterface::class);
-        $encryption->method('decrypt')
-            ->with('encrypted-key')
-            ->willReturn('decrypted-key');
+        $registry = new ImagingAdapterRegistry($container);
 
-        $registry = new ProviderAdapterRegistry($container, $encryption);
-
-        $provider = new Provider();
-        $provider->_setProperty('adapterType', 'openai');
-        $provider->_setProperty('apiKey', 'encrypted-key');
+        $provider = new ImagingProvider(
+            identifier: 'gd-default',
+            name: 'GD default',
+            adapterType: 'gd',
+            quality: 90,
+            timeout: 60,
+        );
 
         $adapter = $registry->createAdapterFromProvider($provider);
 
-        self::assertInstanceOf(OpenAiAdapter::class, $adapter);
+        self::assertInstanceOf(GdAdapter::class, $adapter);
     }
 
     public function testThrowsExceptionForUnknownAdapterType(): void
     {
         $container = $this->createMock(ContainerInterface::class);
-        $encryption = $this->createMock(ProviderEncryptionServiceInterface::class);
+        $registry = new ImagingAdapterRegistry($container);
 
-        $registry = new ProviderAdapterRegistry($container, $encryption);
-
-        $provider = new Provider();
-        $provider->_setProperty('adapterType', 'unknown');
+        $provider = new ImagingProvider(
+            identifier: 'unknown',
+            name: 'Unknown',
+            adapterType: 'unknown',
+        );
 
         $this->expectException(\InvalidArgumentException::class);
         $this->expectExceptionMessage('Unknown adapter type: unknown');
@@ -528,11 +443,10 @@ final class ProviderAdapterRegistryTest extends TestCase
 
 - **Strategy Pattern**: Adapters implement the Strategy pattern
 - **Factory Pattern**: Registry acts as a factory for adapters
-- **Dependency Injection**: Adapters created via DI container
+- **Dependency Injection**: Adapters created via PSR-11 container
 
 ## Related References
 
-- `multi-version-adapters.md` - Adapter pattern for multi-version library compatibility
-- `symfony-patterns.md` - Dependency injection patterns
-- `type-safety.md` - Interface and type declarations
-- Security Audit Skill - `api-key-encryption.md` for credential handling
+- `multi-version-adapters.md` — Adapter pattern for multi-version library compatibility
+- `symfony-patterns.md` — Dependency injection patterns
+- `type-safety.md` — Interface and type declarations
