@@ -25,10 +25,10 @@ Modernize PHP to current standards: PHP 8.1-8.5, PSR/PHP-FIG, PER-CS, PHPStan ma
 
 ## Agent contract
 
-1. **Discover**: `uv run skills/php-modernization/scripts/introspect.py` for cheap project shape, OR `uv run skills/php-modernization/scripts/verify_php_project.py --root . --summary` for full verification with `agent_actions[]`.
-2. **Drill**: `... --check PM-XX` for one finding. Use full output only when triaging >3 findings.
-3. **Apply**: `uv run skills/php-modernization/scripts/modernize_loop.py --mode dry-run` — review transcript before applying.
-4. **References**: load on demand from the table below; do not pre-load.
+1. **Discover**: `uv run scripts/introspect.py` (cheap), or `uv run scripts/verify_php_project.py --summary` (full, with `agent_actions[]`).
+2. **Drill**: `... --check PM-XX` for one finding. Full output only when triaging >3.
+3. **Apply**: `uv run scripts/modernize_loop.py --mode dry-run` — review transcript before applying.
+4. **References**: load on demand from the table; do not pre-load.
 
 ## Reference routing
 
