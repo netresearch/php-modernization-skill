@@ -229,6 +229,40 @@ def select_fixtures(name: str | None) -> list[Path]:
     return matched
 
 
+def _run_update(fixtures: list[Path]) -> int:
+    for fixture in fixtures:
+        update_snapshot(fixture)
+        sys.stdout.write(f"{fixture.relative_to(REPO_ROOT)}\tUPDATED\n")
+    return 0
+
+
+def _print_failure(rel: Path, diff: list[str], name_width: int) -> None:
+    sys.stdout.write(f"{str(rel).ljust(name_width)} FAIL\n")
+    for line in diff:
+        sys.stdout.write("  " + line)
+    if diff and not diff[-1].endswith("\n"):
+        sys.stdout.write("\n")
+
+
+def _run_check(fixtures: list[Path]) -> int:
+    name_width = max(40, max(len(str(f.relative_to(REPO_ROOT))) for f in fixtures))
+    passed = 0
+    failed_count = 0
+
+    for fixture in fixtures:
+        rel = fixture.relative_to(REPO_ROOT)
+        ok, diff = check_fixture(fixture)
+        if ok:
+            sys.stdout.write(f"{str(rel).ljust(name_width)} PASS\n")
+            passed += 1
+        else:
+            _print_failure(rel, diff, name_width)
+            failed_count += 1
+
+    sys.stdout.write(f"\n{passed}/{len(fixtures)} fixtures pass.\n")
+    return 0 if failed_count == 0 else 1
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(list(argv if argv is not None else sys.argv[1:]))
 
@@ -241,36 +275,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write("no fixtures discovered under fixtures/\n")
         return 2
 
-    if args.update:
-        for fixture in fixtures:
-            update_snapshot(fixture)
-            rel = fixture.relative_to(REPO_ROOT)
-            sys.stdout.write(f"{rel}\tUPDATED\n")
-        return 0
-
-    name_width = max(len(str(f.relative_to(REPO_ROOT))) for f in fixtures)
-    name_width = max(name_width, 40)
-    failed: list[tuple[Path, list[str]]] = []
-    passed_count = 0
-
-    for fixture in fixtures:
-        rel = fixture.relative_to(REPO_ROOT)
-        ok, diff = check_fixture(fixture)
-        if ok:
-            sys.stdout.write(f"{str(rel).ljust(name_width)} PASS\n")
-            passed_count += 1
-        else:
-            sys.stdout.write(f"{str(rel).ljust(name_width)} FAIL\n")
-            for line in diff:
-                sys.stdout.write("  " + line)
-            if diff and not diff[-1].endswith("\n"):
-                sys.stdout.write("\n")
-            failed.append((fixture, diff))
-
-    sys.stdout.write("\n")
-    total = len(fixtures)
-    sys.stdout.write(f"{passed_count}/{total} fixtures pass.\n")
-    return 0 if not failed else 1
+    return _run_update(fixtures) if args.update else _run_check(fixtures)
 
 
 if __name__ == "__main__":
