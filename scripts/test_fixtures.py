@@ -179,7 +179,14 @@ def check_fixture(fixture: Path) -> tuple[bool, list[str]]:
             "  run with --update to generate it\n",
         ]
     actual = normalize(run_verifier(fixture))
-    expected_raw = json.loads(target.read_text(encoding="utf-8"))
+    try:
+        expected_raw = json.loads(target.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        return False, [
+            f"snapshot is not valid JSON: {target.relative_to(REPO_ROOT)}\n",
+            f"  {exc.__class__.__name__}: {exc}\n",
+            "  run with --update to regenerate it\n",
+        ]
     expected = normalize(expected_raw)  # idempotent — protects hand-edits
     actual_text = serialize(actual)
     expected_text = serialize(expected)
