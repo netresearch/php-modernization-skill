@@ -14,7 +14,7 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 #### Agent-contract executable layer
 
-- `skills/php-modernization/scripts/verify_php_project.py` — primary mechanical verifier. PEP 723, runnable via `uv run`. Emits stable JSON 1.0.0, SARIF 2.1.0, or JUnit XML. Supports `--summary`, `--check PM-XX`, `--no-tools`, `--no-cache`, `--root`. Includes machine-readable `agent_actions[]` recommendations so downstream agents can plan fixes without re-reading the rule descriptions.
+- `skills/php-modernization/scripts/verify_php_project.py` — primary mechanical verifier. PEP 723, runnable via `uv run`. Emits JSON (`schema_version: 1.0.0`), SARIF 2.1.0, or JUnit XML. Supports `--summary`, `--check PM-XX`, `--no-tools`, `--no-cache`, `--root`. Includes machine-readable `agent_actions[]` recommendations so downstream agents can plan fixes without re-reading the rule descriptions.
 - `skills/php-modernization/scripts/modernize_loop.py` — orchestrator that chains PHP-CS-Fixer, Rector, PHPStan, and Infection (PR-diff mode) into a single transcript. Defaults to `--mode dry-run`; `apply` mode requires `--confirm`.
 - `skills/php-modernization/scripts/introspect.py` — cheap first-touch profiler. Detects archetype, PHP version constraint, tooling fingerprints, and PSR-4 layout without invoking subprocesses (other than `php --version`). Always exits 0.
 - `skills/php-modernization/scripts/_common.py` — shared archetype detection, composer parsing, and version helpers used by the verifier and introspector.
