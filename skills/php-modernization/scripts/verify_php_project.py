@@ -74,6 +74,25 @@ PHPSTAN_BASELINE_CANDIDATES: tuple[str, ...] = (
 
 PHPSTAN_LEVEL_RE = re.compile(r"^[\t ]*level:[\t ]*(?P<level>\S+)", re.MULTILINE)
 
+# NEON ``includes:`` block matcher — captures the YAML/NEON-style list that
+# follows the keyword, regardless of inline (``includes: ['a', 'b']``) or
+# indented dash form (``includes:\n    - a\n    - b``).
+PHPSTAN_INCLUDES_BLOCK_RE = re.compile(
+    r"^[\t ]*includes:[\t ]*(?P<rest>.*?)(?=^[\S]|\Z)",
+    re.MULTILINE | re.DOTALL,
+)
+PHPSTAN_INCLUDES_ITEM_RE = re.compile(
+    r"""
+    (?:^|[\s,\[])             # boundary: line start, whitespace, comma, or [
+    (?P<quote>['"])           # opening quote
+    (?P<path>[^'"\n]+)        # captured path
+    (?P=quote)                # matching closing quote
+    """,
+    re.VERBOSE | re.MULTILINE,
+)
+
+PHPSTAN_INCLUDE_DEPTH_LIMIT = 5
+
 SUBPROCESS_TIMEOUT_SECONDS = 300
 
 
@@ -198,6 +217,102 @@ def parse_phpstan_level(text: str) -> str | None:
     return m.group("level").strip()
 
 
+def parse_phpstan_includes(text: str) -> list[str]:
+    """Extract include paths from a phpstan.neon body.
+
+    Recognises both NEON forms:
+
+    - Inline list: ``includes: ['a.neon', "b.neon"]``
+    - Indented dash list:
+      ``includes:\\n    - a.neon\\n    - 'b.neon'``
+
+    Bare (unquoted) paths in the dash form are also matched.
+    """
+    block_match = PHPSTAN_INCLUDES_BLOCK_RE.search(text)
+    if not block_match:
+        return []
+    block = block_match.group("rest")
+    paths: list[str] = []
+    seen: set[str] = set()
+
+    # Quoted entries — works for both inline and indented forms.
+    for m in PHPSTAN_INCLUDES_ITEM_RE.finditer(block):
+        path = m.group("path").strip()
+        if path and path not in seen:
+            seen.add(path)
+            paths.append(path)
+
+    # Bare dash-list entries (NEON allows unquoted paths).
+    for line in block.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("-"):
+            continue
+        candidate = stripped[1:].strip()
+        if not candidate or candidate.startswith("#"):
+            continue
+        # Strip surrounding quotes if present (already handled by regex above,
+        # but keep idempotent so we can dedupe via the seen set).
+        if (candidate.startswith("'") and candidate.endswith("'")) or (
+            candidate.startswith('"') and candidate.endswith('"')
+        ):
+            candidate = candidate[1:-1]
+        if candidate and candidate not in seen:
+            seen.add(candidate)
+            paths.append(candidate)
+    return paths
+
+
+def resolve_phpstan_level(
+    config: Path,
+    *,
+    depth_limit: int = PHPSTAN_INCLUDE_DEPTH_LIMIT,
+) -> str | None:
+    """Resolve the effective PHPStan level by following ``includes:`` chain.
+
+    Local ``level:`` always wins (NEON include semantics: the including file
+    overrides included parameters). Only when the local file does not declare
+    a ``level:`` do we descend into ``includes:`` in declaration order and
+    return the first match found.
+
+    Cycle-safe via a visited-set keyed on resolved paths; bounded by
+    ``depth_limit`` (default 5) as a defensive guard.
+    """
+    visited: set[Path] = set()
+    return _resolve_phpstan_level_inner(config, visited, depth_limit)
+
+
+def _resolve_phpstan_level_inner(
+    config: Path, visited: set[Path], depth_remaining: int
+) -> str | None:
+    if depth_remaining < 0:
+        return None
+    try:
+        resolved = config.resolve()
+    except OSError:
+        return None
+    if resolved in visited:
+        return None
+    visited.add(resolved)
+    try:
+        body = config.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+
+    level = parse_phpstan_level(body)
+    if level is not None:
+        return level
+
+    base_dir = config.parent
+    for rel in parse_phpstan_includes(body):
+        candidate = (base_dir / rel) if not Path(rel).is_absolute() else Path(rel)
+        if not candidate.is_file():
+            continue
+        nested = _resolve_phpstan_level_inner(candidate, visited, depth_remaining - 1)
+        if nested is not None:
+            return nested
+    return None
+
+
 def phpstan_level_meets_threshold(level_token: str | None) -> bool:
     if level_token is None:
         return False
@@ -219,6 +334,52 @@ def composer_has_script(
     for name in names:
         if name in scripts:
             return name
+    return None
+
+
+def _script_value_contains(value: Any, marker: str) -> bool:
+    """True when a composer script ``value`` references ``marker``.
+
+    Composer scripts may be strings or lists of strings (sequential commands).
+    ``marker`` should be specific enough to identify the underlying tool
+    invocation (e.g. ``php-cs-fixer fix``, ``phpstan analyse``,
+    ``rector process``) so as not to collide with check-only scripts.
+    """
+    if isinstance(value, str):
+        return marker in value
+    if isinstance(value, list):
+        return any(_script_value_contains(item, marker) for item in value)
+    return False
+
+
+def composer_script_matches(
+    composer: dict[str, Any] | None,
+    *,
+    names: Iterable[str],
+    value_markers: Iterable[str] = (),
+) -> str | None:
+    """Locate a composer script by name equality or value substring.
+
+    Name matches take precedence (cheaper, unambiguous). Value markers are
+    matched against script bodies (string or list-of-strings) so projects
+    that wrap a tool under a non-standard script name (e.g. Netresearch's
+    ``ci:cgl`` running ``vendor/bin/php-cs-fixer fix``) are still
+    recognised.
+    """
+    if not composer:
+        return None
+    scripts = composer.get("scripts") or {}
+    if not isinstance(scripts, dict):
+        return None
+    for name in names:
+        if name in scripts:
+            return name
+    markers = tuple(value_markers)
+    if markers:
+        for name, value in scripts.items():
+            for marker in markers:
+                if _script_value_contains(value, marker):
+                    return name
     return None
 
 
@@ -306,11 +467,10 @@ def check_pm02(root: Path, config: Path | None) -> tuple[Check, str | None]:
             ),
             None,
         )
-    try:
-        body = config.read_text(encoding="utf-8", errors="replace")
-    except OSError:
-        body = ""
-    level = parse_phpstan_level(body)
+    # Resolve recursively through ``includes:`` chains so projects whose
+    # local phpstan.neon only includes a shared CI config still report the
+    # effective level (e.g. netresearch/typo3-ci-workflows ships ``level: max``).
+    level = resolve_phpstan_level(config)
     if phpstan_level_meets_threshold(level):
         return (
             Check(
@@ -447,7 +607,14 @@ def check_pm09(root: Path) -> tuple[Check, Path | None]:
 
 
 def check_pm13(composer: dict[str, Any] | None) -> Check:
-    found = composer_has_script(composer, ("cs:fix", "fix:cs", "php:cs:fix"))
+    # Names: PSR/de-facto + Netresearch ``ci:cgl`` / bare ``cgl`` convention.
+    # Value markers: ``php-cs-fixer fix`` is specific enough to avoid colliding
+    # with the dry-run check command (``php-cs-fixer check`` / ``--dry-run``).
+    found = composer_script_matches(
+        composer,
+        names=("cs:fix", "fix:cs", "php:cs:fix", "ci:cgl", "cgl"),
+        value_markers=("php-cs-fixer fix",),
+    )
     if found:
         return Check(
             id="PM-13",
@@ -462,13 +629,29 @@ def check_pm13(composer: dict[str, Any] | None) -> Check:
         category="composer",
         severity="warning",
         status="fail",
-        message="No coding-standards fix script (cs:fix/fix:cs/php:cs:fix) found in composer.json",
+        message=(
+            "No coding-standards fix script "
+            "(cs:fix/fix:cs/php:cs:fix/ci:cgl/cgl) found in composer.json"
+        ),
         evidence=["composer.json"],
     )
 
 
 def check_pm14(composer: dict[str, Any] | None) -> Check:
-    found = composer_has_script(composer, ("phpstan", "analyse", "analyze"))
+    # Names: PSR/de-facto + Netresearch CI naming.
+    # Value markers: tighten with the analyse subcommand to avoid matching
+    # mere mentions of the binary path.
+    found = composer_script_matches(
+        composer,
+        names=(
+            "phpstan",
+            "analyse",
+            "analyze",
+            "ci:test:php:phpstan",
+            "test:phpstan",
+        ),
+        value_markers=("phpstan analyse", "phpstan analyze"),
+    )
     if found:
         return Check(
             id="PM-14",
@@ -483,13 +666,21 @@ def check_pm14(composer: dict[str, Any] | None) -> Check:
         category="composer",
         severity="warning",
         status="fail",
-        message="No PHPStan script (phpstan/analyse/analyze) found in composer.json",
+        message=(
+            "No PHPStan script "
+            "(phpstan/analyse/analyze/ci:test:php:phpstan/test:phpstan) "
+            "found in composer.json"
+        ),
         evidence=["composer.json"],
     )
 
 
 def check_pm15(composer: dict[str, Any] | None) -> Check:
-    found = composer_has_script(composer, ("rector", "refactor"))
+    found = composer_script_matches(
+        composer,
+        names=("rector", "refactor", "ci:test:php:rector", "test:rector"),
+        value_markers=("rector process",),
+    )
     if found:
         return Check(
             id="PM-15",
@@ -504,7 +695,11 @@ def check_pm15(composer: dict[str, Any] | None) -> Check:
         category="composer",
         severity="info",
         status="fail",
-        message="No Rector script (rector/refactor) found in composer.json",
+        message=(
+            "No Rector script "
+            "(rector/refactor/ci:test:php:rector/test:rector) "
+            "found in composer.json"
+        ),
         evidence=["composer.json"],
     )
 

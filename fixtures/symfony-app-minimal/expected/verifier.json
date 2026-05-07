@@ -141,7 +141,7 @@
         "composer.json"
       ],
       "id": "PM-13",
-      "message": "No coding-standards fix script (cs:fix/fix:cs/php:cs:fix) found in composer.json",
+      "message": "No coding-standards fix script (cs:fix/fix:cs/php:cs:fix/ci:cgl/cgl) found in composer.json",
       "severity": "warning",
       "status": "fail"
     },
@@ -151,7 +151,7 @@
         "composer.json"
       ],
       "id": "PM-14",
-      "message": "No PHPStan script (phpstan/analyse/analyze) found in composer.json",
+      "message": "No PHPStan script (phpstan/analyse/analyze/ci:test:php:phpstan/test:phpstan) found in composer.json",
       "severity": "warning",
       "status": "fail"
     },
@@ -161,7 +161,7 @@
         "composer.json"
       ],
       "id": "PM-15",
-      "message": "No Rector script (rector/refactor) found in composer.json",
+      "message": "No Rector script (rector/refactor/ci:test:php:rector/test:rector) found in composer.json",
       "severity": "info",
       "status": "fail"
     },

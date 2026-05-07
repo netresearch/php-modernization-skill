@@ -1,0 +1,7 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// Symfony console marker file (fixture shape only — not executable).
+exit(0);

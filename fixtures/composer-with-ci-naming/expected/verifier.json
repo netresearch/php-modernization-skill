@@ -25,46 +25,6 @@
       "target": "rector.php"
     },
     {
-      "action": "edit_file",
-      "checkpoint": "PM-13",
-      "confirm_required": false,
-      "operation": "add_cs_fix_script",
-      "rationale": "Coding-standards fix script makes the toolchain runnable via composer",
-      "target": "composer.json"
-    },
-    {
-      "action": "edit_file",
-      "checkpoint": "PM-14",
-      "confirm_required": false,
-      "operation": "add_phpstan_script",
-      "rationale": "PHPStan script makes static analysis runnable via composer",
-      "target": "composer.json"
-    },
-    {
-      "action": "edit_file",
-      "checkpoint": "PM-15",
-      "confirm_required": false,
-      "operation": "add_rector_script",
-      "rationale": "Rector script makes automated refactoring runnable via composer",
-      "target": "composer.json"
-    },
-    {
-      "action": "edit_file",
-      "checkpoint": "PM-16",
-      "confirm_required": false,
-      "operation": "require_dev_phpstan",
-      "rationale": "Add phpstan/phpstan to require-dev or rely on a transitive CI package",
-      "target": "composer.json"
-    },
-    {
-      "action": "edit_file",
-      "checkpoint": "PM-17",
-      "confirm_required": false,
-      "operation": "require_dev_php_cs_fixer",
-      "rationale": "Add friendsofphp/php-cs-fixer to require-dev or rely on a transitive CI package",
-      "target": "composer.json"
-    },
-    {
       "action": "read_reference",
       "checkpoint": "PM-25",
       "confirm_required": false,
@@ -73,7 +33,7 @@
       "target": "skills/php-modernization/references/static-analysis-tools.md"
     }
   ],
-  "archetype": "typo3-extension",
+  "archetype": "generic-composer",
   "checks": [
     {
       "category": "phpstan",
@@ -141,9 +101,9 @@
         "composer.json"
       ],
       "id": "PM-13",
-      "message": "No coding-standards fix script (cs:fix/fix:cs/php:cs:fix/ci:cgl/cgl) found in composer.json",
+      "message": "composer script 'ci:cgl' is defined",
       "severity": "warning",
-      "status": "fail"
+      "status": "pass"
     },
     {
       "category": "composer",
@@ -151,9 +111,9 @@
         "composer.json"
       ],
       "id": "PM-14",
-      "message": "No PHPStan script (phpstan/analyse/analyze/ci:test:php:phpstan/test:phpstan) found in composer.json",
+      "message": "composer script 'ci:test:php:phpstan' is defined",
       "severity": "warning",
-      "status": "fail"
+      "status": "pass"
     },
     {
       "category": "composer",
@@ -161,25 +121,25 @@
         "composer.json"
       ],
       "id": "PM-15",
-      "message": "No Rector script (rector/refactor/ci:test:php:rector/test:rector) found in composer.json",
+      "message": "composer script 'ci:test:php:rector' is defined",
       "severity": "info",
-      "status": "fail"
+      "status": "pass"
     },
     {
       "category": "dependencies",
       "evidence": [],
       "id": "PM-16",
-      "message": "PHPStan is not available \u2014 neither binary nor composer dependency detected",
+      "message": "PHPStan is available (binary or composer dependency)",
       "severity": "warning",
-      "status": "fail"
+      "status": "pass"
     },
     {
       "category": "dependencies",
       "evidence": [],
       "id": "PM-17",
-      "message": "PHP-CS-Fixer is not available \u2014 neither binary nor composer dependency detected",
+      "message": "PHP-CS-Fixer is available (binary or composer dependency)",
       "severity": "warning",
-      "status": "fail"
+      "status": "pass"
     },
     {
       "category": "composer",
@@ -221,9 +181,9 @@
   "skill_version": "1.17.0",
   "summary": {
     "errors": 2,
-    "info": 2,
+    "info": 1,
     "status": "fail",
-    "warnings": 5
+    "warnings": 1
   },
   "tool_runs": [],
   "tooling": {
