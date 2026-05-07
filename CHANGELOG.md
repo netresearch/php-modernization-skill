@@ -39,7 +39,7 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 - `PM-39` (mechanical): `readonly` keyword presence on Doctrine entity classes — fails when `readonly class` collides with `#[Entity]`.
 - `PM-40` (LLM review): broad `readonly` review covering inheritance, embeddables, and serialization edges.
-- `PM-41` (mechanical): Infection diff-mode wiring — checks that PR-mode mutation testing is configured.
+- `PM-41` (LLM review): Infection diff-mode wiring — checks that PR-mode mutation testing is configured.
 - `PM-42` (LLM review): API Platform resource separation — entity vs. API resource boundary.
 
 #### Templates
