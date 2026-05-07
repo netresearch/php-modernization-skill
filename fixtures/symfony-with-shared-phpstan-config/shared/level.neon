@@ -1,0 +1,3 @@
+parameters:
+    level: max
+    treatPhpDocTypesAsCertain: false

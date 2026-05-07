@@ -20,6 +20,13 @@ def detect_archetype(root: Path) -> str:
 
     Returns one of: typo3-extension, symfony-app, monorepo-package,
     generic-composer, unknown.
+
+    The ``generic-composer`` fallback recognises plain Composer libraries
+    that lack framework markers but still declare a PSR-4 autoload mapping
+    or carry a top-level ``src/`` directory. This matches typical SDK and
+    library shapes (e.g. ``netresearch/sdk-api-central-station``) where
+    requiring both ``src/`` and ``tests/`` would produce false ``unknown``
+    classifications.
     """
     if (root / "ext_emconf.php").is_file():
         return "typo3-extension"
@@ -38,12 +45,16 @@ def detect_archetype(root: Path) -> str:
         )
         if nested >= 2:
             return "monorepo-package"
-    if (
-        (root / "composer.json").is_file()
-        and (root / "src").is_dir()
-        and (root / "tests").is_dir()
-    ):
-        return "generic-composer"
+    if (root / "composer.json").is_file():
+        if (root / "src").is_dir():
+            return "generic-composer"
+        composer = read_composer_json(root)
+        if composer is not None:
+            autoload = composer.get("autoload") or {}
+            if isinstance(autoload, dict):
+                psr4 = autoload.get("psr-4")
+                if isinstance(psr4, dict) and psr4:
+                    return "generic-composer"
     return "unknown"
 
 

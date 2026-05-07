@@ -1,0 +1,20 @@
+{
+    "name": "fixtures/composer-with-ci-naming",
+    "description": "Plain Composer library using Netresearch ci:cgl / ci:test:php:* script naming (regression coverage for verifier bug #2 + bug #3 generic-composer fallback without tests/).",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2"
+    },
+    "autoload": {
+        "psr-4": {
+            "Fixtures\\ComposerWithCiNaming\\": "src/"
+        }
+    },
+    "scripts": {
+        "ci:cgl": "vendor/bin/php-cs-fixer fix --diff",
+        "ci:test:php:cgl": "vendor/bin/php-cs-fixer fix --dry-run --diff",
+        "ci:test:php:phpstan": "vendor/bin/phpstan analyse --no-progress",
+        "ci:test:php:rector": "vendor/bin/rector process --dry-run"
+    }
+}

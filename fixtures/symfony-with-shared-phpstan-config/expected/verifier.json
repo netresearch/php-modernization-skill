@@ -2,10 +2,10 @@
   "agent_actions": [
     {
       "action": "edit_file",
-      "checkpoint": "PM-01",
+      "checkpoint": "PM-03",
       "confirm_required": false,
-      "operation": "create_phpstan_config",
-      "rationale": "PHPStan must be configured (phpstan.neon or phpstan.neon.dist)",
+      "operation": "set_treat_phpdoc_types_as_certain_false",
+      "rationale": "treatPhpDocTypesAsCertain: false ensures PHPStan does not trust PHPDoc over runtime",
       "target": "phpstan.neon"
     },
     {
@@ -50,14 +50,6 @@
     },
     {
       "action": "edit_file",
-      "checkpoint": "PM-16",
-      "confirm_required": false,
-      "operation": "require_dev_phpstan",
-      "rationale": "Add phpstan/phpstan to require-dev or rely on a transitive CI package",
-      "target": "composer.json"
-    },
-    {
-      "action": "edit_file",
       "checkpoint": "PM-17",
       "confirm_required": false,
       "operation": "require_dev_php_cs_fixer",
@@ -73,36 +65,37 @@
       "target": "skills/php-modernization/references/static-analysis-tools.md"
     }
   ],
-  "archetype": "typo3-extension",
+  "archetype": "symfony-app",
   "checks": [
     {
       "category": "phpstan",
       "evidence": [
-        "phpstan.neon",
-        "phpstan.neon.dist",
-        "Build/phpstan.neon",
-        "Build/phpstan/phpstan.neon"
+        "phpstan.neon"
       ],
       "id": "PM-01",
-      "message": "PHPStan configuration is missing",
+      "message": "PHPStan configuration found at phpstan.neon",
       "severity": "error",
-      "status": "fail"
+      "status": "pass"
     },
     {
       "category": "phpstan",
-      "evidence": [],
+      "evidence": [
+        "phpstan.neon"
+      ],
       "id": "PM-02",
-      "message": "PHPStan configuration not found; level cannot be evaluated",
+      "message": "PHPStan level is 'max' (>= 9 / max)",
       "severity": "error",
-      "status": "skipped"
+      "status": "pass"
     },
     {
       "category": "phpstan",
-      "evidence": [],
+      "evidence": [
+        "phpstan.neon"
+      ],
       "id": "PM-03",
-      "message": "PHPStan configuration not found",
+      "message": "treatPhpDocTypesAsCertain: false is missing \u2014 PHPDoc types are trusted over runtime",
       "severity": "warning",
-      "status": "skipped"
+      "status": "fail"
     },
     {
       "category": "php-cs-fixer",
@@ -169,9 +162,9 @@
       "category": "dependencies",
       "evidence": [],
       "id": "PM-16",
-      "message": "PHPStan is not available \u2014 neither binary nor composer dependency detected",
+      "message": "PHPStan is available (binary or composer dependency)",
       "severity": "warning",
-      "status": "fail"
+      "status": "pass"
     },
     {
       "category": "dependencies",
@@ -201,11 +194,13 @@
     },
     {
       "category": "phpstan",
-      "evidence": [],
+      "evidence": [
+        "phpstan.neon"
+      ],
       "id": "PM-53",
-      "message": "PHPStan configuration not found",
+      "message": "PHPStan level is 'max' (max)",
       "severity": "warning",
-      "status": "skipped"
+      "status": "pass"
     }
   ],
   "environment": {
@@ -220,7 +215,7 @@
   "skill": "php-modernization",
   "skill_version": "1.17.0",
   "summary": {
-    "errors": 2,
+    "errors": 1,
     "info": 2,
     "status": "fail",
     "warnings": 5
@@ -241,9 +236,9 @@
     },
     "phpstan": {
       "baseline": null,
-      "config_file": null,
-      "configured": false,
-      "level": null
+      "config_file": "phpstan.neon",
+      "configured": true,
+      "level": "max"
     },
     "rector": {
       "config_file": null,

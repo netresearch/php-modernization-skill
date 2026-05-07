@@ -1,0 +1,6 @@
+includes:
+    - shared/level.neon
+
+parameters:
+    paths:
+        - src
