@@ -78,15 +78,25 @@ PHPSTAN_LEVEL_RE = re.compile(r"^[\t ]*level:[\t ]*(?P<level>\S+)", re.MULTILINE
 # follows the keyword, regardless of inline (``includes: ['a', 'b']``) or
 # indented dash form (``includes:\n    - a\n    - b``).
 PHPSTAN_INCLUDES_BLOCK_RE = re.compile(
-    r"^[\t ]*includes:[\t ]*(?P<rest>.*?)(?=^[\S]|\Z)",
+    # Match the includes block. The block ends at the next top-level key
+    # (a non-whitespace identifier followed by ":"), NOT at the next
+    # non-whitespace character — that earlier rule incorrectly terminated on
+    # unindented dash-list items like `- shared/level.neon` which are valid
+    # NEON list members at any indent level.
+    r"^[\t ]*includes:[\t ]*(?P<rest>.*?)(?=^[A-Za-z_][\w.-]*\s*:|\Z)",
     re.MULTILINE | re.DOTALL,
 )
 PHPSTAN_INCLUDES_ITEM_RE = re.compile(
     r"""
     (?:^|[\s,\[])             # boundary: line start, whitespace, comma, or [
-    (?P<quote>['"])           # opening quote
-    (?P<path>[^'"\n]+)        # captured path
-    (?P=quote)                # matching closing quote
+    (?:
+        (?P<quote>['"])(?P<qpath>[^'"\n]+)(?P=quote)   # quoted path
+      |                                                # OR
+        (?P<bpath>[^\s,\[\]'"#][^\s,\[\]#]*)           # bare unquoted path
+                                                       # (no whitespace, comma,
+                                                       # bracket, quote or
+                                                       # hash anywhere)
+    )
     """,
     re.VERBOSE | re.MULTILINE,
 )
@@ -235,9 +245,9 @@ def parse_phpstan_includes(text: str) -> list[str]:
     paths: list[str] = []
     seen: set[str] = set()
 
-    # Quoted entries — works for both inline and indented forms.
+    # Quoted and bare entries from inline `[a, b]` form.
     for m in PHPSTAN_INCLUDES_ITEM_RE.finditer(block):
-        path = m.group("path").strip()
+        path = (m.group("qpath") or m.group("bpath") or "").strip()
         if path and path not in seen:
             seen.add(path)
             paths.append(path)
@@ -383,10 +393,50 @@ def composer_script_matches(
     markers = tuple(value_markers)
     if markers:
         for name, value in scripts.items():
+            # Skip Composer lifecycle events — they fire automatically and
+            # are not developer-callable "tool scripts" (PM-13/14/15 ask
+            # whether the project ships an explicit toolchain entry).
+            if name in COMPOSER_EVENT_SCRIPTS:
+                continue
             for marker in markers:
                 if _script_value_contains(value, marker):
                     return name
     return None
+
+
+# Composer reserved lifecycle/event script names (per the Composer schema).
+# https://getcomposer.org/doc/articles/scripts.md
+COMPOSER_EVENT_SCRIPTS: frozenset[str] = frozenset(
+    {
+        "pre-install-cmd",
+        "post-install-cmd",
+        "pre-update-cmd",
+        "post-update-cmd",
+        "pre-status-cmd",
+        "post-status-cmd",
+        "pre-archive-cmd",
+        "post-archive-cmd",
+        "pre-autoload-dump",
+        "post-autoload-dump",
+        "post-root-package-install",
+        "post-create-project-cmd",
+        "pre-dependencies-solving",
+        "post-dependencies-solving",
+        "pre-package-install",
+        "post-package-install",
+        "pre-package-update",
+        "post-package-update",
+        "pre-package-uninstall",
+        "post-package-uninstall",
+        "pre-pool-create",
+        "init",
+        "command",
+        "pre-file-download",
+        "post-file-download",
+        "pre-command-run",
+        "error",
+    }
+)
 
 
 def find_in_files(root: Path, files: Iterable[str], needle: str) -> Path | None:
