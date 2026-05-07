@@ -250,8 +250,14 @@ def parse_phpstan_includes(text: str) -> list[str]:
         candidate = stripped[1:].strip()
         if not candidate or candidate.startswith("#"):
             continue
-        # Strip surrounding quotes if present (already handled by regex above,
-        # but keep idempotent so we can dedupe via the seen set).
+        # Strip trailing inline comment (NEON uses `#`). For unquoted paths,
+        # the comment is delimited by whitespace + `#`. Quoted paths preserve
+        # `#` as part of the value until the closing quote.
+        if not candidate.startswith(("'", '"')):
+            hash_match = re.search(r"\s+#", candidate)
+            if hash_match:
+                candidate = candidate[: hash_match.start()].rstrip()
+        # Strip surrounding quotes if present.
         if (candidate.startswith("'") and candidate.endswith("'")) or (
             candidate.startswith('"') and candidate.endswith('"')
         ):
