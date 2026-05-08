@@ -27,12 +27,17 @@ Does the test care what argument the call receives?
 │       $stub->method('foo')->willReturn($value);
 │
 └─ YES → it's a mock; require expectation
-        $mock = $this->createMock(X::class);
-        $mock->expects(self::once())     // or ::exactly(N), ::atLeastOnce()
+        $mock = self::createMock(X::class);
+        $mock->expects(self::once())     // see "matcher choice" below
             ->method('foo')
             ->with($expectedArg)         // ← THIS is the assertion
             ->willReturn($value);
 ```
+
+`createMock`/`createStub` are static methods on `TestCase`; PHPStan
+flags `$this->createStub(...)` as `staticMethod.dynamicCall`. Use
+`self::` consistently (or migrate the whole file at once if your repo
+convention is `$this->`).
 
 ## Common antipatterns
 
@@ -48,21 +53,26 @@ to `expects()` form, don't strip it.
 
 `PHPUnit\Framework\TestCase::any()` is hard-deprecated
 ([phpunit#6461](https://github.com/sebastianbergmann/phpunit/issues/6461))
-and PHPStan flags every call as `method.deprecated`. Use a concrete
-matcher that reflects the test's actual assertion:
+and PHPStan flags every call as `method.deprecated`. **Pick the matcher
+that matches the test's actual call semantics** — don't blanket-replace
+with `once()`, that adds a strict assertion the original test didn't
+make and will break paths that legitimately invoke the method 0 or 2+
+times.
 
-| Want | Use |
+| Original intent | Use |
 |---|---|
-| Verify exactly one call | `self::once()` |
-| Verify at least one call | `self::atLeastOnce()` |
-| Verify no calls | `self::never()` |
-| Verify N calls | `self::exactly(N)` |
-| Just need `with()` to be available without count check | `self::any()` is gone — pick the closest concrete matcher (usually `once()` if the test path invokes the method exactly once) |
+| "Method must be called exactly once" | `self::once()` |
+| "Method may be called any number of times, including 0" (true `any()`) | `self::atLeast(0)` (== effectively `any` but accepted by PHPStan) — or rethink whether this is a stub, not a mock |
+| "Method must be called at least once" | `self::atLeastOnce()` |
+| "Method must NOT be called" | `self::never()` |
+| "Method must be called exactly N times" | `self::exactly(N)` |
 
-In a modernization sweep, `self::once()` is the safe default for sites
-that previously had `->method('x')->with(...)` without `expects()`:
-those sites invoked the method exactly once on the test path (otherwise
-the original test was already broken).
+For a mass-conversion of legacy `->method('x')->with(...)` chains
+without `expects()` — these were treated as a stub-style call by
+PHPUnit pre-12, and the framework didn't verify count at all.
+`atLeastOnce()` is usually the safest faithful translation; `once()`
+is correct only when you've verified the test path invokes the method
+exactly once.
 
 ### ❌ `expectNotToPerformAssertions()` with mock expectations
 
@@ -116,7 +126,7 @@ that pulled in such a bump), run:
 
 ```bash
 composer install                            # sync vendor
-rm -rf /tmp/phpstan-* var/cache/phpstan     # invalidate phpstan tmpDir
+vendor/bin/phpstan clear-result-cache       # invalidate analysis cache
 vendor/bin/phpstan analyse                  # re-run from cold cache
 ```
 
@@ -149,6 +159,6 @@ vendor/bin/phpunit --display-all-issues 2>&1 | grep -E "PHPUnit notice|tests tri
 vendor/bin/phpunit 2>&1 | grep -E "Risky:|There (was|were) [0-9]+ risky"
 
 # Cold PHPStan
-rm -rf /tmp/phpstan-* var/cache/phpstan
+vendor/bin/phpstan clear-result-cache
 vendor/bin/phpstan analyse --no-progress
 ```

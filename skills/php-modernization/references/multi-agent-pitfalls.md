@@ -37,24 +37,26 @@ vendor/bin/phpstan analyse --no-progress
 **Brief every agent**: when scripted commands accept flags, hand the
 agent the raw binary invocation, not the composer alias.
 
-## Hazard 2: Never `git checkout -- <file>` mid-multi-agent run
+## Hazard 2: `git checkout --` outside your declared scope
 
-If sub-agents are running in parallel against the same working tree,
-one agent's `git checkout -- <path>` can wipe out another agent's
-uncommitted edits.
+If sub-agents run in parallel against the same working tree, one
+agent's `git checkout -- <path>` on a file outside its declared scope
+can wipe out a sibling agent's uncommitted edits.
 
-**Safer alternatives** when an agent needs to test a "main" baseline:
+**The rule (single, unambiguous):**
+
+> An agent may only `git checkout --` / `git restore` files **inside
+> its own declared file scope**. For any file outside that scope —
+> including auto-generated files (Hazard 6) — use `git stash`,
+> `git diff`, or coordinate with the orchestrator instead.
+
+**Safer alternatives** when comparing to a baseline:
 
 - `git stash push -m "tmp"`, do the read-only test, `git stash pop`.
   Stashes are agent-private as long as the name is unique.
 - Spawn a separate read-only worktree with `isolation: "worktree"` for
   the discovery work. (Don't write across worktrees.)
-- Just `git diff main -- <path>` to see what's different without
-  reverting.
-
-**Brief every agent that touches state**: "Do not run `git checkout
---` or `git restore` on files outside your declared scope. If you need
-to compare against main, use `git stash` or `git diff` instead."
+- `git diff main -- <path>` to see differences without reverting.
 
 ## Hazard 3: Local PHPStan cache lies vs CI
 
@@ -71,10 +73,15 @@ which this routinely diverges from CI:
 **Mitigation in the agent's verification step**:
 
 ```bash
-rm -rf /tmp/phpstan-* var/cache/phpstan
-composer install                # if composer.lock changed since last run
+composer install                            # if composer.lock changed
+vendor/bin/phpstan clear-result-cache       # invalidate analysis cache safely
 vendor/bin/phpstan analyse --no-progress
 ```
+
+`vendor/bin/phpstan clear-result-cache` is the supported way to clear
+PHPStan's cache — it knows the actual `tmpDir` from the config, and
+won't accidentally nuke caches from sibling projects on the same
+machine the way `rm -rf /tmp/phpstan-*` could.
 
 Always run this **before** reporting `[OK] No errors`. The skill's
 default verify scripts should not declare success on a cached run.
@@ -111,14 +118,19 @@ regenerates `config/reference.php`. Doctrine migrations and schema
 files have similar regenerators. If the agent commits these, every
 subsequent `composer install` produces a fresh diff.
 
-**Mitigation**:
+**Mitigation** (in order of preference):
 
-- Agents should `git checkout -- <generated-file>` (yes, this hazard
-  collides with #2 — agents have to be precise) BEFORE staging final
-  commits.
-- The verify script should detect Symfony auto-generated files in the
-  staged diff and warn.
-- Better: project should gitignore them. Suggest this in the PR.
+1. **Best**: project gitignores the file. Suggest this in the PR.
+2. **Without gitignore**: at the END of the agent's work, after all
+   sibling agents have committed, run `git restore <generated-file>`
+   *only if that file is in YOUR declared scope* (per Hazard 2). The
+   orchestrator should give exactly one agent ownership of cleanup.
+3. **Mid-run**: don't restore. Commit your real edits, then submit a
+   follow-up commit that restores the regenerated file.
+4. **Alternative**: `git update-index --assume-unchanged <file>` for
+   the duration of the run — files don't appear in `git status` and
+   regenerators won't pollute the diff. Reset with `--no-assume-unchanged`
+   when done.
 
 ## Hazard 7: Pre-commit hooks running tests on the host
 
@@ -149,12 +161,13 @@ in parallel:
 
 ```
 SHARED REPO HAZARDS:
-- Use bin/rector / vendor/bin/php-cs-fixer / vendor/bin/phpstan
-  directly. Do NOT use `composer rector -- --dry-run` (composer
-  swallows the flag).
+- Use vendor/bin/rector / vendor/bin/php-cs-fixer / vendor/bin/phpstan
+  directly. Composer script aliases sometimes drop --forwarded flags
+  depending on the script body's quoting.
 - Do NOT run `git checkout --`, `git restore`, or `git reset --hard`
-  on any file. Use `git stash` for temporary baselines.
-- Before reporting clean: `rm -rf /tmp/phpstan-* var/cache/phpstan`
+  on files OUTSIDE your declared scope. Use `git stash` / `git diff`
+  to compare to a baseline.
+- Before reporting clean: `vendor/bin/phpstan clear-result-cache`
   and re-run analyse.
 - After any composer.lock change in your scope: run `composer install`.
 - If pre-commit hooks block your commit: report the hook output, do

@@ -57,7 +57,7 @@ Modernize PHP to 8.1-8.5, PSR/PER-CS, PHPStan max, type safety.
 ## Hard guardrails
 
 - Never apply `readonly` to Doctrine entities or mapped-superclasses (embeddables: see `references/doctrine-modernization-edges.md`).
-- Never run Rector without `--dry-run`. Invoke `vendor/bin/rector` directly — `composer rector -- --dry-run` swallows the flag.
+- Never run Rector without `--dry-run`. Invoke `vendor/bin/rector` directly — composer script aliases can drop `--`-forwarded flags depending on configuration.
 - Never raise PHPStan level without regenerating + committing the baseline. Shrink, never delete.
 - Never apply blanket `final` to mock targets or extension points without confirmation.
 - Never edit `@generated` files or files under `var/cache/`, `vendor/`, `node_modules/`, `.Build/`.

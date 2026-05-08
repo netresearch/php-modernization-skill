@@ -354,12 +354,16 @@ vendor/bin/rector process --clear-cache
 
 | Set | Purpose |
 |-----|---------|
-| `LevelSetList::UP_TO_PHP_83` | PHP version upgrade |
+| `LevelSetList::UP_TO_PHP_85` | PHP version upgrade — bump alongside `composer.json`'s `php` constraint; available from Rector 2.4+ |
 | `SetList::CODE_QUALITY` | Improve code quality |
 | `SetList::DEAD_CODE` | Remove unused code |
 | `SetList::TYPE_DECLARATION` | Add type declarations |
 | `SetList::PRIVATIZATION` | Make code more private |
 | `SetList::EARLY_RETURN` | Convert to early returns |
+
+If your installed Rector predates 2.4, the upper `UP_TO_PHP_*` constant
+will be `UP_TO_PHP_84` or lower — check `vendor/rector/rector/src/Set/ValueObject/LevelSetList.php`
+for what's actually available.
 
 ### CI Integration
 
