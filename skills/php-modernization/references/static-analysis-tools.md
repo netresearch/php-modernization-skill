@@ -284,7 +284,11 @@ Rector automates code migrations and refactoring.
 composer require --dev rector/rector
 ```
 
-### Configuration
+### Configuration (modern, composer-based)
+
+Per-version `SymfonySetList::SYMFONY_*` constants are all
+`@deprecated` upstream — they don't handle package differences. The
+modern shape is to let Rector read installed versions from `composer.lock`:
 
 ```php
 <?php
@@ -295,6 +299,7 @@ declare(strict_types=1);
 use Rector\Config\RectorConfig;
 use Rector\Set\ValueObject\LevelSetList;
 use Rector\Set\ValueObject\SetList;
+use Rector\Symfony\Set\SymfonySetList;
 use Rector\TypeDeclaration\Rector\ClassMethod\AddVoidReturnTypeWhereNoReturnRector;
 
 return RectorConfig::configure()
@@ -306,23 +311,34 @@ return RectorConfig::configure()
         __DIR__ . '/src/Kernel.php',
     ])
     ->withSets([
-        LevelSetList::UP_TO_PHP_83,
+        LevelSetList::UP_TO_PHP_85,        // bump alongside composer.json's php constraint
         SetList::CODE_QUALITY,
         SetList::DEAD_CODE,
         SetList::TYPE_DECLARATION,
         SetList::PRIVATIZATION,
         SetList::EARLY_RETURN,
+        SymfonySetList::SYMFONY_CODE_QUALITY,  // still non-deprecated
     ])
+    ->withComposerBased(symfony: true)         // auto-detects Symfony major from composer.lock
+    ->withAttributesSets(symfony: true)        // annotation → attribute migration
     ->withRules([
         AddVoidReturnTypeWhereNoReturnRector::class,
     ]);
 ```
 
+`withComposerBased(symfony: true)` replaces every per-version
+`SymfonySetList::SYMFONY_60`/`SYMFONY_70`/`SYMFONY_80` etc. and
+auto-tracks the installed Symfony major. Same for `doctrine`,
+`phpunit`, `behat` flags on the same call.
+
 ### Usage
 
 ```bash
-# Preview changes (dry run)
+# Preview changes — INVOKE THE BINARY DIRECTLY.
+# `composer rector -- --dry-run` does NOT forward the flag (composer
+# script aliases swallow trailing args) and runs Rector in apply mode.
 vendor/bin/rector process --dry-run
+bin/rector process --dry-run                 # netresearch convention
 
 # Apply changes
 vendor/bin/rector process
@@ -338,12 +354,16 @@ vendor/bin/rector process --clear-cache
 
 | Set | Purpose |
 |-----|---------|
-| `LevelSetList::UP_TO_PHP_83` | PHP version upgrade |
+| `LevelSetList::UP_TO_PHP_85` | PHP version upgrade — bump alongside `composer.json`'s `php` constraint; available from Rector 2.4+ |
 | `SetList::CODE_QUALITY` | Improve code quality |
 | `SetList::DEAD_CODE` | Remove unused code |
 | `SetList::TYPE_DECLARATION` | Add type declarations |
 | `SetList::PRIVATIZATION` | Make code more private |
 | `SetList::EARLY_RETURN` | Convert to early returns |
+
+If your installed Rector predates 2.4, the upper `UP_TO_PHP_*` constant
+will be `UP_TO_PHP_84` or lower — check `vendor/rector/rector/src/Set/ValueObject/LevelSetList.php`
+for what's actually available.
 
 ### CI Integration
 
@@ -501,3 +521,23 @@ includes:
 ```
 
 Reduce baseline errors over time until reaching zero.
+
+## Cache invalidation hazard
+
+`phpstan.neon`'s `tmpDir` (e.g. `tmpDir: /tmp/phpstan-X`) caches
+analysis results keyed to `vendor/` stubs. After **any** of:
+
+- `composer install` / `composer update`
+- A rebase that pulled in a `phpstan-*` extension or `phpunit` major
+  bump
+- Mass test refactors (mock → stub conversions, etc.)
+
+…the cache may report the OLD shape as clean while CI fails on the new.
+Always purge before final verify:
+
+```bash
+rm -rf /tmp/phpstan-* var/cache/phpstan
+vendor/bin/phpstan analyse --no-progress
+```
+
+Make this part of the agent's verification step, not optional.
