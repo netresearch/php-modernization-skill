@@ -21,8 +21,6 @@ allowed-tools:
 
 # PHP Modernization
 
-Modernize PHP to 8.1-8.5, PSR/PER-CS, PHPStan max, type safety.
-
 ## Agent contract
 
 1. **Discover**: `uv run ${CLAUDE_SKILL_DIR}/scripts/introspect.py` (cheap), or `verify_php_project.py --summary` (full, with `agent_actions[]`).
@@ -49,7 +47,7 @@ Modernize PHP to 8.1-8.5, PSR/PER-CS, PHPStan max, type safety.
 | Doctrine edges | `references/doctrine-modernization-edges.md` |
 | API Platform | `references/api-platform-edges.md` |
 | Immutability | `references/immutability-boundaries.md` |
-| Contracts & invariants (value objects, services, state machines) | `references/contracts-and-invariants.md` |
+| Contracts & invariants | `references/contracts-and-invariants.md` |
 | Mutation testing | `references/mutation-testing.md` |
 | Migration planning | `references/migration-strategies.md` |
 | PHPUnit 12→13, mock vs stub | `references/phpunit-modernization.md` |
