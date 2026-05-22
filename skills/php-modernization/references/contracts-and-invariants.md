@@ -26,12 +26,10 @@ PHP compiles `assert()` calls under `zend.assertions`:
 
 - `zend.assertions=1` (dev / CI): assertions run, failures throw `AssertionError`
 - `zend.assertions=-1` (production): the compiler strips the calls entirely — zero cost
-- `assert.exception=1`: assertion failures throw rather than warning (set explicitly; the default has churned)
 
 ```ini
 ; php.ini (development / CI)
 zend.assertions = 1
-assert.exception = 1
 ```
 
 ```ini
@@ -39,13 +37,15 @@ assert.exception = 1
 zend.assertions = -1
 ```
 
-Because `assert()` is strippable, do not rely on it for input validation or side-effecting checks. It is for *invariants the code itself is supposed to maintain*.
+(Note: `assert.exception` was deprecated in PHP 8.3 — under `zend.assertions=1`, failures already throw `AssertionError`. Don't set it on PHP 8.3+.)
+
+Because `assert()` is strippable, do not rely on it for input validation, security checks, or side-effecting checks. It is for *invariants the code itself is supposed to maintain*.
 
 Reference: <https://www.php.net/manual/en/function.assert.php>
 
 ### `webmozart/assert`
 
-Use for **always-on** runtime checks at boundaries (input validation, library-API guard rails). The exceptions thrown are `InvalidArgumentException`, which surfaces as a 4xx in most stacks.
+Use for **always-on** runtime checks at boundaries (input validation, library-API guard rails). The exceptions thrown are `InvalidArgumentException`; most application frameworks need an explicit exception-listener / handler to map that to a 4xx response (Symfony's `kernel.exception` listener, Laravel's `Handler::register`, Slim's error middleware, etc.). Configure that mapping or the failure surfaces as a generic 500.
 
 ```php
 use Webmozart\Assert\Assert;
@@ -141,21 +141,25 @@ final class TransferService
      * Transfer funds between accounts.
      *
      * Contract:
-     *   pre:  $amount->isPositive()
-     *   pre:  $from->balance->isGreaterThanOrEqual($amount)
+     *   pre:  $amount->isPositive()                                        // caller's responsibility → always-on guard
+     *   pre:  $from->balance->isGreaterThanOrEqual($amount)                // caller's responsibility → always-on guard
      *   post: $from->balance + $to->balance == old($from->balance + $to->balance)
      *   inv:  account balances never go negative
      */
     public function transfer(Account $from, Account $to, Money $amount): void
     {
-        \assert($amount->isPositive(), 'precondition: amount > 0');
-        \assert($from->balance->isGreaterThanOrEqual($amount), 'precondition: sufficient balance');
+        // Caller-facing preconditions: always-on. Webmozart throws
+        // InvalidArgumentException, which the framework maps to a 4xx.
+        Assert::true($amount->isPositive(), 'amount must be positive');
+        Assert::true($from->balance->isGreaterThanOrEqual($amount), 'insufficient balance');
 
         $sumBefore = $from->balance->plus($to->balance);
 
         $from->debit($amount);
         $to->credit($amount);
 
+        // Self-checks: strippable in production. They guard *our own*
+        // implementation, not the caller.
         \assert($from->balance->plus($to->balance)->equals($sumBefore), 'postcondition: conservation');
         \assert(!$from->balance->isNegative() && !$to->balance->isNegative(), 'invariant: non-negative');
     }
@@ -191,6 +195,8 @@ A postcondition is automatically a property: "for all valid inputs, the postcond
 PHPUnit data providers cover representative inputs. Paired with mutation testing (`infection/infection`), they catch most contract drift in domain code:
 
 ```php
+use PHPUnit\Framework\Attributes\DataProvider;
+
 public static function withdrawalCases(): iterable
 {
     yield 'zero balance, zero withdrawal' => [0, 0, 0];
