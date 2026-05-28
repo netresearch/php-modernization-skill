@@ -8,6 +8,8 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-05-28
+
 This entry collects the cumulative work landed on `main` after the v1.15.1 tag — the agent-harness refocus that turns the skill into an executable contract instead of a static reference bundle. Release notes will be assigned a version when the next tag is cut.
 
 ### Added
