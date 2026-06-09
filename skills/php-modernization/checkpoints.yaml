@@ -483,17 +483,17 @@ llm_reviews:
     domain: code-quality
     severity: error
     prompt: |
-      Review all PSR-15 middleware process() methods that contain a
-      catch(Throwable) or catch(Exception) block.
+      Review all PSR-15 middleware process() methods that contain a broad catch
+      block: catch(\Throwable), catch(Throwable), catch(\Exception), catch(Exception),
+      or multi-catch forms like catch(FooException|\Throwable $e).
 
       In TYPO3 and Symfony middleware stacks, certain exceptions are framework
-      control-flow signals — they carry a prepared response and must propagate
-      to the error-handling middleware further up the stack. Swallowing them
-      (logging and continuing) prevents error pages, redirects, and access
-      controls from working correctly.
+      control-flow signals that must propagate to the error-handling middleware
+      further up the stack. Swallowing them (logging and continuing) prevents
+      error pages, redirects, and access controls from working correctly.
 
-      Flag any catch(Throwable) / catch(Exception) block that does NOT re-throw
-      at least the following types before handling the error:
+      Flag any broad catch block that does NOT re-throw at least the following
+      types before handling the error:
 
       TYPO3 projects:
         - TYPO3\CMS\Core\Http\ImmediateResponseException  (carries PSR-7 response, must propagate)
@@ -501,9 +501,10 @@ llm_reviews:
         - TYPO3\CMS\Core\Error\Http\StatusException       (base for 404, 503, etc. — handled by SiteBasedErrorHandlingMiddleware)
 
       Symfony projects:
-        - Symfony\Component\HttpKernel\Exception\HttpExceptionInterface
+        - Symfony\Component\HttpKernel\Exception\HttpExceptionInterface  (carries HTTP status code + headers, must propagate for HttpKernel to render the correct error response)
+        - Symfony\Component\Security\Core\Exception\AccessDeniedException  (used by security firewall to trigger authentication entry point or render access-denied page)
 
-      A correct guard looks like:
+      A correct guard looks like (TYPO3):
         if ($e instanceof ImmediateResponseException
             || $e instanceof PropagateResponseException
             || $e instanceof StatusException
@@ -511,5 +512,12 @@ llm_reviews:
             throw $e;
         }
 
+      Or for Symfony:
+        if ($e instanceof HttpExceptionInterface
+            || $e instanceof AccessDeniedException
+        ) {
+            throw $e;
+        }
+
       Report the file, method, and missing re-throw types for each violation.
-    desc: "PSR-15 middleware catch(Throwable) blocks must re-throw framework control-flow exceptions (ImmediateResponseException, PropagateResponseException, StatusException)"
+    desc: "PSR-15 middleware broad catch(\Throwable) blocks must re-throw framework control-flow exceptions (TYPO3: ImmediateResponseException, PropagateResponseException, StatusException; Symfony: HttpExceptionInterface, AccessDeniedException)"
