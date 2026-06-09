@@ -520,4 +520,4 @@ llm_reviews:
         }
 
       Report the file, method, and missing re-throw types for each violation.
-    desc: "PSR-15 middleware broad catch(\Throwable) blocks must re-throw framework control-flow exceptions (TYPO3: ImmediateResponseException, PropagateResponseException, StatusException; Symfony: HttpExceptionInterface, AccessDeniedException)"
+    desc: 'PSR-15 middleware broad catch(\Throwable) blocks must re-throw framework control-flow exceptions (TYPO3: ImmediateResponseException, PropagateResponseException, StatusException; Symfony: HttpExceptionInterface, AccessDeniedException)'
