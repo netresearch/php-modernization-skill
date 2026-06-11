@@ -4,7 +4,7 @@ description: "Use when modernizing PHP code: PHP 8.1-8.5 features, PSR/PHP-FIG/P
 license: "(MIT AND CC-BY-SA-4.0)"
 compatibility: "Requires php 8.1+, composer."
 metadata:
-  version: "1.18.0"
+  version: "1.19.0"
   repository: "https://github.com/netresearch/php-modernization-skill"
   author: "Netresearch DTT GmbH"
 allowed-tools:
