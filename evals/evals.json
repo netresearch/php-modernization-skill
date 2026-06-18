@@ -434,5 +434,26 @@
         "description": "Defines dependency constraint rules"
       }
     ]
+  },
+  {
+    "name": "cs-fixer-ci-version-parity",
+    "prompt": "My php-cs-fixer run passes locally but the CI 'code-style' job fails on the very same files. Locally I run `php vendor/bin/php-cs-fixer fix --dry-run` on PHP 8.5; CI runs the gate on PHP 8.2. Why does this happen and what should I do so my local check matches CI?",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "version",
+        "description": "Identifies php-cs-fixer behaviour as PHP-version-specific (fixers/formatting depend on the running PHP version)"
+      },
+      {
+        "type": "content_contains",
+        "value": "8.2",
+        "description": "Recommends running under CI's pinned PHP version, not the newer local one"
+      },
+      {
+        "type": "content_contains",
+        "value": "Docker",
+        "description": "Recommends matching CI via the project's runner / Docker (e.g. make code-style or docker run php:8.2-cli)"
+      }
+    ]
   }
 ]
