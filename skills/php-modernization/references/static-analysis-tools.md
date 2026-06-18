@@ -541,3 +541,27 @@ vendor/bin/phpstan analyse --no-progress
 ```
 
 Make this part of the agent's verification step, not optional.
+
+## Run the toolchain the way CI does (version parity)
+
+PHP-CS-Fixer (and, less often, PHPStan) behaves in a **PHP-version-specific**
+way: which fixers apply and how they format depends on the PHP version the
+binary runs under. So `php vendor/bin/php-cs-fixer fix --dry-run` on a *newer*
+local PHP can report a file clean while CI — running on the project's *pinned,
+older* PHP — rewrites it and fails the gate. (Seen in practice: a closure
+formatted `fn (` passed local PHP 8.5 but CI's PHP 8.2 demanded `fn(`, costing a
+red Quality gate and a force-push.)
+
+Run quality gates through the project's own runner so the PHP version matches CI:
+
+- If the repo ships a wrapper — `make code-style` / `make phpstan`, a composer
+  script (`composer ci:cs`, `composer ci:test:php:cs`), or a Docker-based
+  runner — use it. It pins the PHP version *and* the config CI uses.
+- If you must call the binary directly, invoke it under the same PHP version CI
+  uses (e.g. `docker run --rm -v "$PWD":/app -w /app php:8.2-cli vendor/bin/php-cs-fixer fix --dry-run`),
+  not your local default interpreter.
+- `PHP_CS_FIXER_IGNORE_ENV` only silences the version-mismatch *warning*; it does
+  **not** make a newer PHP behave like the pinned one.
+
+Make "run the gate the way CI runs it" part of the verification step — a
+locally-green cs-fixer/PHPStan is not proof until it has run on CI's toolchain.
