@@ -565,3 +565,31 @@ Run quality gates through the project's own runner so the PHP version matches CI
 
 Make "run the gate the way CI runs it" part of the verification step — a
 locally-green cs-fixer/PHPStan is not proof until it has run on CI's toolchain.
+
+## SAST maintainability refactors can silently drop a branch
+
+SAST maintainability/complexity findings — SonarCloud `S3776` (cognitive
+complexity) and `S1142` (too many `return` statements) — are usually "fixed" by
+**extracting** a helper method or **reordering** control flow. That edit is
+**behavior-risky in a way the other gates cannot see**: an extraction can
+silently drop a branch — e.g. a fallback-to-default path taken on an empty or
+invalid response. PHP-CS-Fixer and PHPStan stay green (the shape is still
+type-correct and well-formatted), and a passing unit suite proves nothing if
+that branch was never covered. (Seen in practice: a 2026 complexity cleanup
+extracted a method and lost an empty-response fallback; every static gate and
+the existing unit suite passed — only a human code reviewer caught it.)
+
+Before trusting green gates on a complexity refactor:
+
+- **Diff the control-flow branches** of the refactored method against the
+  original. Trace every logical path to ensure all outcomes are preserved, even
+  if the structural count of `return` or `else` statements has changed.
+- **Add a unit test for the previously-uncovered branch FIRST**, watch it pass
+  against the original, then refactor. A test that only covers the happy path
+  cannot protect the fallback you are about to move.
+
+Often the better call is to **accept** subjective complexity findings on
+controller / service / command layers rather than perform a risky extraction.
+Mark them won't-fix in the SAST UI with a short comment explaining why the
+method's structure is intentional — a deliberate "review as safe" beats a
+mechanical refactor that ships a regression.
