@@ -582,8 +582,8 @@ the existing unit suite passed — only a human code reviewer caught it.)
 Before trusting green gates on a complexity refactor:
 
 - **Diff the control-flow branches** of the refactored method against the
-  original. Is every `return`, `else`, and early-exit preserved? Count them on
-  both sides.
+  original. Trace every logical path to ensure all outcomes are preserved, even
+  if the structural count of `return` or `else` statements has changed.
 - **Add a unit test for the previously-uncovered branch FIRST**, watch it pass
   against the original, then refactor. A test that only covers the happy path
   cannot protect the fallback you are about to move.
