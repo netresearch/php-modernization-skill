@@ -126,6 +126,60 @@ final class ApiSubscriber implements EventSubscriberInterface
 }
 ```
 
+### Wrapping a `final` service — compose, don't `->decorate()`
+
+To intercept a `final` upstream service that belongs to a **tagged service
+collection**, do not use Symfony's `->decorate()`. Decoration leaves the inner
+service registered, so with a tagged collection **both** the inner (decorated)
+and outer (decorator) service carry the tag — the collection receives the
+service twice, and that duplicate registration can break the consumer (observed
+on PHP 8.1 with a `phpdoc.guides.directive`-tagged collection).
+
+`final` also rules out subclassing. Compose instead: inject the upstream service
+into your wrapper and delegate to it, then in a compiler pass clear the
+upstream's tag so only the wrapper stays in the collection.
+
+```php
+<?php
+
+declare(strict_types=1);
+
+namespace App\Guides\Directive;
+
+final class MyDirective extends BaseDirective
+{
+    public function __construct(
+        private readonly UpstreamDirective $inner,
+        private readonly LoggerInterface $logger,
+    ) {
+    }
+
+    public function process(BlockContext $blockContext, Directive $directive): ?Node
+    {
+        // intercept / adjust, then delegate
+        return $this->inner->process($blockContext, $directive);
+    }
+}
+```
+
+Clear the tag on the upstream definition in a compiler pass so only the wrapper
+is registered for the collection:
+
+```php
+// CompilerPassInterface::process()
+if ($container->has(UpstreamDirective::class)) {
+    // findDefinition() resolves aliases; getDefinition() would throw on one
+    $container->findDefinition(UpstreamDirective::class)
+        ->clearTag('phpdoc.guides.directive');
+}
+```
+
+`clearTag()` removes only that tag; the upstream service stays in the container,
+so it remains injectable here and for any other consumer. Prefer it over
+`removeDefinition()`, which deletes the service outright and breaks anything else
+that injects it. For a non-`final` service not in a tagged collection, plain
+`->decorate()` is fine.
+
 ## Attribute-Based Routing
 
 ```php
