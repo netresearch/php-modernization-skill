@@ -586,7 +586,7 @@ json_decode('{}', true) === [];        // true
 json_decode('{}');                     // stdClass {}  (object)  ← preserved
 ```
 
-A JSON Schema `properties` block, or a tool call's `arguments`, MUST serialise
+A JSON Schema `properties` block, or a tool call's `arguments`, MUST serialize
 as `{}` when empty. Sending `[]` gets the whole request rejected — Ollama, for
 example, returns HTTP 400 `Value looks like object, but can't find closing '}'
 symbol`.
@@ -594,12 +594,12 @@ symbol`.
 **Rules:**
 
 - For a field that must be a JSON **object**, represent "empty" as
-  `new stdClass()` (or `(object) []`), not `[]`. Normalise at the value's
-  construction site so every serialisation path is correct:
+  `new \stdClass()` (or `(object) []`), not `[]`. Normalize at the value's
+  construction site so every serialization path is correct:
 
   ```php
   if (($schema['properties'] ?? null) === []) {
-      $schema['properties'] = new stdClass();   // serialises as {}
+      $schema['properties'] = new \stdClass();   // serializes as {}
   }
   ```
 
@@ -607,11 +607,19 @@ symbol`.
   `json_decode($json)` (objects) — not `json_decode($json, true)` (which turns
   an empty `{}` into `[]` and re-encodes it wrong on the next hop).
 
-- Prefer normalising in a **shared value object's constructor** over each
+- Prefer normalizing in a **shared value object's constructor** over each
   provider/serializer: adapters that read the raw property directly (not via a
   `toArray()`) then get the correct type too, and `fromArray(toArray())` stays
-  idempotent.
+  idempotent:
 
-**Symptom to recognise:** an intermittent-looking 4xx from a JSON API that
+  ```php
+  public function __construct(array|object $properties)
+  {
+      // Empty array would serialize as []; force an empty object to {}.
+      $this->properties = $properties === [] ? new \stdClass() : (object) $properties;
+  }
+  ```
+
+**Symptom to recognize:** an intermittent-looking 4xx from a JSON API that
 actually correlates with *which optional/empty field is present* (e.g. only
 fails when a parameterless tool is offered) — not with timing or connections.
