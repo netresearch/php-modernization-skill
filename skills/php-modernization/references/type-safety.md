@@ -566,3 +566,52 @@ class UserRepository extends AbstractRepository
     }
 }
 ```
+
+## JSON: Empty Object vs. Empty Array
+
+PHP conflates `[]` (empty array) and `{}` (empty object) in ways that break
+strict JSON consumers — LLM tool-calling APIs (OpenAI, Ollama), JSON Schema
+validators, and any peer that distinguishes the two types.
+
+**Two traps, one root cause — `[]` and `{}` are the same empty PHP array:**
+
+```php
+// Trap 1 — encoding: an empty PHP array becomes a JSON array, never an object.
+json_encode([]);                       // "[]"   ← NOT "{}"
+json_encode(['properties' => []]);     // {"properties":[]}  ← invalid where an object is required
+
+// Trap 2 — decoding with associative=true collapses an empty object to [].
+json_decode('{}', true);               // []     (array)  ← type is now wrong
+json_decode('{}', true) === [];        // true
+json_decode('{}');                     // stdClass {}  (object)  ← preserved
+```
+
+A JSON Schema `properties` block, or a tool call's `arguments`, MUST serialise
+as `{}` when empty. Sending `[]` gets the whole request rejected — Ollama, for
+example, returns HTTP 400 `Value looks like object, but can't find closing '}'
+symbol`.
+
+**Rules:**
+
+- For a field that must be a JSON **object**, represent "empty" as
+  `new stdClass()` (or `(object) []`), not `[]`. Normalise at the value's
+  construction site so every serialisation path is correct:
+
+  ```php
+  if (($schema['properties'] ?? null) === []) {
+      $schema['properties'] = new stdClass();   // serialises as {}
+  }
+  ```
+
+- When a decoded value must **round-trip** as an object, decode with
+  `json_decode($json)` (objects) — not `json_decode($json, true)` (which turns
+  an empty `{}` into `[]` and re-encodes it wrong on the next hop).
+
+- Prefer normalising in a **shared value object's constructor** over each
+  provider/serializer: adapters that read the raw property directly (not via a
+  `toArray()`) then get the correct type too, and `fromArray(toArray())` stays
+  idempotent.
+
+**Symptom to recognise:** an intermittent-looking 4xx from a JSON API that
+actually correlates with *which optional/empty field is present* (e.g. only
+fails when a parameterless tool is offered) — not with timing or connections.
