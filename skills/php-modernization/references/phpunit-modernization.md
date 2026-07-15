@@ -177,7 +177,7 @@ pcov is fast *because* it does less — line coverage only. Switching to pcov fo
 **Enable branch coverage** (needs xdebug — pcov cannot):
 
 ```xml
-<!-- valid in the bundled PHPUnit ≥ 12 schema (phpunit.xsd declares branchCoverage);
+<!-- valid in the bundled PHPUnit 13 schema (phpunit.xsd declares branchCoverage AND pathCoverage);
      some AI review bots wrongly flag it as unsupported — verify against the vendored .xsd -->
 <coverage branchCoverage="true"/>
 ```
