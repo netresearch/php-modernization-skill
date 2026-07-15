@@ -6,7 +6,10 @@
 # Consumers should pin third-party actions to a SHA in production. The major
 # tags below (@v2, @v3, @v4, @v6) are convenient defaults but allow upstream
 # changes through; replace with `<owner>/<repo>@<sha> # <tag>` for SLSA-grade
-# supply-chain hygiene.
+# supply-chain hygiene. The `# nosemgrep: github-actions-mutable-action-tag`
+# markers on those lines record that
+# the mutable default is intentional for this template so SAST does not flag
+# it — drop the marker when you pin to a SHA.
 #
 # Local consumption:
 #   cp skills/php-modernization/templates/github-actions/php-modernization.yml \
@@ -45,13 +48,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v4  # nosemgrep: github-actions-mutable-action-tag
         with:
           # Infection diff-mode needs the base branch in history.
           fetch-depth: 0
 
       - name: Set up PHP
-        uses: shivammathur/setup-php@v2
+        uses: shivammathur/setup-php@v2  # nosemgrep: github-actions-mutable-action-tag
         with:
           php-version: ${{ inputs.php-version }}
           coverage: none
@@ -61,7 +64,7 @@ jobs:
         run: composer install --no-interaction --prefer-dist --no-progress
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v6  # nosemgrep: github-actions-mutable-action-tag
         with:
           enable-cache: true
 
@@ -79,7 +82,7 @@ jobs:
 
       - name: Upload SARIF to code scanning
         if: ${{ inputs.enable-sarif }}
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v3  # nosemgrep: github-actions-mutable-action-tag
         with:
           sarif_file: php-modernization.sarif
           category: php-modernization
@@ -102,7 +105,7 @@ jobs:
 
       - name: Upload artifacts
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v4  # nosemgrep: github-actions-mutable-action-tag
         with:
           name: php-modernization-${{ github.run_id }}
           path: |
