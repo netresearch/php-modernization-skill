@@ -162,3 +162,28 @@ vendor/bin/phpunit 2>&1 | grep -E "Risky:|There (was|were) [0-9]+ risky"
 vendor/bin/phpstan clear-result-cache
 vendor/bin/phpstan analyse --no-progress
 ```
+
+## Code coverage: driver choice + branch coverage
+
+Two drivers, different capabilities — pick per need, don't default blindly:
+
+| driver | line | branch | path | also does |
+|--------|:----:|:------:|:----:|-----------|
+| **pcov** | ✓ | ✗ | ✗ | nothing (coverage-only) |
+| **xdebug** | ✓ | ✓ | ✓ | debug, profile, trace |
+
+pcov is fast *because* it does less — line coverage only. Switching to pcov for speed permanently forecloses branch/path coverage. Keep xdebug when you want branch coverage; reach for pcov only for line-only CI where speed dominates.
+
+**Enable branch coverage** (needs xdebug — pcov cannot):
+
+```xml
+<!-- valid in the bundled PHPUnit 13 schema (phpunit.xsd declares branchCoverage AND pathCoverage);
+     some AI review bots wrongly flag it as unsupported — verify against the vendored .xsd -->
+<coverage branchCoverage="true"/>
+```
+```bash
+# Cobertura carries branch data (branch-rate / branches-covered) for Codecov; Clover does not
+XDEBUG_MODE=coverage vendor/bin/phpunit --coverage-cobertura cov.xml
+```
+
+**Cost:** xdebug branch coverage instruments every branch decision → **~6× slower** than a plain run; a full unit suite can blow past a 10-min job timeout. Run it off the gating path (nightly / `workflow_dispatch`), never on every PR, and raise that job's `timeout-minutes` accordingly.
