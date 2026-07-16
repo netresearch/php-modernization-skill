@@ -188,15 +188,16 @@ if ($rows === false) { $rows = []; }
 // warning-emitter and handle the failure explicitly (also catches the case
 // where an error handler turns the warning into an exception):
 $h = @proc_open($cmd, $spec, $pipes);         // ✗
-try { $h = proc_open($cmd, $spec, $pipes); }  // ✓
+$h = false;                                   // ✓ init first, so the check is safe if proc_open throws
+try { $h = proc_open($cmd, $spec, $pipes); }
 catch (\Throwable $e) { /* degrade */ }
 if (!\is_resource($h)) { /* degrade */ }
 // For unlink/file ops, guard instead of suppress: if (is_file($f)) { unlink($f); }
 
 // cast.string — casting a mixed to string is unsafe (it could be an array):
 $s = (string) $config->get($key);             // ✗
-$raw = $config->get($key);                    // ✓
-$s = \is_string($raw) ? $raw : '';
+$raw = $config->get($key);                    // ✓ string-only intent (config keys);
+$s = \is_string($raw) ? $raw : '';            //   use is_scalar($raw) ? (string) $raw : '' to keep int/bool
 ```
 
 Run the static analyzer **after** adding the test files, not before — tests are
