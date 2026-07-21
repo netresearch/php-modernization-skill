@@ -455,5 +455,26 @@
         "description": "Recommends matching CI via the project's runner / Docker (e.g. make code-style or docker run php:8.2-cli)"
       }
     ]
+  },
+  {
+    "name": "php-subprocess-from-web-sapi",
+    "prompt": "This PHP service spawns a subprocess to run a CLI script. It works from our console command and cron, but crashes with \"ValueError: First element must contain a non-empty program name\" when the same code runs behind Apache mod_php. Fix it:\n\n```php\n<?php\n\ndeclare(strict_types=1);\n\nnamespace App\\Service;\n\nuse Symfony\\Component\\Process\\Process;\n\nfinal class IndexBuilder\n{\n    public function build(string $script): void\n    {\n        $process = new Process([\\PHP_BINARY, $script]);\n        $process->mustRun();\n    }\n}\n```",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "PhpExecutableFinder",
+        "description": "Resolves the PHP binary via PhpExecutableFinder instead of \\PHP_BINARY"
+      },
+      {
+        "type": "content_contains",
+        "value": "find(false)",
+        "description": "Uses find(false) so console/cron behaviour is unchanged"
+      },
+      {
+        "type": "content_regex",
+        "value": "SAPI|mod_php|web|empty",
+        "description": "Explains that \\PHP_BINARY is empty under a non-CLI SAPI"
+      }
+    ]
   }
 ]

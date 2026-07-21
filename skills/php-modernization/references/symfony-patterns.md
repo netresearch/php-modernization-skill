@@ -433,6 +433,49 @@ final class NotificationService
 }
 ```
 
+## Spawning a PHP subprocess (`Process` component)
+
+`\PHP_BINARY` is an **empty string under a non-CLI SAPI** (Apache `mod_php`,
+PHP-FPM). It only resolves to the interpreter path under the CLI SAPI. So
+`new Process([\PHP_BINARY, $script, ...])` works from a console command, a
+cron job, or CI, but throws from any web entry point:
+
+```
+ValueError: First element must contain a non-empty program name
+  at Symfony\Component\Process\Process::__construct()
+```
+
+The trap is that the CLI paths — the ones you test — pass, while the web path
+fails only in production. Resolve the executable with `PhpExecutableFinder`
+instead of reading the constant directly:
+
+```php
+<?php
+
+declare(strict_types=1);
+
+use Symfony\Component\Process\PhpExecutableFinder;
+use Symfony\Component\Process\Process;
+
+// find(false): do NOT append server-API arguments — we want the bare binary.
+// Under CLI this returns \PHP_BINARY; under a web SAPI it falls through to
+// PHP_BINDIR/php (e.g. /usr/local/bin/php in the php:*-apache image).
+$php = (new PhpExecutableFinder())->find(false);
+
+if (false === $php) {
+    throw new \RuntimeException('Could not locate the PHP CLI binary.');
+}
+
+$args = [$script, '--shard', '1/4'];  // whatever the script needs
+$process = new Process([$php, ...$args]);
+$process->mustRun();
+```
+
+`find(false)` returns `\PHP_BINARY` under CLI, so console/cron/CI behaviour is
+unchanged; it only differs where the constant would have been empty. Handle the
+`false` return — a container without a CLI binary on `PATH` is a real
+possibility. Never hardcode `/usr/bin/php`: the path varies across base images.
+
 ## Security Configuration
 
 ```php
