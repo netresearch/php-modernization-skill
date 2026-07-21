@@ -72,6 +72,54 @@ public function processUsers(array $items): void
 }
 ```
 
+### Consistent-Constructor Subclass Collisions
+
+`@phpstan-consistent-constructor` requires every subclass constructor to stay call-compatible with the base. Adding a **new trailing parameter** to such a base constructor collides with any subclass that already appends its own parameters — the same positional slot now carries two different types:
+
+```php
+// Error: Parameter #14 $toolChoice (string|null) of ChildOptions::__construct
+//        is not contravariant with parameter #14 $suppressRequestCount (bool|null)
+//        of ParentOptions::__construct   (method.childParameterType)
+
+/** @phpstan-consistent-constructor */
+class ParentOptions
+{
+    public function __construct(
+        // …13 existing params…
+        private ?bool $suppressRequestCount = null,  // new — now slot #14
+    ) {}
+}
+
+class ChildOptions extends ParentOptions
+{
+    public function __construct(
+        // …same 13…
+        private ?string $toolChoice = null,          // was slot #14
+    ) {
+        parent::__construct(/* … */);
+    }
+}
+```
+
+**Fix — add a fluent wither, not a constructor parameter.** The constructor signature stays stable (no subclass collision) and the field stays immutable-by-clone:
+
+```php
+class ParentOptions
+{
+    // constructor unchanged
+    private ?bool $suppressRequestCount = null;
+
+    public function withSuppressRequestCount(bool $value): static
+    {
+        $clone = clone $this;
+        $clone->suppressRequestCount = $value;
+        return $clone;
+    }
+}
+```
+
+Rule of thumb: on a `@phpstan-consistent-constructor` type that has subclasses, evolve state through `with*()` withers, never through new constructor parameters. See `references/immutability-boundaries.md` for the wither/clone pattern.
+
 ### Return Type Errors
 
 ```php
