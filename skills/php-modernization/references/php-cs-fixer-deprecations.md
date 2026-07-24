@@ -78,3 +78,19 @@ The verify scripts should detect:
 - `@PSR12` / `@PSR12:risky` (deprecated by `@PER-CS`).
 - Any rule-set name that produces a "Detected deprecations" warning
   on dry-run (run the detection command above).
+
+## Pre-push usage gotchas
+
+Two php-cs-fixer behaviours make a local run disagree with CI:
+
+- **The cache masks violations.** php-cs-fixer records clean files in
+  `.php-cs-fixer.cache`; a later run then reports a file clean while CI (fresh
+  checkout, no cache) fails the Code Style job on it — often an
+  `ordered_class_elements` reorder that a newer fixer version flags. For a
+  reliable pre-push check, run with `--using-cache=no`. (The CI fixer version can
+  also be newer than local; cache-off catches most of that gap.)
+- **`no_unused_imports` deletes an import you added before its first use.** When
+  a `use X;` is added in one edit and its usage (a new method or test) in a later
+  edit, with a fixer run in between, the import is stripped as unused and does not
+  come back — CI then dies with `Class "…\X" not found`. After adding code that
+  references a newly-imported class, re-verify the import is still present.

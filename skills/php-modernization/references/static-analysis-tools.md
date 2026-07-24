@@ -373,6 +373,21 @@ for what's actually available.
   run: vendor/bin/rector process --dry-run --ansi
 ```
 
+### DEAD_CODE rewrites can change intent — verify, don't auto-apply
+
+`SetList::DEAD_CODE` includes `RemoveDefaultArgumentValueRector`, which strips a
+trailing argument whose value equals the parameter's default. That is wrong when
+the argument is *meaningful* and only coincidentally equals a default — e.g.
+`verifyChain($from, $to, 0)` where the third parameter defaults to a configured
+value and `0` is passed to disable it: Rector rewrites the call to
+`verifyChain()`, silently restoring the floor. Pass such an argument **by name**
+(`verifyChain(minEpoch: 0)`) — the rule leaves named arguments alone. (The same
+set also rewrites `$x !== null` to `$x instanceof T` on a `?T` return; that one
+is a safe equivalent — apply it and add the import.)
+
+A rewrite from a lossy set (`DEAD_CODE`, `CODE_QUALITY`) is a suggestion to
+verify against intent, not an edit to apply blind.
+
 ## PHP-CS-Fixer (Coding Style)
 
 Enforces coding standards automatically.
