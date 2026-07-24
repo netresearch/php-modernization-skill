@@ -26,15 +26,16 @@ import shutil
 import subprocess
 import sys
 import xml.etree.ElementTree as ET
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 # Sibling-import the shared module. PEP 723 scripts launched via `uv run`
 # don't add their own directory to sys.path, so we add it explicitly.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from _common import (  # noqa: E402
+from _common import (
     SCHEMA_VERSION,
     SKILL_ID,
     SKILL_VERSION,
