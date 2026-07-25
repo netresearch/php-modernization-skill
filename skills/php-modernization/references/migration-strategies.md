@@ -161,6 +161,63 @@ composer update
 composer validate --strict
 ```
 
+### Refreshing a committed lock across a CI matrix
+
+Composer resolves against the **running** PHP, not against the root `require`
+constraint. A lock refreshed on a developer machine running PHP 8.5 can
+therefore pin packages that the lowest cell of a `8.2 / 8.3 / 8.4` CI matrix
+cannot install — the update succeeds locally and CI fails on `Your lock file
+does not contain a compatible set of packages`.
+
+Two ways to pin resolution to the minimum supported version:
+
+1. **Declare `config.platform.php`** (see "Composer Constraint Updates" above).
+   Deterministic on every machine, and the right fix when you own
+   `composer.json`. It changes resolution for everyone, so it is a decision,
+   not a hotfix.
+2. **Run the update in a container** pinned to the minimum version. No
+   `composer.json` change — use this when a repo has no platform declaration
+   and the task at hand is a dependency fix, not a policy change.
+
+```bash
+# resolve at the minimum supported version, in a throwaway container.
+# php:X-cli ships no composer — mount the host phar (it is plain PHP, so it
+# runs under the container's interpreter).
+docker run --rm -v "$PWD":/app -w /app -e COMPOSER_ALLOW_SUPERUSER=1 \
+  -v "$(command -v composer)":/usr/local/bin/composer:ro \
+  php:8.2-cli composer update --no-install --ignore-platform-req="ext-*"
+```
+
+- `--no-install` writes only the lock, so the container needs no extensions
+  and no vendor download.
+- `--ignore-platform-req="ext-*"` skips the missing extensions while leaving
+  the **php version** requirement enforced — which is the constraint being
+  pinned. Do not use bare `--ignore-platform-reqs`; it drops the php check too
+  and defeats the purpose.
+
+Verify the result against every PHP version in the matrix before pushing:
+
+```bash
+for V in 8.2 8.3 8.4; do
+  docker run --rm -v "$PWD":/app -w /app -e COMPOSER_ALLOW_SUPERUSER=1 \
+    -v "$(command -v composer)":/usr/local/bin/composer:ro \
+    php:${V}-cli composer install --dry-run --ignore-platform-req="ext-*"
+done
+```
+
+### A lock refresh is a code change
+
+An unconstrained `composer update` moves every package its constraint allows,
+including across majors — `"psr/log": "^1.0 || ^2.0 || ^3.0"` will jump 1.x to
+3.x. Observed: that jump gave `LoggerInterface::log()` native parameter types,
+which made PHPStan fail on an untyped test double — in a job unrelated to the
+one being fixed.
+
+Run the project's whole gate (static analysis, code style, tests) against the
+refreshed lock, not just the check that was red. Pin the blast radius with
+`composer update <vendor>/<package> --with-dependencies` when only one package
+needs to move.
+
 ## Framework-Specific Migrations
 
 ### Symfony Upgrade
