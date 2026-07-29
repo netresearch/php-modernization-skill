@@ -388,6 +388,65 @@ is a safe equivalent — apply it and add the import.)
 A rewrite from a lossy set (`DEAD_CODE`, `CODE_QUALITY`) is a suggestion to
 verify against intent, not an edit to apply blind.
 
+### Review the lines Rector ADDS, not only the ones it removes
+
+A removal rule can also insert. `RemoveEraseCredentialsRector` deletes
+`User::eraseCredentials()` (correct — Symfony 8 dropped it from
+`UserInterface`) *and* appends a `serialize(): void` method carrying the old
+body to the end of the class. The `--dry-run` output shows the deletion as one
+hunk and the insertion as another at the bottom of the file, so reading only
+the hunk that matches the rule's name misses it. Nothing calls the stub, the
+entity does not implement `Serializable`, and `void` does not match
+`Serializable::serialize(): ?string` — it is dead code with a misleading
+comment that static analysis will not flag.
+
+After applying any rule set, review the insertions specifically:
+
+```bash
+vendor/bin/rector process
+git diff | grep '^+' | grep -v '^+++'
+```
+
+For a cleanup set the expected diff is almost pure deletion, so every `+` line
+is an anomaly that needs a reason. Removing such a stub is stable — the rule
+only fires while the original method is present, so it is not re-added on the
+next run and needs no skip.
+
+### Rector cannot see framework facts — check the assumption behind the rule
+
+Three rules in one dependency bump produced changes that were locally plausible
+and globally wrong, each because Rector could not observe a framework contract:
+
+| Rule | Rewrite | Why it is wrong |
+|------|---------|-----------------|
+| `RenameClassRector` | `HttpKernel\Bundle\BundleInterface` → `DependencyInjection\Kernel\BundleInterface` | The parent `registerBundles()` signature is not covariant with the replacement until Symfony 9. Breaks PHPStan and orphans the `@phpstan-ignore` annotations that documented the decision. |
+| `RemoveDefaultValueFromAssignedPropertyRector` | drops `= null` from `private ?EventDispatcherInterface $eventDispatcher = null;` | The property is assigned by `#[Required]` setter injection *after* construction, not by the constructor. Without the default it stays uninitialized and the `instanceof` guard reading it raises `Typed property must not be accessed before initialization`. |
+| `RemoveEraseCredentialsRector` | see above | Leaves a stray `serialize()` stub. |
+
+Confirm the failure mode before arguing about it — a five-line repro settles it:
+
+```php
+class WithDefault    { private ?X $d = null; public function g(): string { return $this->d instanceof X ? 'set' : 'not set'; } }
+class WithoutDefault { private ?X $d;        public function g(): string { return $this->d instanceof X ? 'set' : 'not set'; } }
+// WithDefault    -> not set
+// WithoutDefault -> Error: Typed property WithoutDefault::$d must not be accessed before initialization
+```
+
+Scope the resulting `withSkip` to the rule's blind spot, not to the file that
+happened to trip it. `RemoveDefaultValueFromAssignedPropertyRector` only fires
+on classes that *have* a constructor, so a second class with the same
+setter-injected property is silently exempt today and starts failing the moment
+someone adds one — a per-file skip would have looked complete and not been:
+
+```php
+->withSkip([
+    // Fires per file, so scope per file:
+    RenameClassRector::class => [__DIR__ . '/../../src/Kernel.php'],
+    // Blind spot is structural (#[Required] setter injection): skip repo-wide.
+    RemoveDefaultValueFromAssignedPropertyRector::class,
+])
+```
+
 ## PHP-CS-Fixer (Coding Style)
 
 Enforces coding standards automatically.
