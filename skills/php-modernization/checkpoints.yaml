@@ -218,6 +218,13 @@ mechanical:
     severity: error
     desc: "readonly must not be applied to Doctrine entities or mapped-superclasses (Doctrine hydrates them via reflection-bypassing the constructor). Embeddables are a nuanced case — see references/doctrine-modernization-edges.md"
 
+  # === MECHANICAL REFACTOR SAFETY ===
+  - id: PM-44
+    type: command
+    command: 'D=""; for d in src Classes tests Tests; do [ -d "$d" ] && D="$D $d"; done; [ -z "$D" ] || ! grep -rqP ''const\s+(\w+)\s*=\s*self::\1\b'' $D'
+    severity: error
+    desc: "Self-referencing class constant (const X = self::X) — a fatal error at class-load time, produced by replace-all literal-to-constant extraction that also rewrites the declaration site. Static analysis does not catch it; only executing the file does. Exclude the declaration line when extracting a repeated literal."
+
 llm_reviews:
   # === READONLY CLASS STATIC PROPERTY CHECK ===
   - id: PM-32

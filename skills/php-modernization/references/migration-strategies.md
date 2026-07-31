@@ -424,6 +424,39 @@ return $this->legacyParser->parse($input);
 
 ## Anti-Patterns to Avoid
 
+### Replace-All Literal Extraction That Rewrites Its Own Declaration
+
+Bulk-extracting a repeated literal into a constant (the usual fix for SonarQube
+`php:S1192`) is a natural scripted transform: find every `'…'`, replace with
+`self::NAME`. Run naively, the replacement also hits the line that *defines* the
+constant:
+
+```php
+// ❌ what a blind replace-all produces
+private const SMALL_PAYLOAD = self::SMALL_PAYLOAD;   // Fatal: self-referencing constant
+
+// ✅ intended
+private const SMALL_PAYLOAD = '{"a":1}';
+```
+
+**Static analysis does not catch this.** PHPStan at level 10 reports nothing —
+the error is raised by the engine at class-load time, so only *executing* a file
+that loads the class surfaces it. A change set that passes every analyzer can
+still be fatally broken.
+
+Two rules when scripting this class of refactor:
+
+1. **Exclude the declaration line.** Insert the `const` declaration *after*
+   rewriting the usages, or skip any line already matching
+   `const\s+NAME\s*=`.
+2. **Verify by executing, not by analyzing.** Run the test suite (or at minimum
+   `php -l` plus a load of each touched class); a green PHPStan run is not
+   evidence here.
+
+Checkpoint `PM-44` detects the resulting pattern. It generalizes beyond PHP —
+any "extract repeated value to a named constant" transform in any language has
+the same declaration-site hazard.
+
 ### Premature Backwards Compatibility
 
 Don't add backwards compatibility code for features or versions that haven't been released yet:
