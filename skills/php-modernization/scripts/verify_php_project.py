@@ -79,14 +79,19 @@ PHPSTAN_LEVEL_RE = re.compile(r"^[\t ]*level:[\t ]*(?P<level>\S+)", re.MULTILINE
 # follows the keyword, regardless of inline (``includes: ['a', 'b']``) or
 # indented dash form (``includes:\n    - a\n    - b``).
 PHPSTAN_INCLUDES_BLOCK_RE = re.compile(
-    # Match the includes block. The block ends at the next top-level key
-    # (a non-whitespace identifier followed by ":"), NOT at the next
-    # non-whitespace character — that earlier rule incorrectly terminated on
-    # unindented dash-list items like `- shared/level.neon` which are valid
-    # NEON list members at any indent level.
-    r"^[\t ]*includes:[\t ]*(?P<rest>.*?)(?=^[A-Za-z_][\w.-]*\s*:|\Z)",
+    # Capture everything after the keyword; the block is then truncated at
+    # the next top-level key with PHPSTAN_TOP_LEVEL_KEY_RE in a second
+    # step (a single anchored-alternation lookahead would do it in one
+    # regex, but its operator precedence is hard to read).
+    r"^[\t ]*includes:[\t ]*(?P<rest>.*)",
     re.MULTILINE | re.DOTALL,
 )
+# A top-level key (a non-whitespace identifier followed by ":") terminates
+# the includes block. The next non-whitespace character must NOT — that
+# earlier rule incorrectly terminated on unindented dash-list items like
+# `- shared/level.neon` which are valid NEON list members at any indent
+# level.
+PHPSTAN_TOP_LEVEL_KEY_RE = re.compile(r"^[A-Za-z_][\w.-]*\s*:", re.MULTILINE)
 PHPSTAN_INCLUDES_ITEM_RE = re.compile(
     r"""
     (?:^|[\s,\[])             # boundary: line start, whitespace, comma, or [
@@ -243,6 +248,9 @@ def parse_phpstan_includes(text: str) -> list[str]:
     if not block_match:
         return []
     block = block_match.group("rest")
+    key_match = PHPSTAN_TOP_LEVEL_KEY_RE.search(block)
+    if key_match:
+        block = block[: key_match.start()]
     paths: list[str] = []
     seen: set[str] = set()
 
