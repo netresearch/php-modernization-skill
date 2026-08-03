@@ -84,7 +84,7 @@ PHPSTAN_INCLUDES_BLOCK_RE = re.compile(
     # non-whitespace character — that earlier rule incorrectly terminated on
     # unindented dash-list items like `- shared/level.neon` which are valid
     # NEON list members at any indent level.
-    r"^[\t ]*includes:[\t ]*(?P<rest>.*?)(?=^[A-Za-z_][\w.-]*\s*:|\Z)",
+    r"^[\t ]*includes:[\t ]*(?P<rest>.*?)(?=(?:^[A-Za-z_][\w.-]*\s*:)|\Z)",
     re.MULTILINE | re.DOTALL,
 )
 PHPSTAN_INCLUDES_ITEM_RE = re.compile(
