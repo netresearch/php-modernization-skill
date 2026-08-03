@@ -8,6 +8,20 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-08-03
+
+### Added
+
+- `PM-44` checkpoint: detect self-referencing class constants.
+
+### Changed
+
+- Reference guidance updates: fluent wither over new constructor param on consistent-constructor DTOs (PHPStan), `PHP_BINARY` empty under non-CLI SAPIs (Symfony patterns), DEAD_CODE Rector rewrites can change intent, PHP-CS-Fixer pre-push gotchas (cache, unused imports), refreshing a committed lock at the minimum PHP version, reviewing lines Rector adds.
+
+### Fixed
+
+- SonarCloud quality gate: includes-block boundary matching restructured out of an anchored-alternation regex (`python:S5850`/`S6395`); synthetic fixtures excluded from Automatic Analysis via `.sonarcloud.properties` (`text:S8567`).
+
 ## [1.19.0] - 2026-06-11
 
 ### Added
