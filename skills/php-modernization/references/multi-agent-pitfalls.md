@@ -154,6 +154,46 @@ have nothing to do with the staged changes.
    permission, and only after confirming the staged change passes the
    tests in the project's preferred environment (Docker).
 
+## Hazard 8: A symlinked `vendor/` loads another worktree's `src/`
+
+Giving a second worktree its own `vendor/` costs a full `composer
+install`, so symlinking the sibling's looks free. It is not: Composer
+writes `$baseDir = dirname(dirname(__DIR__))` into
+`vendor/composer/autoload_psr4.php`, and `__DIR__` resolves through the
+symlink. So `$baseDir` points at the *other* worktree, and every
+`App\…` class loads from **that** tree's `src/`.
+
+Nothing errors. Tests run, PHPStan runs, both against code you are not
+editing. The edit you just made appears to have no effect — the failure
+looks like a broken fix rather than a broken environment, which is what
+makes it expensive. Observed cost: a correct guard was investigated as
+defective because the test exercising it was executing the sibling
+worktree's older copy.
+
+Detect it in one line before trusting any result in a fresh worktree. Replace
+the class with any real one from your own `src/` — the check is *where* it
+resolves from, so any autoloadable class answers it:
+
+```bash
+php -r 'require "vendor/autoload.php"; echo (new ReflectionClass("App\\Service\\YourRealClass"))->getFileName(), PHP_EOL;'
+```
+
+If that path is not inside the worktree you are standing in, every test
+result so far is void.
+
+**Options, in order:**
+
+1. Real `composer install` per worktree — correct, and the only one
+   that is safe with parallel agents.
+2. `cp -al <sibling>/vendor vendor` — hardlinks, so cheap in space and
+   time, and `$baseDir` resolves locally because `vendor/` is a real
+   directory. Do not use it while another agent may `composer install`
+   into either copy.
+3. Symlink — only for a worktree where nothing will be executed.
+
+Same family as Hazard 4: that one is the wrong dependency *version*,
+this one the wrong *source tree*.
+
 ## Concise briefing template
 
 Include this in every multi-agent dispatch where modifications happen
@@ -172,4 +212,7 @@ SHARED REPO HAZARDS:
 - After any composer.lock change in your scope: run `composer install`.
 - If pre-commit hooks block your commit: report the hook output, do
   NOT --no-verify.
+- In a fresh worktree, never symlink vendor/ from a sibling — the
+  autoloader would load that sibling's src/. Verify with
+  ReflectionClass::getFileName() before trusting any test result.
 ```
