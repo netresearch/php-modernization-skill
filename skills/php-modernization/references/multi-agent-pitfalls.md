@@ -170,11 +170,12 @@ makes it expensive. Observed cost: a correct guard was investigated as
 defective because the test exercising it was executing the sibling
 worktree's older copy.
 
-Detect it in one line before trusting any result in a fresh worktree:
+Detect it in one line before trusting any result in a fresh worktree. Replace
+the class with any real one from your own `src/` — the check is *where* it
+resolves from, so any autoloadable class answers it:
 
 ```bash
-php -r 'require "vendor/autoload.php";
-  echo (new ReflectionClass(App\Service\Whatever::class))->getFileName(), PHP_EOL;'
+php -r 'require "vendor/autoload.php"; echo (new ReflectionClass("App\\Service\\YourRealClass"))->getFileName(), PHP_EOL;'
 ```
 
 If that path is not inside the worktree you are standing in, every test
