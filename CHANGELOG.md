@@ -8,6 +8,11 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-08-08
+
+### Added
+- Add Agent Plugins 1.0.0 portable manifest (manifest)
+
 ## [1.21.0] - 2026-08-03
 
 ### Added
