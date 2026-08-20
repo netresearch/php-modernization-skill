@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "php-modernization",
-  "version": "1.22.0",
+  "version": "1.22.1",
   "description": "PHP 8.x modernization patterns with type safety and PHPStan",
   "author": {
     "name": "Netresearch DTT GmbH",

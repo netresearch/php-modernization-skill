@@ -8,6 +8,19 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.22.1] - 2026-08-20
+
+### Changed
+
+- The multi-version adapter reference no longer names the repository its example
+  came from. The pattern applies to any extension whose dependency ships
+  incompatible major versions; the repository name was the only part that did
+  not travel, and that repository is an evaluation target in
+  netresearch/agent-system-evals, where this skill is part of the fleet under
+  test ([#94]).
+
+[#94]: https://github.com/netresearch/php-modernization-skill/pull/94
+
 ## [1.22.0] - 2026-08-08
 
 ### Added
