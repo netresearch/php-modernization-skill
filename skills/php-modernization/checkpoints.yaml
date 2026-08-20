@@ -533,3 +533,43 @@ llm_reviews:
 
       Report the file, method, and missing re-throw types for each violation.
     desc: 'PSR-15 middleware broad catch(\Throwable) blocks must re-throw framework control-flow exceptions (TYPO3: ImmediateResponseException, PropagateResponseException, StatusException; Symfony: HttpExceptionInterface, AccessDeniedException)'
+
+  - id: PM-54
+    type: llm_review
+    domain: code-quality
+    severity: error
+    prompt: |
+      This repository publishes one or more Composer packages (a library, or a
+      monorepo whose packages/* directories are sub-split into standalone
+      packages). Review every dependency constraint that was ADDED or NARROWED
+      in the change under review.
+
+      A constraint in a published package states what the code supports, not
+      what happened to be installed when it was written. Narrowing a range is a
+      breaking change for consumers and cannot ride along in a patch or minor
+      release.
+
+      Flag a constraint when any of these hold:
+
+      1. The range is narrower than the majors that actually provide the symbols
+         the code uses. Example: the code uses only Psr\Log\LoggerInterface and
+         Psr\Log\LogLevel, unchanged across v1, v2 and v3, but the constraint
+         says "^3.0".
+
+      2. The range is narrower than what an existing hard dependency of the same
+         package already permits, so consumers lose a resolution they have today.
+         Example: the package requires symfony/http-client, which permits
+         psr/log ^1|^2|^3, while the new entry says ^3.0.
+
+      3. A sibling package in the same repository declares a wider range for the
+         same dependency, and the difference is not explained.
+
+      Do NOT flag a narrow range when a class in the package IMPLEMENTS an
+      interface of that dependency (implements LoggerInterface, extends
+      AbstractLogger, and equivalents). Implementing binds the package to one
+      major because the signatures differ; consuming does not. In that case the
+      narrow range is correct and the reason belongs in the commit message.
+
+      Report the package, the dependency, the declared range, the range the code
+      actually supports, and which of the three cases applies.
+    desc: 'Dependency constraints in a published package must match what the code supports, never what happened to be installed — narrowing is a BC break for consumers'
