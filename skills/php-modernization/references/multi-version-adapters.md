@@ -1,6 +1,6 @@
 # Multi-Version Library Adapter Pattern
 
-**Source:** t3x-nr-image-optimize Extension -- intervention/image v2/v4 compatibility
+**Source:** an image-processing extension supporting intervention/image v2 and v4 side by side
 **Purpose:** Support multiple major versions of a library with incompatible APIs
 
 ## When to Use
