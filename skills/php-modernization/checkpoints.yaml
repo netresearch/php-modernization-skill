@@ -12,14 +12,14 @@ skill_id: php-modernization
 mechanical:
   # === PHPSTAN CONFIGURATION ===
   - id: PM-01
-    type: command
-    command: "test -f phpstan.neon || test -f Build/phpstan.neon || test -f Build/phpstan/phpstan.neon || test -f phpstan.neon.dist"
+    type: file_exists
+    target: "{phpstan.neon,Build/phpstan.neon,Build/phpstan/phpstan.neon,phpstan.neon.dist}"
     severity: error
     desc: "PHPStan configuration must exist (phpstan.neon, Build/phpstan.neon, Build/phpstan/phpstan.neon, or phpstan.neon.dist)"
 
   - id: PM-02
     type: command
-    command: 'for f in phpstan.neon Build/phpstan.neon Build/phpstan/phpstan.neon phpstan.neon.dist; do [ -f "$f" ] && grep -qE "^[[:space:]]*level:[[:space:]]*(9|1[0-9]|max)([[:space:]]|$)" "$f" && exit 0; done; exit 1'
+    command: "grep -hE '^[[:space:]]*level:[[:space:]]*(9|1[0-9]|max)([[:space:]]|$)' phpstan.neon Build/phpstan.neon Build/phpstan/phpstan.neon phpstan.neon.dist 2>/dev/null | grep -q ."
     severity: error
     desc: "PHPStan level must be 9 or higher (or max)"
 
@@ -220,8 +220,13 @@ mechanical:
 
   # === MECHANICAL REFACTOR SAFETY ===
   - id: PM-44
-    type: command
-    command: 'D=""; for d in src Classes tests Tests; do [ -d "$d" ] && D="$D $d"; done; [ -z "$D" ] || ! grep -rqP ''const\s+(\w+)\s*=\s*self::\1\b'' $D'
+    type: script
+    command: |
+      D=""
+      for d in src Classes tests Tests; do
+        [ -d "$d" ] && D="$D $d"
+      done
+      [ -z "$D" ] || ! grep -rqP 'const\s+(\w+)\s*=\s*self::\1\b' $D
     severity: error
     desc: "Self-referencing class constant (const X = self::X) — a fatal error at class-load time, produced by replace-all literal-to-constant extraction that also rewrites the declaration site. Static analysis does not catch it; only executing the file does. Exclude the declaration line when extracting a repeated literal."
 
