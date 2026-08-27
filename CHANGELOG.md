@@ -8,6 +8,12 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.22.2] - 2026-08-27
+
+### Fixed
+
+- Checkpoints PM-01/PM-02/PM-44 brought onto the runner contract
+
 ## [1.22.1] - 2026-08-20
 
 ### Changed
