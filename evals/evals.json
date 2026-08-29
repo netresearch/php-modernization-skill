@@ -476,5 +476,26 @@
         "description": "Explains that \\PHP_BINARY is empty under a non-CLI SAPI"
       }
     ]
+  },
+  {
+    "name": "composer-constraint-for-published-package",
+    "prompt": "This monorepo publishes each `packages/*` directory as a standalone Composer package.\n\n`packages/renderer/src/Handler.php` type-hints `Psr\\Log\\LoggerInterface` and reads `Psr\\Log\\LogLevel`. No class in the package implements `LoggerInterface` or extends `AbstractLogger`.\n\n`packages/renderer/composer.json` currently declares:\n\n```json\n{\n    \"require\": {\n        \"php\": \"^8.1\",\n        \"symfony/http-client\": \"^6.4 || ^7.0\"\n    }\n}\n```\n\n`symfony/http-client` requires `psr/log: ^1|^2|^3`. A sibling package in the same repository declares `\"psr/log\": \"^1.0 || ^2.0 || ^3.0\"`. `composer.lock` resolves `psr/log` to 3.0.2.\n\nAdd the missing `psr/log` entry to `packages/renderer/composer.json` and explain the constraint you chose.",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "^1.0 || ^2.0 || ^3.0",
+        "description": "Declares the range the code supports, not the locked major"
+      },
+      {
+        "type": "content_not_contains",
+        "value": "\"psr/log\": \"^3.0\"",
+        "description": "Does not narrow to the locked major, which would be a BC break for consumers"
+      },
+      {
+        "type": "content_regex",
+        "value": "(?i)\\b(no|not|never|nothing)\\b[^.]{0,60}\\bimplement",
+        "description": "States that nothing in the package implements the interface — the reason the permissive range is safe, not merely the word"
+      }
+    ]
   }
 ]

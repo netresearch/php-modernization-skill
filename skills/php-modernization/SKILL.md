@@ -41,7 +41,7 @@ allowed-tools:
 | PHP-CS-Fixer deprecations | `references/php-cs-fixer-deprecations.md` |
 | DTOs / VOs / inputs | `references/type-safety.md`, `references/request-dtos.md` |
 | Adapter / registry | `references/adapter-registry-pattern.md` |
-| Multi-version compat | `references/multi-version-adapters.md` |
+| Multi-version compat | `references/multi-version-adapters.md`, `references/composer-package-metadata.md` |
 | Symfony patterns | `references/symfony-patterns.md` |
 | PSR-15 middleware | `references/psr15-middleware-architecture.md` |
 | Doctrine edges | `references/doctrine-modernization-edges.md` |
