@@ -492,9 +492,9 @@
         "description": "Does not narrow to the locked major, which would be a BC break for consumers"
       },
       {
-        "type": "content_contains",
-        "value": "implement",
-        "description": "Names the implements-vs-consumes test as the reason the permissive range is safe"
+        "type": "content_regex",
+        "value": "(?i)\\b(no|not|never|nothing)\\b[^.]{0,60}\\bimplement",
+        "description": "States that nothing in the package implements the interface — the reason the permissive range is safe, not merely the word"
       }
     ]
   }

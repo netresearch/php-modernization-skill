@@ -34,11 +34,13 @@ Consuming `LoggerInterface` works across majors, because the call sites pass the
 
 ```bash
 # First pass. Not just `implements LoggerInterface`: the name may be fully
-# qualified, sit second in an implements list, or arrive through a trait.
-grep -rnE 'implements[^{]*Logger(Interface|AwareInterface)|extends[^{]*AbstractLogger|use[^;]*Logger(Aware)?Trait' packages/*/src
+# qualified, or sit second in an implements list.
+grep -rnE 'implements[^{]*Logger(Interface|AwareInterface)|extends[^{]*AbstractLogger' packages/*/src
 ```
 
-A hit means the narrow range is required, and the reason belongs in the commit message. An empty result is a first pass, not a verdict — the pattern still misses an interface inherited through a parent class outside `src`, and a trait aliased on import. Read the classes that touch the dependency before settling on the permissive range; the direction that costs consumers a release is a false empty, not a false hit.
+A hit means the narrow range is required, and the reason belongs in the commit message. An empty result is a first pass, not a verdict — the pattern misses an interface inherited through a parent class outside `src`, and an implementation assembled some other way. Read the classes that touch the dependency before settling on the permissive range; the direction that costs consumers a release is a false empty, not a false hit.
+
+`use LoggerTrait` is **not** on that list, and adding it makes the check worse rather than safer: the pattern cannot tell an in-class `use` from a namespace import at the top of the file, and the trait supplies method bodies without implementing the interface — its own methods arrive from whichever major is installed, so they bind nothing. The case that does bind is a class declaring `log()` itself against the trait's abstract, and that is something to read, not to grep.
 
 ## Verifying a package, not a monorepo
 
@@ -47,7 +49,9 @@ In a monorepo the root install merges every dependency graph, so each package's 
 Verify per package, in isolation:
 
 ```bash
-cp -r packages/<name> /tmp/check && cd /tmp/check
+# A fresh directory per run: `cp -r pkg /tmp/check` nests when /tmp/check
+# already exists, and the run then measures the previous copy.
+check="$(mktemp -d)" && cp -r packages/<name>/. "$check" && cd "$check"
 # only production code counts: dev autoload and dev requires are not shipped
 jq 'del(.["autoload-dev"]) | del(.["require-dev"]) | del(.scripts)' composer.json > c && mv c composer.json
 composer install --no-interaction --quiet
