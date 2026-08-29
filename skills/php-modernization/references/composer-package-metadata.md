@@ -33,11 +33,12 @@ Ask whether anything in the package **implements** the interface rather than mer
 Consuming `LoggerInterface` works across majors, because the call sites pass the same arguments. Implementing it does not: PSR-3 v3 declares `string|\Stringable $message` where v1 declares nothing, so a class implementing the interface is bound to one major. The same holds for any interface whose signatures changed between majors.
 
 ```bash
-# The check that decides permissive vs. narrow
-grep -rn "implements LoggerInterface\|extends AbstractLogger" packages/*/src
+# First pass. Not just `implements LoggerInterface`: the name may be fully
+# qualified, sit second in an implements list, or arrive through a trait.
+grep -rnE 'implements[^{]*Logger(Interface|AwareInterface)|extends[^{]*AbstractLogger|use[^;]*Logger(Aware)?Trait' packages/*/src
 ```
 
-Empty result means the permissive range is safe. A hit means the narrow one is required, and the reason belongs in the commit message.
+A hit means the narrow range is required, and the reason belongs in the commit message. An empty result is a first pass, not a verdict — the pattern still misses an interface inherited through a parent class outside `src`, and a trait aliased on import. Read the classes that touch the dependency before settling on the permissive range; the direction that costs consumers a release is a false empty, not a false hit.
 
 ## Verifying a package, not a monorepo
 
