@@ -19,7 +19,7 @@ mechanical:
 
   - id: PM-02
     type: command
-    command: "grep -hE '^[[:space:]]*level:[[:space:]]*(9|1[0-9]|max)([[:space:]]|$)' phpstan.neon Build/phpstan.neon Build/phpstan/phpstan.neon phpstan.neon.dist 2>/dev/null | grep -q ."
+    pattern: "grep -hE '^[[:space:]]*level:[[:space:]]*(9|1[0-9]|max)([[:space:]]|$)' phpstan.neon Build/phpstan.neon Build/phpstan/phpstan.neon phpstan.neon.dist 2>/dev/null | grep -q ."
     severity: error
     desc: "PHPStan level must be 9 or higher (or max)"
 
@@ -31,22 +31,29 @@ mechanical:
     desc: "PHPStan should not trust PHPDoc types over runtime"
 
   # === PHP-CS-FIXER CONFIGURATION ===
+  # Target list covers the repository root AND Build/, because a TYPO3
+  # extension that keeps its build tooling under Build/ carries the config at
+  # Build/.php-cs-fixer.php — a root-only target reported a missing config for
+  # a project that has one. The same list is used by PM-05/PM-06/PM-24/PM-30:
+  # a brace target whose alternatives all miss makes a `contains` check SKIP,
+  # so widening PM-04 alone would leave those silently unevaluated on exactly
+  # the projects this fix is for.
   - id: PM-04
     type: file_exists
-    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php}"
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
     severity: error
-    desc: "PHP-CS-Fixer configuration must exist"
+    desc: "PHP-CS-Fixer configuration must exist (root or Build/, .php-cs-fixer.php or .php-cs-fixer.dist.php)"
 
   - id: PM-05
     type: contains
-    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php}"
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
     pattern: "@PER-CS"
     severity: error
     desc: "PHP-CS-Fixer must use @PER-CS ruleset"
 
   - id: PM-06
     type: contains
-    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php}"
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
     pattern: "strict_types"
     severity: warning
     desc: "PHP-CS-Fixer should enforce strict_types declaration"
@@ -95,39 +102,54 @@ mechanical:
     desc: "Rector should include CodeQualitySetList rules"
 
   # === COMPOSER CONFIGURATION ===
+  # Accepted script names mirror scripts/verify_php_project.py (check_pm13/14/15)
+  # so the YAML checkpoint and the Python verifier cannot disagree. They add the
+  # Netresearch / TYPO3 `ci:*` convention, under which the same capability is
+  # named ci:cgl (fix) and ci:test:php:phpstan / ci:test:php:rector.
+  # ci:test:php:cgl is deliberately NOT accepted by PM-13: it is the dry-run
+  # CHECK script, not a fix script, so a project that can only report style
+  # violations still fails PM-13.
   - id: PM-13
     type: json_path
     target: composer.json
-    pattern: '.scripts["cs:fix"] or .scripts["fix:cs"] or .scripts["php:cs:fix"]'
+    pattern: '.scripts["cs:fix"] or .scripts["fix:cs"] or .scripts["php:cs:fix"] or .scripts["ci:cgl"] or .scripts["cgl"]'
     severity: warning
-    desc: "Composer should have a coding standards fix script"
+    desc: "Composer should have a coding standards fix script (cs:fix/fix:cs/php:cs:fix/ci:cgl/cgl)"
 
   - id: PM-14
     type: json_path
     target: composer.json
-    pattern: '.scripts["phpstan"] or .scripts["analyse"] or .scripts["analyze"]'
+    pattern: '.scripts["phpstan"] or .scripts["analyse"] or .scripts["analyze"] or .scripts["ci:test:php:phpstan"] or .scripts["test:phpstan"]'
     severity: warning
-    desc: "Composer should have a PHPStan script"
+    desc: "Composer should have a PHPStan script (phpstan/analyse/analyze/ci:test:php:phpstan/test:phpstan)"
 
   - id: PM-15
     type: json_path
     target: composer.json
-    pattern: '.scripts["rector"] or .scripts["refactor"]'
+    pattern: '.scripts["rector"] or .scripts["refactor"] or .scripts["ci:test:php:rector"] or .scripts["test:rector"]'
     severity: info
-    desc: "Composer should have a Rector script"
+    desc: "Composer should have a Rector script (rector/refactor/ci:test:php:rector/test:rector)"
 
   # === DEV DEPENDENCIES ===
   # Note: command type checks both direct and transitive dependencies
   # (e.g., via shared CI packages like netresearch/composer-patches-plugin)
+  #
+  # `A || B || C` never ran: the runner rejects a command containing `||`
+  # outright and records the checkpoint as failed, so PM-16/PM-17 reported a
+  # missing tool on every project regardless of what was installed. The OR is
+  # expressed instead as one `find`-fed pipeline: `find` lists whichever of the
+  # candidate paths exist, `grep -l` keeps the ones mentioning the tool, and the
+  # exit status comes from the final `grep -q .`. Composer's bin proxy embeds
+  # the target package path, so the installed binary matches its own name.
   - id: PM-16
     type: command
-    command: "test -f .Build/bin/phpstan || grep -q phpstan composer.json || grep -q phpstan composer.lock"
+    pattern: "find .Build/bin/phpstan vendor/bin/phpstan composer.json composer.lock -maxdepth 0 2>/dev/null | xargs -r grep -l phpstan 2>/dev/null | grep -q ."
     severity: warning
     desc: "PHPStan should be available (directly or transitively via a CI package)"
 
   - id: PM-17
     type: command
-    command: "test -f .Build/bin/php-cs-fixer || grep -q php-cs-fixer composer.json || grep -q php-cs-fixer composer.lock"
+    pattern: "find .Build/bin/php-cs-fixer vendor/bin/php-cs-fixer composer.json composer.lock -maxdepth 0 2>/dev/null | xargs -r grep -l php-cs-fixer 2>/dev/null | grep -q ."
     severity: warning
     desc: "PHP-CS-Fixer should be available (directly or transitively via a CI package)"
 
@@ -155,7 +177,7 @@ mechanical:
   # `target` and emitted "Target file not found:" with no path.
   - id: PM-30
     type: regex
-    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php}"
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
     pattern: "header_comment"
     severity: info
     desc: "PHP-CS-Fixer should configure the header_comment rule for consistent copyright headers across all PHP files"
@@ -163,22 +185,35 @@ mechanical:
   # === PHP-CS-FIXER RISKY RULES ===
   - id: PM-24
     type: contains
-    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php}"
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
     pattern: "risky"
     severity: info
     desc: "PHP-CS-Fixer should enable @PER-CS:risky for comprehensive enforcement"
 
   # === PHPAT ARCHITECTURE TESTS ===
+  # `A || B` is rejected by the runner, so this checkpoint failed on every
+  # project, phpat present or not. One pipeline instead; `find` keeps the
+  # missing-file case out of grep's exit status.
   - id: PM-25
     type: command
-    command: "grep -rq 'phpat' composer.json 2>/dev/null || grep -rq 'phpat' composer.lock 2>/dev/null"
+    pattern: "find composer.json composer.lock -maxdepth 0 2>/dev/null | xargs -r grep -l phpat 2>/dev/null | grep -q ."
     severity: info
     desc: "PHPat should be configured for architecture testing in defined architectures"
 
   # === MULTI-VERSION LIBRARY ADAPTERS ===
+  # Two defects, both fixed here:
+  #   * `find … -exec sh -c '… && …' … \;` is rejected by the runner (the `&&`,
+  #     the `\;` and the unanchored `exec` pattern all trip it), so the check
+  #     never executed and always reported a failure.
+  #   * the find had no exclusion, so it descended into a bundled dependency
+  #     tree (.Build/, vendor/, node_modules/) and reported findings against
+  #     code the project does not own.
+  # The per-file "uses method_exists but carries no dynamic-dispatch ignore"
+  # test becomes two grep passes: -l lists the files that use it, -L keeps only
+  # those without the marker. Leading `!` inverts: offenders => fail.
   - id: PM-37
     type: command
-    command: "! find src Classes -type f -name '*.php' 2>/dev/null -exec sh -c 'grep -Eq \"(method_exists|function_exists)\" \"$1\" && ! grep -Eq \"@phpstan-ignore method\\.dynamicName\" \"$1\"' sh {} \\; -print -quit | grep -q ."
+    pattern: "! grep -rlE --include='*.php' --exclude-dir=.Build --exclude-dir=vendor --exclude-dir=node_modules '(method_exists|function_exists)' src Classes 2>/dev/null | xargs -r grep -LE '@phpstan-ignore method\\.dynamicName' 2>/dev/null | grep -q ."
     severity: info
     desc: "Classes using method_exists() for version detection should use adapter pattern with dynamic dispatch (@phpstan-ignore method.dynamicName)"
 
@@ -205,16 +240,24 @@ mechanical:
     severity: warning
     desc: "Avoid (string) cast on mixed — use assert(is_string()) or is_string() guard for proper type narrowing"
 
+  # The `for … ; do … ; done` form contained `;` and `&&`, which the runner
+  # rejects, so this reported "level below 10" on every project including one
+  # configured at max. Same semantics without shell chaining: `find` yields the
+  # candidate configs in precedence order, `head -1` keeps the first that
+  # exists, awk exits non-zero unless that file declares level 10 or max. With
+  # no config at all, `xargs -r` runs nothing and the checkpoint passes — as
+  # before, PM-01 owns the missing-config case. Build/phpstan/phpstan.neon
+  # added for parity with PM-01/PM-02.
   - id: PM-53
     type: command
-    command: "for f in phpstan.neon phpstan.neon.dist Build/phpstan.neon; do if [ -f \"$f\" ]; then level=$(sed -n 's/^[[:space:]]*level:[[:space:]]*//p' \"$f\" 2>/dev/null); case \"$level\" in 10|max) exit 0 ;; esac; echo \"WARN: $f uses PHPStan level '$level' — level 10 (max) recommended\" && exit 1; fi; done; exit 0"
+    pattern: "find phpstan.neon phpstan.neon.dist Build/phpstan.neon Build/phpstan/phpstan.neon -maxdepth 0 2>/dev/null | head -1 | xargs -r awk '/^[[:space:]]*level:[[:space:]]*(10|max)([[:space:]]|$)/{ok=1} END{exit !ok}'"
     severity: warning
     desc: "Projects should target PHPStan level 10 (max) for full strict typing (not gated on PHP version — verify applicability)"
 
   # === IMMUTABILITY BOUNDARIES (guardrail) ===
   - id: PM-39
     type: command
-    command: "! grep -rlE '^(final\\s+)?readonly\\s+class' src/ Classes/ 2>/dev/null | xargs -r grep -lE '#\\[(ORM\\\\)?Entity|#\\[(ORM\\\\)?MappedSuperclass' 2>/dev/null | grep -q ."
+    pattern: "! grep -rlE --exclude-dir=.Build --exclude-dir=vendor --exclude-dir=node_modules '^(final\\s+)?readonly\\s+class' src/ Classes/ 2>/dev/null | xargs -r grep -lE '#\\[(ORM\\\\)?Entity|#\\[(ORM\\\\)?MappedSuperclass' 2>/dev/null | grep -q ."
     severity: error
     desc: "readonly must not be applied to Doctrine entities or mapped-superclasses (Doctrine hydrates them via reflection-bypassing the constructor). Embeddables are a nuanced case — see references/doctrine-modernization-edges.md"
 
