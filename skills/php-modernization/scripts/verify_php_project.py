@@ -63,9 +63,16 @@ RECTOR_CONFIG_CANDIDATES: tuple[str, ...] = (
     "Build/rector.php",
     "Build/rector/rector.php",
 )
+# Root first, then Build/ — the same list and the same order as PM-04/PM-05/
+# PM-06/PM-24/PM-30 in checkpoints.yaml. A TYPO3 extension that keeps its build
+# tooling under Build/ carries the config at Build/.php-cs-fixer.php; with a
+# root-only list this verifier reported PM-04 as failed for a project that has
+# one, while the YAML checkpoint passed.
 PHP_CS_FIXER_CANDIDATES: tuple[str, ...] = (
     ".php-cs-fixer.php",
     ".php-cs-fixer.dist.php",
+    "Build/.php-cs-fixer.php",
+    "Build/.php-cs-fixer.dist.php",
 )
 PHPSTAN_BASELINE_CANDIDATES: tuple[str, ...] = (
     "phpstan-baseline.neon",
@@ -1135,16 +1142,16 @@ def run_composer_audit(root: Path) -> ToolRun | None:
 # ---------------------------------------------------------------------------
 
 
+# Derived from the candidate tuples rather than repeated as literals: a config
+# path that the checks look for but the signature does not watch is a stale
+# cache hit after that file changes (Build/.php-cs-fixer.php and
+# Build/rector.php were exactly that).
 CACHE_INVALIDATION_FILES: tuple[str, ...] = (
     "composer.json",
     "composer.lock",
-    "phpstan.neon",
-    "phpstan.neon.dist",
-    "Build/phpstan.neon",
-    "Build/phpstan/phpstan.neon",
-    "rector.php",
-    ".php-cs-fixer.php",
-    ".php-cs-fixer.dist.php",
+    *PHPSTAN_CONFIG_CANDIDATES,
+    *RECTOR_CONFIG_CANDIDATES,
+    *PHP_CS_FIXER_CANDIDATES,
 )
 
 

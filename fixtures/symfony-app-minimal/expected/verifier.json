@@ -108,7 +108,9 @@
       "category": "php-cs-fixer",
       "evidence": [
         ".php-cs-fixer.php",
-        ".php-cs-fixer.dist.php"
+        ".php-cs-fixer.dist.php",
+        "Build/.php-cs-fixer.php",
+        "Build/.php-cs-fixer.dist.php"
       ],
       "id": "PM-04",
       "message": "PHP-CS-Fixer configuration is missing",
