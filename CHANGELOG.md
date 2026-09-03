@@ -8,6 +8,17 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+### Fixed
+
+- `verifier`: the PHP-CS-Fixer config is searched for under `Build/`
+- Checkpoints accept `Build/` tooling paths and the `ci:*` script convention
+
+### Documentation
+
+- Composer package metadata reference added
+- `composer`: the trait branch dropped, the eval made directional, a fresh temp dir per run
+- `composer`: the implements check widened; an empty result is called a first pass
+
 ## [1.22.2] - 2026-08-27
 
 ### Fixed
