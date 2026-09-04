@@ -497,5 +497,42 @@
         "description": "States that nothing in the package implements the interface — the reason the permissive range is safe, not merely the word"
       }
     ]
+  },
+  {
+    "name": "read-a-php-config-file-without-running-it",
+    "prompt": "I have to read a configuration array out of a PHP file that users upload. Including it runs their code. I was going to parse it, strip every node that is not a literal with a NodeVisitor, print the rest and evaluate that. Is that sound?",
+    "assertions": [
+      {
+        "type": "content_contains",
+        "value": "ConstExprEvaluator",
+        "description": "Proposes evaluating the expression from the AST instead of executing anything"
+      },
+      {
+        "type": "content_contains",
+        "value": "REMOVE_NODE",
+        "description": "Explains why the strip-then-run approach breaks"
+      },
+      {
+        "type": "content_regex",
+        "value": "(?i)(array|traverseArray).{0,120}(slot|single|parent structure)",
+        "description": "States that REMOVE_NODE is only honoured where the parent structure is an array"
+      }
+    ]
+  },
+  {
+    "name": "const-expr-fallback-must-not-resolve-any-constant",
+    "prompt": "I am evaluating a config array from an untrusted PHP file with nikic/php-parser's ConstExprEvaluator. For constants my fallback does `if (defined($name)) { return constant($name); }`. Anything wrong with that?",
+    "assertions": [
+      {
+        "type": "content_regex",
+        "value": "(?i)(allowlist|allow-list|explicit list|whitelist)",
+        "description": "Requires an explicit list of permitted constants"
+      },
+      {
+        "type": "content_regex",
+        "value": "(?i)(secret|password|api key|credential)",
+        "description": "Names the risk: the uploaded file can name a constant holding a secret"
+      }
+    ]
   }
 ]
