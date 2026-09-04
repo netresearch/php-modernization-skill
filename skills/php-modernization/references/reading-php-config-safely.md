@@ -42,22 +42,59 @@ And the result still has to be executed.
 ## Evaluate the expression instead
 
 `nikic/php-parser` ships `ConstExprEvaluator`, which computes a constant
-expression without executing anything. Find the assignment, evaluate its
-right-hand side, done:
+expression without executing anything. Locate the expression that holds the
+configuration, evaluate it, done.
+
+Config files come in two shapes and both are worth handling. `return [...]` is
+the modern one — Symfony's `config/bundles.php`, most Laravel config; the
+assignment (`$EM_CONF[$key] = [...]`, `$config = [...]`) is the older one:
 
 ```php
 $statements = new ParserFactory()->createForHostVersion()->parse($code);
 
-$assignments = new NodeFinder()->find($statements, static fn(Node $n): bool =>
-    $n instanceof Assign || $n instanceof AssignOp || $n instanceof AssignRef);
+// Run NameResolver if you intend to accept ::class - see the fallback below
+$traverser = new NodeTraverser(new NameResolver());
+$statements = $traverser->traverse($statements);
 
-// exactly one assignment, to the variable you expect
-if (count($assignments) !== 1 || !$assignments[0] instanceof Assign) {
-    return null;
+$expression = null;
+
+// shape 1: a single top-level `return <expr>;`
+$returns = array_values(array_filter(
+    $statements,
+    static fn(Node $n): bool => $n instanceof Stmt\Return_ && $n->expr !== null
+));
+if (count($returns) === 1) {
+    $expression = $returns[0]->expr;
 }
 
-$value = (new ConstExprEvaluator())->evaluateSilently($assignments[0]->expr);
+// shape 2: exactly one assignment, and it must write to the variable you expect
+if ($expression === null) {
+    $assignments = (new NodeFinder())->find($statements, static fn(Node $n): bool =>
+        $n instanceof Assign || $n instanceof AssignOp || $n instanceof AssignRef);
+
+    if (count($assignments) !== 1 || !$assignments[0] instanceof Assign) {
+        return null;                    // none, or more than one - ambiguous
+    }
+    $target = $assignments[0]->var;
+    $base   = $target instanceof ArrayDimFetch ? $target->var : $target;
+    if (!$base instanceof Variable || $base->name !== $expectedVariable) {
+        return null;                    // an assignment, but not the one we want
+    }
+    $expression = $assignments[0]->expr;
+}
+
+$value = (new ConstExprEvaluator())->evaluateSilently($expression);
 ```
+
+Two details that are easy to skip and both bite:
+
+- `NodeFinder::find()` walks **every** descendant, not the top level. Without the
+  target check, an unrelated assignment inside a closure or a dead branch is
+  evaluated as if it were the configuration; with more than one assignment in the
+  file the count check rejects a file that is perfectly fine. Checking the target
+  variable is what makes "exactly one" meaningful.
+- Deciding between the two shapes on *count* rather than on the first match keeps
+  a file that both returns and assigns from being read half-way.
 
 Everything else in the file — a `declare`, a guard clause, a function
 declaration, a stray comment — is simply not looked at, because nothing runs.
@@ -76,13 +113,25 @@ Supply one only to reproduce behaviour you must keep, and make it reject rather
 than guess:
 
 ```php
-new ConstExprEvaluator(static function (Expr $part) {
+/** @var array<string, mixed> $allowedConstants  e.g. ['PHP_EOL' => PHP_EOL] */
+new ConstExprEvaluator(static function (Expr $part) use ($allowedConstants) {
     // an undefined variable came out as null under the old include
     if ($part instanceof Variable) {
         return null;
     }
-    if ($part instanceof ConstFetch && defined($part->name->toString())) {
-        return constant($part->name->toString());
+    // Foo::class is a name, not a value - it loads nothing.
+    // Only correct after NameResolver has run, otherwise `use` aliases resolve wrong.
+    if ($part instanceof ClassConstFetch
+        && $part->class instanceof Name
+        && $part->name instanceof Identifier
+        && $part->name->toLowerString() === 'class'
+    ) {
+        return $part->class->toString();
+    }
+    if ($part instanceof ConstFetch
+        && array_key_exists($name = $part->name->toString(), $allowedConstants)
+    ) {
+        return $allowedConstants[$name];
     }
     throw new ConstExprEvaluationException(
         'Expression of type ' . $part->getType() . ' cannot be evaluated'
@@ -90,11 +139,19 @@ new ConstExprEvaluator(static function (Expr $part) {
 });
 ```
 
-Two notes on that shape:
+Three notes on that shape:
 
-- Resolving a **defined** constant reads a value; it does not load a class.
-  `ClassConstFetch` is not handled natively, so `Foo::BAR` reaches the fallback
-  and is rejected — which is what you want from an untrusted file.
+- **Do not resolve constants by `defined()` + `constant()`.** That accepts *any*
+  constant the host process happens to have defined, so an untrusted file can
+  name `DB_PASSWORD` or an API key and lift its value into a config value you
+  then store, log or display. Pass an explicit allowlist of the constants the
+  format is documented to support; anything else is rejected like any other
+  non-literal.
+- **`::class` is safe and worth supporting**, because it is resolved from the
+  syntax tree and loads nothing — `FrameworkBundle::class` as an array key is
+  ordinary in Symfony config. It is only *correct* once `NameResolver` has run,
+  though: without it, a short name under a `use` alias resolves to the wrong
+  string. Any other `ClassConstFetch` (`Foo::BAR`) stays rejected.
 - A function call in a value (`'x' => trim(' y ')`) is likewise rejected. If the
   old behaviour executed it, that is a behaviour change worth stating explicitly
   rather than papering over.
