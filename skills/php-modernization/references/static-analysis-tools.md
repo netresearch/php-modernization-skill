@@ -667,3 +667,67 @@ controller / service / command layers rather than perform a risky extraction.
 Mark them won't-fix in the SAST UI with a short comment explaining why the
 method's structure is intentional — a deliberate "review as safe" beats a
 mechanical refactor that ships a regression.
+
+## `php:S2003` is a false positive on a value-returning include
+
+SonarCloud's `php:S2003` flags `require`/`include` and asks for the `_once`
+variant. On a config file that ends in `return [...];` and is read **for its
+return value**, that rewrite is a behavior change, not a style fix.
+
+`require` evaluates the file and yields its return value every time it runs.
+`require_once` yields that value only the **first** time the process includes
+that path; every later inclusion of the same path — from anywhere, including a
+different file — short-circuits and yields `bool(true)`:
+
+```php
+// cfg.php ends in:  return ['a' => 1];
+
+$first  = require      'cfg.php';   // array(1) { 'a' => 1 }  ← file included here
+$second = require_once 'cfg.php';   // bool(true)             ← already included
+$third  = require_once 'cfg.php';   // bool(true)
+```
+
+Order is what makes the bug intermittent. `require_once` on a path nothing has
+touched yet *does* return the array; it degrades to `true` only on the repeat.
+So `$config = require_once $path;` in a loader returns the configuration on the
+first call and `true` on the second, and a loader called exactly once passes
+every test — until a second call site, a second request in a long-running
+worker, or another file's own `require_once` of the same config gets there
+first. (Measured on PHP 8.5.10; this is documented `require_once` semantics, not
+a version quirk.)
+
+The consumer then sees `true` where it expected an array. TYPO3's tailor loads
+its packaging config exactly this way and depends on it — `$configuration =
+require $exludeConfigurationFile;` at
+[`src/Service/VersionService.php:243`](https://github.com/TYPO3/tailor/blob/7faa2d2e7e247f309eb8807a30edea1f911aaf07/src/Service/VersionService.php#L243),
+followed two lines later by an `is_array($configuration)` guard that throws.
+Under the `S2003` rewrite that guard starts throwing on the second load.
+
+**Do not apply `S2003` where the include's return value is assigned.** The
+`_once` guard exists to prevent redeclaration; a file that only returns an array
+declares nothing, so there is nothing for it to protect. Plain `require` is
+correct here, and re-reading the file is the point.
+
+Disposing of the finding has two traps of its own:
+
+- **A false-positive mark does not reliably survive a refactor.** Observed: a
+  refactor that reshaped the flagged line brought the finding back under a *new*
+  issue key, while the "won't fix" / "false positive" disposition stayed on the
+  old one — so the rule reappeared on the next analysis with nothing to show
+  that it had already been triaged. Mark the issue **after** the code has
+  reached its final shape, and re-query the project's open issues on the last
+  push instead of trusting a mark set mid-refactor.
+- **A rule that keeps recurring on the same files belongs in a project-level
+  exclusion**, not in one-by-one marks:
+
+```properties
+sonar.issue.ignore.multicriteria=e1
+sonar.issue.ignore.multicriteria.e1.ruleKey=php:S2003
+sonar.issue.ignore.multicriteria.e1.resourceKey=**/conf/*.php
+```
+
+Put it in the properties file your analysis mode actually reads: Automatic
+Analysis reads `.sonarcloud.properties`, the CI-based scanner reads
+`sonar-project.properties`, and a project carrying both must keep them in sync.
+The equivalent under **Administration → General Settings → Analysis Scope →
+Ignore Issues on Multiple Criteria** applies in either mode.
