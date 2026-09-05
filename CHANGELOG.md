@@ -8,6 +8,8 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-09-05
+
 ### Added
 
 - `reading-php-config-safely.md`: read a PHP config file without executing it
@@ -162,7 +164,8 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 (historical — pre-CHANGELOG)
 
-[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.22.3...HEAD
+[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.0...HEAD
+[1.23.0]: https://github.com/netresearch/php-modernization-skill/compare/v1.22.3...v1.23.0
 [1.22.3]: https://github.com/netresearch/php-modernization-skill/compare/v1.22.2...v1.22.3
 [1.21.0]: https://github.com/netresearch/php-modernization-skill/compare/v1.20.2...v1.21.0
 [1.19.0]: https://github.com/netresearch/php-modernization-skill/compare/v1.18.0...v1.19.0
