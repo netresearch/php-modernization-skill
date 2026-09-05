@@ -8,6 +8,15 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+### Added
+
+- `reading-php-config-safely.md`: read a PHP config file without executing it
+
+### Fixed
+
+- `php:S2003` is a false positive on a value-returning include
+- Reading a PHP config handles return-based files, targets the right assignment, and allowlists constants
+
 ## [1.22.3] - 2026-09-03
 
 ### Fixed
