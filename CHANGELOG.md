@@ -8,6 +8,15 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+### Added
+
+- README: the `/plugin install` step the marketplace section was missing, and a "Without a marketplace" section covering the skills-directory route
+- Evals: a case for reading a PHP config file without executing it
+
+### Fixed
+
+- Evals: a word-order false negative; the case now ties the mechanism to the risk it covers
+
 ## [1.23.0] - 2026-09-05
 
 ### Added
