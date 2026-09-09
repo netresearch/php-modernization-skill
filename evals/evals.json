@@ -514,7 +514,7 @@
       },
       {
         "type": "content_regex",
-        "value": "(?i)(array|traverseArray).{0,120}(slot|single|parent structure)",
+        "value": "(?is)((array|traverseArray).{0,120}(slot|single|parent structure)|(slot|single|parent structure).{0,120}(array|traverseArray))",
         "description": "States that REMOVE_NODE is only honoured where the parent structure is an array"
       }
     ]
@@ -532,6 +532,11 @@
         "type": "content_regex",
         "value": "(?i)(secret|password|api key|credential)",
         "description": "Names the risk: the uploaded file can name a constant holding a secret"
+      },
+      {
+        "type": "content_regex",
+        "value": "(?is)(constant\\s*\\(.{0,200}(secret|password|api key|credential)|(secret|password|api key|credential).{0,200}constant\\s*\\()",
+        "description": "Ties the constant() fallback to the disclosure, so naming an allowlist and a secret separately is not enough"
       }
     ]
   }
