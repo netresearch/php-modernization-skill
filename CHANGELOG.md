@@ -10,7 +10,7 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ### Added
 
-- README: the `/plugin install` step the marketplace section was missing, and a "Without a marketplace" section covering the skills-directory route
+- README: the `/plugin install` step missing from the marketplace section, and a "Without a marketplace" section covering the skills-directory route
 - Evals: a case for reading a PHP config file without executing it
 
 ### Fixed
