@@ -50,6 +50,7 @@ allowed-tools:
 | Contracts & invariants | `references/contracts-and-invariants.md` |
 | Mutation testing | `references/mutation-testing.md` |
 | Migration planning | `references/migration-strategies.md` |
+| Public API inventory vs consumers | `references/public-api-inventory.md` |
 | PHPUnit 12→13, mock vs stub | `references/phpunit-modernization.md` |
 | Multi-agent dispatch hazards | `references/multi-agent-pitfalls.md` |
 | Reading a PHP config file without running it | `references/reading-php-config-safely.md` |
