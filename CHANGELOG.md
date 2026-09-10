@@ -8,6 +8,11 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+### Added
+
+- README: the `/plugin install` step missing from the marketplace section, and a "Without a marketplace" section covering the skills-directory route
+- Evals: `read-a-php-config-file-without-running-it` and `const-expr-fallback-must-not-resolve-any-constant`
+
 ## [1.23.0] - 2026-09-05
 
 ### Added
