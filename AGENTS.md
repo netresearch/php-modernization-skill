@@ -84,8 +84,14 @@ The agent contract in [SKILL.md](skills/php-modernization/SKILL.md#hard-guardrai
 
 ## Rules
 
+These govern the PHP this skill guides people to write — `**/*.php`. They do not
+apply to Markdown, YAML, JSON or shell in this repository. Stated because a
+reviewer reading this file as repository-wide guidance has no other way to tell:
+`knowledge_base.code_guidelines` applies a guidelines document to every path, and
+nothing in that setting can scope it.
+
 1. **PHP 8.1+ required** — promotion, readonly, enums, match, attributes, union types.
-2. **Strict types** — `declare(strict_types=1)` in every file.
+2. **Strict types** — `declare(strict_types=1)` in every PHP file.
 3. **DTOs over arrays** — typed objects for structured data, never raw arrays.
 4. **Backed enums** — replace string/int constants for fixed value sets.
 5. **PHPStan ≥ 9** — level 9 minimum, level 10 for new projects, `treatPhpDocTypesAsCertain: false`.
