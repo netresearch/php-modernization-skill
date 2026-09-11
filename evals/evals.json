@@ -539,5 +539,26 @@
         "description": "Ties the constant() fallback to the disclosure, so naming an allowlist and a secret separately is not enough"
       }
     ]
+  },
+  {
+    "name": "public-api-inventory-counts-same-namespace-callers",
+    "prompt": "Before tagging 1.0 I want to prune my library's @api classes. I grep src/ for each fully-qualified class name, and every class with no hit outside its own file goes on the removal list. 17 classes came out uncalled. Is that list sound?",
+    "assertions": [
+      {
+        "type": "content_regex",
+        "value": "(?i)(same[- ]namespace|short name|without a use|no use statement)",
+        "description": "Spots that FQCN grep misses callers in the same namespace"
+      },
+      {
+        "type": "content_regex",
+        "value": "(?i)(entry point|extension point|leaf|meant to be called|called from outside)",
+        "description": "Says zero in-repo callers is expected for public entry points and extension points"
+      },
+      {
+        "type": "content_regex",
+        "value": "(?i)(consumer|dependents|composer\\.json)",
+        "description": "Redirects the question to external consumers rather than in-repo callers"
+      }
+    ]
   }
 ]
