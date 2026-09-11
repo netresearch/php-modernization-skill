@@ -50,7 +50,9 @@
 ├── scripts/
 │   ├── test_fixtures.py                      # Golden-snapshot diff runner
 │   └── verify-harness.sh                     # AGENTS.md/docs harness check
-├── docs/ARCHITECTURE.md                      # Architecture overview
+├── docs/
+│   ├── ARCHITECTURE.md                       # Architecture overview
+│   └── php-rules.md                          # PHP coding rules (scoped to **/*.php)
 ├── evals/evals.json                          # Skill evaluation suite
 ├── .claude-plugin/plugin.json                # Plugin manifest
 ├── composer.json                             # Composer package manifest
@@ -84,25 +86,16 @@ The agent contract in [SKILL.md](skills/php-modernization/SKILL.md#hard-guardrai
 
 ## Rules
 
-These govern the PHP this skill guides people to write — `**/*.php`. They do not
-apply to Markdown, YAML, JSON or shell in this repository. Stated because a
-reviewer reading this file as repository-wide guidance has no other way to tell:
-`knowledge_base.code_guidelines` applies a guidelines document to every path, and
-nothing in that setting can scope it.
-
-1. **PHP 8.1+ required** — promotion, readonly, enums, match, attributes, union types.
-2. **Strict types** — `declare(strict_types=1)` in every PHP file.
-3. **DTOs over arrays** — typed objects for structured data, never raw arrays.
-4. **Backed enums** — replace string/int constants for fixed value sets.
-5. **PHPStan ≥ 9** — level 9 minimum, level 10 for new projects, `treatPhpDocTypesAsCertain: false`.
-6. **Static analysis stack** — PHPStan + PHPat + Rector + PHP-CS-Fixer (`@PER-CS`).
-7. **PSR / PER-CS compliance** — see `references/psr-per-compliance.md`.
-8. **Type-hint against PSR interfaces**, not implementations.
+The PHP coding rules live in [docs/php-rules.md](docs/php-rules.md), scoped to
+`**/*.php` via `.coderabbit.yaml`. They are not repeated here: this file is
+supplied to reviews for every path, and a PHP rule stated here is evaluated
+against Markdown and YAML changes too (#116).
 
 ## References
 
 - [SKILL.md](skills/php-modernization/SKILL.md) — agent contract and reference-routing table
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — architecture overview
+- [docs/php-rules.md](docs/php-rules.md) — PHP coding rules, scoped to `**/*.php`
 - [CHANGELOG.md](CHANGELOG.md) — release history
 - [fixtures/README.md](fixtures/README.md) — regression-suite layout and snapshot rules
 - [skills/php-modernization/templates/README.md](skills/php-modernization/templates/README.md) — template consumption guide

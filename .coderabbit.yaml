@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://storage.googleapis.com/coderabbit_public_assets/schema.v2.json
+#
+# Scopes the PHP coding rules to PHP files (#116).
+#
+# `knowledge_base.code_guidelines` supplies a guideline document to reviews of
+# every path by default, so PHP rules stated in the root AGENTS.md were being
+# evaluated against Markdown and YAML changes. `applyTo` is the only field that
+# restricts where a document applies — `reviews.path_instructions` only adds
+# guidance for a glob, it cannot subtract a repository-wide one.
+#
+# AGENTS.md is listed explicitly rather than left to the built-in defaults: the
+# schema declares `filePatterns` with `default: []` and documents the defaults
+# in prose, which does not say whether an explicit list extends or replaces
+# them. Naming it keeps it a guideline either way.
+knowledge_base:
+  code_guidelines:
+    enabled: true
+    filePatterns:
+      # Plain-string form: an entry is either a bare pattern or an object that
+      # carries BOTH files and applyTo — the object form with files alone is
+      # schema-invalid, so an unscoped document has to be written like this.
+      - "**/AGENTS.md"
+      - files: "docs/php-rules.md"
+        applyTo: "**/*.php"
