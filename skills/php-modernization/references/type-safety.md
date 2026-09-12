@@ -356,6 +356,38 @@ class UserRepository implements RepositoryInterface
 
 ## Assertions and Guards
 
+### `preg_match()` returns `false`, not `0`, on malformed UTF-8
+
+With the `/u` modifier PCRE validates the whole subject before matching. An
+invalid byte makes `preg_match()` return **`false`** — not `0` — so the common
+shapes silently conflate "no match" with "could not be examined":
+
+```php
+// WRONG - false == 0, so a byte-damaged subject reads as "no match"
+if (preg_match('/\s/u', $value) === 0) { /* treated as clean */ }
+if (!preg_match('/\s/u', $value))      { /* same bug */ }
+
+// RIGHT - decide the encoding first, then match
+if (preg_match('//u', $value) !== 1) {
+    // not valid UTF-8: reject, log, or transcode - do not fall through
+    return null;
+}
+if (preg_match('/\s/u', $value) === 1) { /* now meaningful */ }
+```
+
+`'//u'` is an empty pattern with the modifier: it matches any valid UTF-8
+subject and fails on a malformed one, so it is an encoding check that needs no
+`mbstring`. `preg_last_error_msg()` names the cause (`Malformed UTF-8
+characters, possibly incorrectly encoded`).
+
+Why it matters beyond the branch: a value that passes an inverted guard keeps
+travelling. Symfony's `UnicodeString` constructor throws
+`InvalidArgumentException` on invalid UTF-8, and `AsciiSlugger` builds one — so
+a single bad byte reaching a slugger aborts the whole run with an exception
+attributed to whatever template called it, naming neither the input nor its
+origin. Validate the encoding where the value enters, and keep the raw value out
+of the log message: it is the one thing that cannot be written safely.
+
 ### Type Guards
 
 ```php
