@@ -363,17 +363,30 @@ invalid byte makes `preg_match()` return **`false`** — not `0` — so the comm
 shapes silently conflate "no match" with "could not be examined":
 
 ```php
-// WRONG - false == 0, so a byte-damaged subject reads as "no match"
-if (preg_match('/\s/u', $value) === 0) { /* treated as clean */ }
-if (!preg_match('/\s/u', $value))      { /* same bug */ }
+$r = preg_match('/\s/u', $value);   // false on malformed UTF-8
 
-// RIGHT - decide the encoding first, then match
+// WRONG - the match test: false === 1 is false, so a byte-damaged
+// subject reads as "no match" and travels on as if it were clean
+if ($r === 1) { /* has whitespace */ }
+
+// WRONG - conflates false with 0: !false is true, same wrong branch
+if (!preg_match('/\s/u', $value)) { /* "no match" */ }
+
+// ALSO WRONG, differently - the no-match test: false === 0 is false
+// too, so NEITHER branch runs and the error is silently skipped
+if ($r === 0) { /* never reached for a malformed subject */ }
+
+// RIGHT - settle the encoding first, then match
 if (preg_match('//u', $value) !== 1) {
     // not valid UTF-8: reject, log, or transcode - do not fall through
     return null;
 }
 if (preg_match('/\s/u', $value) === 1) { /* now meaningful */ }
 ```
+
+Note the asymmetry: `=== 1` and `!preg_match(...)` take the wrong branch, while
+`=== 0` takes no branch at all. Only the first of those looks like a working
+guard, which is why it is the one that ships.
 
 `'//u'` is an empty pattern with the modifier: it matches any valid UTF-8
 subject and fails on a malformed one, so it is an encoding check that needs no
