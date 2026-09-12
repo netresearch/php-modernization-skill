@@ -8,6 +8,12 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.23.2] - 2026-09-12
+
+### Added
+
+- Type safety: `preg_match()` returns `false`, not `0`, when the subject is not valid UTF-8 under `/u` — the two comparison shapes that misread it, the `preg_match('//u', ...)` encoding check that separates the states, and why an unvalidated value aborts a run in `UnicodeString` rather than failing at the branch
+
 ## [1.23.1] - 2026-09-11
 
 ### Added
@@ -171,7 +177,8 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 (historical — pre-CHANGELOG)
 
-[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.1...HEAD
+[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.2...HEAD
+[1.23.2]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.1...v1.23.2
 [1.23.1]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.0...v1.23.1
 [1.23.0]: https://github.com/netresearch/php-modernization-skill/compare/v1.22.3...v1.23.0
 [1.22.3]: https://github.com/netresearch/php-modernization-skill/compare/v1.22.2...v1.22.3
