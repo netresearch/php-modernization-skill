@@ -9,6 +9,13 @@
 version: 1
 skill_id: php-modernization
 
+# Only run for Composer projects (SKILL.md compatibility: "Requires php 8.1+,
+# composer."). Without this gate /assess ran every check against a Python
+# repository and reported failures that were not about that repository.
+preconditions:
+  - type: file_exists
+    target: composer.json
+
 mechanical:
   # === PHPSTAN CONFIGURATION ===
   - id: PM-01
