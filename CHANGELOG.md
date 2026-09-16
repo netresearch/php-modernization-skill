@@ -8,6 +8,10 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+### Fixed
+
+- `checkpoints.yaml` declared no preconditions, so `/assess` ran every check against any repository. On a Python repository without a `composer.json` it reported 13 failures out of 29 checks that were not about that repository. The skill is now gated on `composer.json` existing, matching the scope `SKILL.md` already declares in `compatibility: "Requires php 8.1+, composer."`. Any Composer project still runs every check, TYPO3 or not
+
 ## [1.23.2] - 2026-09-12
 
 ### Added
