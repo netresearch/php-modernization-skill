@@ -8,6 +8,8 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.23.3] - 2026-09-16
+
 ### Fixed
 
 - `checkpoints.yaml` declared no preconditions, so `/assess` ran every check against any repository. On a Python repository without a `composer.json` it reported 13 failures out of 29 checks that were not about that repository. The skill is now gated on `composer.json` existing, matching the scope `SKILL.md` already declares in `compatibility: "Requires php 8.1+, composer."`. Any Composer project still runs every check, TYPO3 or not
@@ -181,7 +183,8 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 (historical — pre-CHANGELOG)
 
-[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.2...HEAD
+[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.3...HEAD
+[1.23.3]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.2...v1.23.3
 [1.23.2]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.1...v1.23.2
 [1.23.1]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.0...v1.23.1
 [1.23.0]: https://github.com/netresearch/php-modernization-skill/compare/v1.22.3...v1.23.0
