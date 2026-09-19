@@ -515,6 +515,51 @@ vendor/bin/php-cs-fixer fix -v
   run: vendor/bin/php-cs-fixer fix --dry-run --diff --ansi
 ```
 
+### One authoritative style tool, not two
+
+`.php-cs-fixer.dist.php` above is the single source of truth for style. A second
+tool that also *decides* style — GrumPHP's own coding-standard tasks are the
+usual one — gives a project two rule sets that have to agree, and they drift:
+the observed case was `single_line_empty_body`, where the two disagreed on
+whether `public function __construct() {}` stays on one line, so each run undid
+the other and the diff never settled.
+
+The way out is not to tune both. It is to let PHP-CS-Fixer own style and give
+the hook runner nothing to decide:
+
+- **Hooks: CaptainHook.** It runs commands you name, in the order you name
+  them, and holds no rule set of its own — so `vendor/bin/php-cs-fixer fix` is
+  the only thing deciding how the code looks. GrumPHP's value is the tasks it
+  bundles, and that is exactly what collides here.
+- **Style: `@PER-CS`.** PSR-2 was superseded by PSR-12 and PSR-12 is itself
+  folded into PER Coding Style, which is the one that still moves. A ruleset
+  pinned to `@PSR2` is pinned to a document nobody updates — see
+  `references/psr-per-compliance.md`.
+- **Whatever else runs in the hook — PHPStan, Rector, PHPUnit — runs the same
+  binary CI runs**, with the same config file. A hook that enforces something
+  CI does not, or the other way round, is the same two-rule-sets problem in a
+  different place.
+
+```json
+{
+    "config": {
+        "fail-on-first-error": true,
+        "run-mode": "local"
+    },
+    "pre-commit": {
+        "enabled": true,
+        "actions": [
+            { "action": "vendor/bin/php-cs-fixer fix --dry-run --diff" },
+            { "action": "vendor/bin/phpstan analyse --no-progress" }
+        ]
+    }
+}
+```
+
+`fail-on-first-error` decides whether a commit stops at the first failing
+action or collects all of them; `run-mode: local` runs the binaries from the
+developer's own checkout rather than a container.
+
 ## Combined CI Workflow
 
 ```yaml
