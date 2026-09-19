@@ -96,8 +96,8 @@ verdicts.
 For PHP type syntax that is `phpstan/phpdoc-parser`:
 
 ```php
-use PHPStan\PhpDocParser\{Lexer\Lexer, Parser\ConstExprParser, Parser\TypeParser,
-    Parser\TokenIterator, ParserConfig};
+use PHPStan\PhpDocParser\{Lexer\Lexer, Parser\ConstExprParser, Parser\ParserException,
+    Parser\TypeParser, Parser\TokenIterator, ParserConfig};
 
 $config = new ParserConfig([]);
 $lexer  = new Lexer($config);
@@ -109,11 +109,17 @@ $isValidType = static function (string $type) use ($lexer, $types): bool {
         $types->parse($it);
         $it->consumeTokenType(Lexer::TOKEN_END); // without this, `int foo bar` "parses"
         return true;
-    } catch (\Throwable) {
+    } catch (ParserException) {
         return false;
     }
 };
 ```
+
+Catch `ParserException`, not `\Throwable`. Every rejection path in the library
+raises that one class — measured on 2.3.5 over `int foo bar`, `???`, `''`,
+`array{` and `|` — so the broad catch buys nothing and silently turns a bug in
+your own oracle into "not a valid type", which is the answer you are least
+likely to question.
 
 The `TOKEN_END` assertion is the part people forget: `parse()` stops at the
 first thing it does not understand and reports success for the prefix.
@@ -132,6 +138,9 @@ the platform requirement. To run one suite on many versions without a Composer
 install per version, copy the tree and empty that one file **in the copy**:
 
 ```bash
+TMP=$(mktemp -d)                 # never leave this unset: `cp -a … "$TMP/"`
+trap 'rm -rf "$TMP"' EXIT        # would then target / and the mount would be ":/app"
+
 cp -a src tests vendor phpunit.xml.dist "$TMP/"
 echo '<?php' > "$TMP/vendor/composer/platform_check.php"
 
