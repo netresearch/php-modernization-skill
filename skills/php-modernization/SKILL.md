@@ -49,6 +49,7 @@ allowed-tools:
 | Immutability | `references/immutability-boundaries.md` |
 | Contracts & invariants | `references/contracts-and-invariants.md` |
 | Mutation testing | `references/mutation-testing.md` |
+| Lexing PHP as tokens, across versions | `references/lexing-php-across-versions.md` |
 | Migration planning | `references/migration-strategies.md` |
 | Public API inventory vs consumers | `references/public-api-inventory.md` |
 | PHPUnit 12→13, mock vs stub | `references/phpunit-modernization.md` |
