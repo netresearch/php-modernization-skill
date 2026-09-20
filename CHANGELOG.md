@@ -8,6 +8,8 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.23.4] - 2026-09-20
+
 ### Added
 
 - `references/lexing-php-across-versions.md`: how token streams differ between PHP versions and what that costs a tool that reads them, so a hand-rolled splitter is recognised as re-implementing `nikic/php-parser`'s emulative lexer before it is written
@@ -192,7 +194,8 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 (historical — pre-CHANGELOG)
 
-[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.3...HEAD
+[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.4...HEAD
+[1.23.4]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.3...v1.23.4
 [1.23.3]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.2...v1.23.3
 [1.23.2]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.1...v1.23.2
 [1.23.1]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.0...v1.23.1
