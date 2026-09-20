@@ -8,6 +8,15 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+### Added
+
+- `references/lexing-php-across-versions.md`: how token streams differ between PHP versions and what that costs a tool that reads them, so a hand-rolled splitter is recognised as re-implementing `nikic/php-parser`'s emulative lexer before it is written
+
+### Changed
+
+- `references/static-analysis-tools.md` names one authoritative style tool instead of listing several as equals, and CaptainHook as the hook runner
+- The oracle catch in the reference examples is narrowed to the exception it is meant to handle, and `TMP` is created before it is used
+
 ## [1.23.3] - 2026-09-16
 
 ### Fixed
