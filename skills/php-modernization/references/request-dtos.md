@@ -140,10 +140,19 @@ final readonly class AuditFilterRequest
         }
 
         try {
-            return new DateTimeImmutable($value);
+            $date = new DateTimeImmutable($value);
         } catch (\Exception) {
             return null;
         }
+
+        // 2026-02-30 does not throw: it rolls over to 2026-03-02 and only
+        // records a warning. See "Safe Date Handling" below.
+        $errors = DateTimeImmutable::getLastErrors();
+        if ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)) {
+            return null;
+        }
+
+        return $date;
     }
 }
 ```
@@ -237,6 +246,17 @@ final class AuditFilterRequestTest extends TestCase
     public function handlesInvalidDateGracefully(): void
     {
         $request = $this->createRequestWithParams(['from' => 'not-a-date']);
+
+        $dto = AuditFilterRequest::fromRequest($request);
+
+        self::assertNull($dto->from);
+    }
+
+    #[Test]
+    public function rejectsNonexistentDate(): void
+    {
+        // Parses without throwing and would silently become 2026-03-02
+        $request = $this->createRequestWithParams(['from' => '2026-02-30']);
 
         $dto = AuditFilterRequest::fromRequest($request);
 
@@ -383,6 +403,81 @@ The string-based approach works without additional extensions, making it suitabl
 - Environments where bcmath isn't installed
 - TYPO3 extensions aiming for minimal dependencies
 
+## Safe Date Handling
+
+### A nonexistent date rolls over instead of throwing
+
+`new DateTimeImmutable($value)` throws only when it cannot parse the string. A
+string it can parse that names no real date or time is normalised forward, and
+the only trace is a warning in `DateTimeImmutable::getLastErrors()`:
+
+| Input | Constructor result | Recorded warning |
+|---|---|---|
+| `2026-02-30` | `2026-03-02 00:00:00` | `The parsed date was invalid` |
+| `2026-04-31` | `2026-05-01 00:00:00` | `The parsed date was invalid` |
+| `2026-09-21T24:00:00` | `2026-09-22 00:00:00` | `The parsed time was invalid` |
+| `2026-13-01` | throws | — |
+| `2026-09-21T25:00:00` | throws | — |
+
+Out-of-range months and hours throw `DateMalformedStringException` on PHP 8.3+
+(it extends `DateException`, which extends `Exception`); PHP 8.1 and 8.2 throw
+plain `Exception`, so `catch (\Exception)` covers every version. A `try`/`catch`
+alone therefore refuses month 13 and hour 25, and accepts February 30th: a
+filter asked for `2026-02-30` quietly starts on March 2nd.
+
+### The check: `getLastErrors()` right after the constructor
+
+```php
+/**
+ * @throws \InvalidArgumentException when $value is not a real calendar date/time
+ */
+function parseStrictDate(string $value): \DateTimeImmutable
+{
+    try {
+        $date = new \DateTimeImmutable($value);
+    } catch (\Exception $e) {
+        throw new \InvalidArgumentException('Not a parseable date', 0, $e);
+    }
+
+    // First statement after the constructor: the next parse overwrites it.
+    $errors = \DateTimeImmutable::getLastErrors();
+    if ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)) {
+        if (preg_match('/[T ]24:00/', $value) === 1) {
+            throw new \InvalidArgumentException(
+                'Write 24:00 as 00:00 of the next day: ' . $date->format('Y-m-d\T00:00:00'),
+            );
+        }
+        throw new \InvalidArgumentException('Not a calendar date');
+    }
+
+    return $date;
+}
+```
+
+- **Refuse when either count is above zero.** From PHP 8.2,
+  `getLastErrors()` returns `false` after a clean parse. PHP 8.1 returns an array
+  with both counts at `0` instead, so a bare `getLastErrors() !== false` refuses
+  every date on 8.1. Checking the counts works on both.
+- **Read it immediately.** The state is process-global, shared by `DateTime` and
+  `DateTimeImmutable`, and replaced by the next parse: a `new DateTimeImmutable()`
+  for "now" between the constructor and the check resets it to clean.
+- **Say how to write 24:00.** ISO 8601 allows `24:00` as end of day and users
+  send it; a bare "invalid date" leaves them guessing. The rolled-over value
+  already holds the next day, so the refusal can name the exact replacement
+  (`2026-09-21T24:00:00` → `2026-09-22T00:00:00`).
+
+### `createFromFormat()` fixes the shape, not the range
+
+`DateTimeImmutable::createFromFormat('!Y-m-d', $value)` is the stricter parser:
+it returns `false` for anything that does not match the format (the constructor
+accepts relative strings such as `next monday`), and the `!` resets the fields
+the format does not name to zero — without it the current time of day leaks into
+the result. It still rolls over: `2026-02-30` becomes `2026-03-02` and
+`2026-13-01` becomes `2027-01-01`, each with a warning and no `false`. Apply the
+same `getLastErrors()` check after it.
+
+Verified on PHP 8.1.34, 8.2.33, 8.3.33, 8.4.25 and 8.5.10.
+
 ## Command/Query DTOs
 
 For complex operations, separate command and query objects:
@@ -467,10 +562,17 @@ final readonly class CreateSecretCommand
         }
 
         try {
-            return new \DateTimeImmutable($value);
+            $date = new \DateTimeImmutable($value);
         } catch (\Exception) {
             throw new \InvalidArgumentException("Invalid date format for: $key");
         }
+
+        $errors = \DateTimeImmutable::getLastErrors();
+        if ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)) {
+            throw new \InvalidArgumentException("Not a calendar date for: $key");
+        }
+
+        return $date;
     }
 
     /**
@@ -532,6 +634,7 @@ final readonly class ListSecretsQuery
 | Command DTO | Write operations with required fields |
 | Query DTO | Read operations with optional filters |
 | Safe Integer Parsing | Prevent overflow without bcmath |
+| Safe Date Parsing | Refuse dates PHP rolls over (`2026-02-30`, `24:00`) |
 
 **Benefits:**
 - Type safety preserved through entire flow

@@ -8,6 +8,14 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+### Added
+
+- Evals: `parse-user-supplied-date-refuses-rollover`
+
+### Fixed
+
+- `references/request-dtos.md`: the date helpers caught the constructor's exception and nothing else, so `2026-02-30` was accepted as 2026-03-02 and `24:00` as the next day. They now check `DateTimeImmutable::getLastErrors()` after the constructor, and a new "Safe Date Handling" section explains why, the PHP 8.1 difference, and that `createFromFormat()` needs the same check
+
 ## [1.23.4] - 2026-09-20
 
 ### Added
