@@ -8,6 +8,8 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.23.5] - 2026-09-23
+
 ### Added
 
 - Evals: `parse-user-supplied-date-refuses-rollover`
@@ -202,7 +204,8 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 (historical — pre-CHANGELOG)
 
-[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.4...HEAD
+[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.5...HEAD
+[1.23.5]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.4...v1.23.5
 [1.23.4]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.3...v1.23.4
 [1.23.3]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.2...v1.23.3
 [1.23.2]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.1...v1.23.2
