@@ -444,7 +444,7 @@ function parseStrictDate(string $value): \DateTimeImmutable
     if ($errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)) {
         if (preg_match('/[T ]24:00/', $value) === 1) {
             throw new \InvalidArgumentException(
-                'Write 24:00 as 00:00 of the next day: ' . $date->format('Y-m-d\T00:00:00'),
+                'Write 24:00 as 00:00 of the next day: ' . $date->format('Y-m-d\T00:00:00P'),
             );
         }
         throw new \InvalidArgumentException('Not a calendar date');
@@ -464,7 +464,9 @@ function parseStrictDate(string $value): \DateTimeImmutable
 - **Say how to write 24:00.** ISO 8601 allows `24:00` as end of day and users
   send it; a bare "invalid date" leaves them guessing. The rolled-over value
   already holds the next day, so the refusal can name the exact replacement
-  (`2026-09-21T24:00:00` → `2026-09-22T00:00:00`).
+  (`2026-09-21T24:00:00+02:00` → `2026-09-22T00:00:00+02:00`). Keep the offset
+  (`P`) in the suggestion: without it, a value sent as `+02:00` and resubmitted
+  is read in the server's default timezone and names a different instant.
 
 ### `createFromFormat()` fixes the shape, not the range
 

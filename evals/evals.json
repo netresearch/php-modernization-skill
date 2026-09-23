@@ -580,6 +580,13 @@
         "value": "(?i)(roll(s|ed)? over|overflow|2026-03-02|march 2|02-30|feb(ruary)? 30)",
         "description": "Names the failure: a nonexistent date such as February 30th parses without throwing and rolls into the next month"
       }
-    ]
+    ],
+    "samples": {
+      "passing": "No. `new DateTimeImmutable('2026-02-30')` does not throw: it rolls over to 2026-03-02 and only records a warning. Call `DateTimeImmutable::getLastErrors()` as the first statement after the constructor and refuse when `$errors !== false && ($errors['warning_count'] > 0 || $errors['error_count'] > 0)`.",
+      "failing": [
+        "Yes. The constructor throws an Exception for any invalid date, so catching it and returning null already rejects bad input.",
+        "Not quite: after the constructor, check `DateTimeImmutable::getLastErrors() !== false` and return null when it is."
+      ]
+    }
   }
 ]
