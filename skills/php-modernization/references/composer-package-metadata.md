@@ -86,9 +86,10 @@ Not every unknown symbol is a missing `require`:
 curl -s -o /dev/null -w "%{http_code}\n" https://repo.packagist.org/p2/<vendor>/<name>.json
 # without the entry: the constraints must still resolve (exit 0) ...
 # (-vvv is required: at lower verbosity Composer prints no URLs at all)
-composer update --dry-run -vvv > composer-dry-run.log 2>&1; echo "exit $?"
+log=$(mktemp)
+composer update --dry-run -vvv > "$log" 2>&1; echo "exit $?"
 # ... and this must print nothing
-grep api.github.com composer-dry-run.log
+grep api.github.com "$log"
 ```
 
 A dry run downloads no dists. An install, with or without the entry, fetches each GitHub-hosted dist from `api.github.com/repos/<owner>/<repo>/zipball/<sha>`, which redirects to `codeload.github.com`; an install from a `composer.lock` makes no other GitHub API request.
