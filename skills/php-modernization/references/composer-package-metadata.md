@@ -73,8 +73,25 @@ Not every unknown symbol is a missing `require`:
 | a class from a package that requires *this* one | declaring it closes a dependency ring; needs a code change |
 | a v1-only and a v3-only class of the same library | a runtime `class_exists()` switch; unresolvable by construction, whitelist it |
 
-## Two traps that cost real time
+## Traps that cost real time
 
 **A polyfilled function looks like a version-floor problem and is not.** `mb_str_pad()` exists from PHP 8.3, so a package declaring `php: ^8.1` that calls it looks broken. It is not, if `symfony/polyfill-mbstring` (v1.28+) reaches it — verify by installing the package standalone in a container of the lowest supported PHP version and calling the function. The defect is then an undeclared polyfill, not the PHP floor.
 
 **A pinned checker can abort and look like a pass.** `composer-require-checker` 3.5.1 aborts on `symfony/config` v8 with `Syntax error, unexpected '(', expecting T_VARIABLE`, and `--ignore-parse-errors` does not help. The abort produces empty output that reads exactly like a clean run. Check the exit code and confirm the tool printed a verdict, not nothing.
+
+**A redundant `vcs` repository turns dependency resolution into a rate-limited API client.** The symptom is a CI step that resolves dependencies — `composer update`, or `composer install` without a `composer.lock` — and fails in every job with `The "https://api.github.com/repos/<owner>/<repo>/commits/<sha>" file could not be downloaded (HTTP/2 429)`, and a re-run passes only when the quota happens to have recovered. The cause is a `repositories: [{ "type": "vcs", "url": "https://github.com/..." }]` entry: for a GitHub URL Composer's GitHub driver reads versions and commits through `api.github.com`, which allows 60 unauthenticated requests per hour per IP, and shared runner IPs spend that quota. If the package is on Packagist, the entry is redundant — delete it and Composer resolves versions from Packagist's static metadata instead of the GitHub API. Verify first:
+
+```bash
+# 200 = published on Packagist
+curl -s -o /dev/null -w "%{http_code}\n" https://repo.packagist.org/p2/<vendor>/<name>.json
+# without the entry: the constraints must still resolve (exit 0) ...
+# (-vvv is required: at lower verbosity Composer prints no URLs at all)
+log=$(mktemp)
+composer update --dry-run -vvv > "$log" 2>&1; echo "exit $?"
+# ... and this must print nothing
+grep api.github.com "$log"
+```
+
+A dry run downloads no dists. An install, with or without the entry, fetches each GitHub-hosted dist from `api.github.com/repos/<owner>/<repo>/zipball/<sha>`, which redirects to `codeload.github.com`; an install from a `composer.lock` makes no other GitHub API request.
+
+If the source has to stay a VCS repository, add `"no-api": true` to the entry (Composer then clones with git instead of calling the API), or authenticate Composer in CI (`composer config --global github-oauth.github.com "$GITHUB_TOKEN"`) for the higher authenticated limit.
