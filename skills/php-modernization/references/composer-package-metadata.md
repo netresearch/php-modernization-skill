@@ -79,13 +79,16 @@ Not every unknown symbol is a missing `require`:
 
 **A pinned checker can abort and look like a pass.** `composer-require-checker` 3.5.1 aborts on `symfony/config` v8 with `Syntax error, unexpected '(', expecting T_VARIABLE`, and `--ignore-parse-errors` does not help. The abort produces empty output that reads exactly like a clean run. Check the exit code and confirm the tool printed a verdict, not nothing.
 
-**A redundant `vcs` repository turns `composer install` into a rate-limited API client.** The symptom is an install step that fails in every CI job with `The "https://api.github.com/repos/<owner>/<repo>/commits/<sha>" file could not be downloaded (HTTP/2 429)`, passes now and then, and does not recover on re-run. The cause is a `repositories: [{ "type": "vcs", "url": "https://github.com/..." }]` entry: for a GitHub URL Composer's GitHub driver reads versions and commits through `api.github.com`, which allows 60 unauthenticated requests per hour per IP, and shared runner IPs spend that quota. If the package is on Packagist, the entry is redundant — delete it and Composer resolves from Packagist's static metadata, with no API call. Verify first:
+**A redundant `vcs` repository turns `composer install` into a rate-limited API client.** The symptom is an install step that fails in every CI job with `The "https://api.github.com/repos/<owner>/<repo>/commits/<sha>" file could not be downloaded (HTTP/2 429)`, and a re-run passes only when the quota happens to have recovered. The cause is a `repositories: [{ "type": "vcs", "url": "https://github.com/..." }]` entry: for a GitHub URL Composer's GitHub driver reads versions and commits through `api.github.com`, which allows 60 unauthenticated requests per hour per IP, and shared runner IPs spend that quota. If the package is on Packagist, the entry is redundant — delete it and Composer resolves versions from Packagist's static metadata instead of the GitHub API. Verify first:
 
 ```bash
 # 200 = published on Packagist
 curl -s -o /dev/null -w "%{http_code}\n" https://repo.packagist.org/p2/<vendor>/<name>.json
-# the constraint must still resolve, with no api.github.com line in the output
-composer update <vendor>/<name> --dry-run
+# without the entry: the constraints must still resolve, and this must print nothing
+# (-vvv is required: at lower verbosity Composer prints no URLs at all)
+composer update --dry-run -vvv 2>&1 | grep api.github.com
 ```
+
+A dry run downloads no dists. The install itself still fetches each GitHub-hosted dist from `api.github.com/repos/<owner>/<repo>/zipball/<sha>`, which redirects to `codeload.github.com`.
 
 If the source has to stay a VCS repository, add `"no-api": true` to the entry (Composer then clones with git instead of calling the API), or authenticate Composer in CI (`composer config --global github-oauth.github.com "$GITHUB_TOKEN"`) for the higher authenticated limit.
