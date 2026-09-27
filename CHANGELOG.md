@@ -8,6 +8,10 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+### Fixed
+
+- PM-05 (checkpoint and verifier) no longer fails a project whose `.php-cs-fixer.dist.php` requires the shared `netresearch/typo3-ci-workflows` config: that config enables `@PER-CS3x0` in `config/php-cs-fixer/rules.php`, but the project file carries no literal `@PER-CS`, and the resolved rule set is not readable before `composer install`. New regression fixture `typo3-extension-shared-cs-config`
+
 ## [1.23.6] - 2026-09-27
 
 ### Added

@@ -623,6 +623,18 @@ def check_pm04(root: Path) -> tuple[Check, Path | None]:
     )
 
 
+# The shared config of netresearch/typo3-ci-workflows sets '@PER-CS3x0' in
+# config/php-cs-fixer/rules.php. A project that requires it carries no literal
+# @PER-CS, and the resolved rule set is not readable before `composer install`.
+SHARED_PHP_CS_FIXER_CONFIG = "netresearch/typo3-ci-workflows/config/php-cs-fixer/"
+
+
+def uses_per_cs(config: Path) -> bool:
+    return text_contains(config, "@PER-CS") or text_contains(
+        config, SHARED_PHP_CS_FIXER_CONFIG
+    )
+
+
 def check_pm05(root: Path, config: Path | None) -> Check:
     if config is None:
         return Check(
@@ -632,7 +644,7 @@ def check_pm05(root: Path, config: Path | None) -> Check:
             status="skipped",
             message="PHP-CS-Fixer configuration not found",
         )
-    if text_contains(config, "@PER-CS"):
+    if uses_per_cs(config):
         return Check(
             id="PM-05",
             category="php-cs-fixer",
@@ -1264,7 +1276,7 @@ def evaluate(root: Path, *, run_tools: bool) -> Report:
             "configured": phpcs_cfg is not None,
             "config_file": str(phpcs_cfg.relative_to(root)) if phpcs_cfg else None,
             "ruleset_includes_per_cs": (
-                bool(phpcs_cfg) and text_contains(phpcs_cfg, "@PER-CS")  # type: ignore[arg-type]
+                bool(phpcs_cfg) and uses_per_cs(phpcs_cfg)  # type: ignore[arg-type]
             ),
         },
         phpat={"configured": composer_dep_mentions(root, "phpat")},

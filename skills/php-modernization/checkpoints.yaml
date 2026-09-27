@@ -77,12 +77,16 @@ mechanical:
     severity: error
     desc: "PHP-CS-Fixer configuration must exist (root or Build/, .php-cs-fixer.php or .php-cs-fixer.dist.php)"
 
+  # The shared config of netresearch/typo3-ci-workflows (config/php-cs-fixer/
+  # rules.php) sets '@PER-CS3x0'. A project that requires it carries no
+  # literal @PER-CS, and the resolved rule set cannot be read before
+  # `composer install` has populated .Build/, so the require is accepted.
   - id: PM-05
-    type: contains
+    type: regex
     target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
-    pattern: "@PER-CS"
+    pattern: "@PER-CS|netresearch/typo3-ci-workflows/config/php-cs-fixer/"
     severity: error
-    desc: "PHP-CS-Fixer must use @PER-CS ruleset"
+    desc: "PHP-CS-Fixer must use the @PER-CS ruleset, directly or via the shared netresearch/typo3-ci-workflows config"
 
   - id: PM-06
     type: contains
