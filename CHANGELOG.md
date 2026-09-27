@@ -10,7 +10,11 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ### Fixed
 
-- PM-05 (checkpoint and verifier) no longer fails a project whose `.php-cs-fixer.dist.php` requires the shared `netresearch/typo3-ci-workflows` config: that config enables `@PER-CS3x0` in `config/php-cs-fixer/rules.php`, but the project file carries no literal `@PER-CS`, and the resolved rule set is not readable before `composer install`. New regression fixture `typo3-extension-shared-cs-config`
+- PM-05 (checkpoint and verifier) no longer fails a project whose `.php-cs-fixer.dist.php` requires the shared `netresearch/typo3-ci-workflows` config: that config enables `@PER-CS3x0` in `config/php-cs-fixer/rules.php`, but the project file carries no literal `@PER-CS`, and the resolved rule set is not readable before `composer install`. New regression fixture `typo3-extension-shared-cs-config`. Only a `require` of the shared config counts; a comment naming its path no longer satisfies PM-05
+- PM-10, PM-11 and PM-12 accept a `require` of the shared Rector config of `netresearch/typo3-ci-workflows`, which applies `LevelSetList::UP_TO_PHP_82`, `SetList::DEAD_CODE` and `SetList::CODE_QUALITY` unconditionally
+- PM-30 accepts a `require` of the shared php-cs-fixer factory (`config/php-cs-fixer/config.php`), which sets `header_comment` from the header the project passes
+- PM-06 no longer passes on the config file's own `declare(strict_types=1)`: it needs the `declare_strict_types` rule, directly or via the shared config
+- PM-24 no longer passes on `setRiskyAllowed(true)`, a comment or another `:risky` set: it needs a PER-CS risky set by name. The shared config enables `@PER-CS3x0`, not its risky variant, so it does not satisfy PM-24
 
 ## [1.23.6] - 2026-09-27
 

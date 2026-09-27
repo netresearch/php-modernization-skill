@@ -626,13 +626,21 @@ def check_pm04(root: Path) -> tuple[Check, Path | None]:
 # The shared config of netresearch/typo3-ci-workflows sets '@PER-CS3x0' in
 # config/php-cs-fixer/rules.php. A project that requires it carries no literal
 # @PER-CS, and the resolved rule set is not readable before `composer install`.
-SHARED_PHP_CS_FIXER_CONFIG = "netresearch/typo3-ci-workflows/config/php-cs-fixer/"
+# Only a require of it counts: a comment that merely names the path enables
+# nothing. Same expression as the PM-05 checkpoint pattern.
+SHARED_PHP_CS_FIXER_CONFIG_RE = re.compile(
+    r"require[^;\n]*netresearch/typo3-ci-workflows/config/php-cs-fixer/"
+)
 
 
 def uses_per_cs(config: Path) -> bool:
-    return text_contains(config, "@PER-CS") or text_contains(
-        config, SHARED_PHP_CS_FIXER_CONFIG
-    )
+    if text_contains(config, "@PER-CS"):
+        return True
+    try:
+        text = config.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return SHARED_PHP_CS_FIXER_CONFIG_RE.search(text) is not None
 
 
 def check_pm05(root: Path, config: Path | None) -> Check:
