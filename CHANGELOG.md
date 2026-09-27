@@ -8,6 +8,10 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+### Added
+
+- `references/composer-package-metadata.md`: a `vcs` repository entry for a package that is also on Packagist makes dependency resolution (`composer update`, or `composer install` without a `composer.lock`) read versions through `api.github.com`, so CI fails with HTTP 429 once the unauthenticated limit of 60 requests per hour is spent. The new trap paragraph gives the Packagist check, a `composer update --dry-run -vvv` verification with its exit status, the fix (delete the entry), and the fallbacks when the source must stay VCS (`"no-api": true` or a `github-oauth` token)
+
 ## [1.23.5] - 2026-09-23
 
 ### Added
