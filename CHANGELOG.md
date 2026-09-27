@@ -8,6 +8,8 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.23.6] - 2026-09-27
+
 ### Added
 
 - `references/composer-package-metadata.md`: a `vcs` repository entry with a GitHub URL for a package that is also on Packagist makes dependency resolution (`composer update`, or `composer install` without a `composer.lock`) read versions through `api.github.com`, so CI fails with HTTP 429 once the unauthenticated limit of 60 requests per hour is spent. The new trap paragraph gives the Packagist check, a `composer update --dry-run -vvv` verification with its exit status, the fix (delete the entry), and the fallbacks when the source must stay VCS (`"no-api": true` or a `github-oauth` token)
@@ -208,7 +210,8 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 (historical — pre-CHANGELOG)
 
-[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.5...HEAD
+[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.6...HEAD
+[1.23.6]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.5...v1.23.6
 [1.23.5]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.4...v1.23.5
 [1.23.4]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.3...v1.23.4
 [1.23.3]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.2...v1.23.3
