@@ -623,6 +623,28 @@ def check_pm04(root: Path) -> tuple[Check, Path | None]:
     )
 
 
+# The shared config of netresearch/typo3-ci-workflows sets '@PER-CS3x0' in
+# config/php-cs-fixer/rules.php. A project that requires it carries no literal
+# @PER-CS, and the resolved rule set is not readable before `composer install`.
+# Only a require of it counts: a comment that merely names the path enables
+# nothing. Neither `@PER-CS` nor the require counts inside a comment: the line
+# must not start one (`//`, `#`, `/*`, ` * `), and no `//`, `#` or `;` may
+# precede the match. Same expression as the PM-05 checkpoint pattern.
+PER_CS_OR_SHARED_CONFIG_RE = re.compile(
+    r"^[ \t]*(?:[^/#*\s;](?:[^;/#\n]|/[^/*;\n])*)?"
+    r"(?:@PER-CS|require[^;\n]*netresearch/typo3-ci-workflows/config/php-cs-fixer/)",
+    re.MULTILINE,
+)
+
+
+def uses_per_cs(config: Path) -> bool:
+    try:
+        text = config.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return False
+    return PER_CS_OR_SHARED_CONFIG_RE.search(text) is not None
+
+
 def check_pm05(root: Path, config: Path | None) -> Check:
     if config is None:
         return Check(
@@ -632,7 +654,7 @@ def check_pm05(root: Path, config: Path | None) -> Check:
             status="skipped",
             message="PHP-CS-Fixer configuration not found",
         )
-    if text_contains(config, "@PER-CS"):
+    if uses_per_cs(config):
         return Check(
             id="PM-05",
             category="php-cs-fixer",
@@ -1264,7 +1286,7 @@ def evaluate(root: Path, *, run_tools: bool) -> Report:
             "configured": phpcs_cfg is not None,
             "config_file": str(phpcs_cfg.relative_to(root)) if phpcs_cfg else None,
             "ruleset_includes_per_cs": (
-                bool(phpcs_cfg) and text_contains(phpcs_cfg, "@PER-CS")  # type: ignore[arg-type]
+                bool(phpcs_cfg) and uses_per_cs(phpcs_cfg)  # type: ignore[arg-type]
             ),
         },
         phpat={"configured": composer_dep_mentions(root, "phpat")},

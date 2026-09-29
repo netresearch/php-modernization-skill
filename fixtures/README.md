@@ -15,6 +15,9 @@ that shape:
 | `generic-composer-minimal/` | Bare-bones library with `src/` + `tests/` and PSR-4 autoload. Most checks fail; PM-19 (PSR-4) passes. | `generic-composer` |
 | `symfony-app-minimal/` | Minimal Symfony 7 app shape (`bin/console` + `config/bundles.php` + `src/Controller/`). | `symfony-app` |
 | `typo3-extension-minimal/` | Minimal TYPO3 extension (`ext_emconf.php`, `Configuration/Services.yaml`, `Classes/`). | `typo3-extension` |
+| `typo3-extension-shared-cs-config/` | `typo3-extension-minimal` plus a `.php-cs-fixer.dist.php` that requires the shared `netresearch/typo3-ci-workflows` config and names no ruleset itself. PM-05 passes. | `typo3-extension` |
+| `typo3-extension-shared-cs-config-comment/` | Negative control for the one above: the require of the shared config appears only in a docblock and a `//` comment, the file's own rules have no `@PER-CS`. PM-05 fails. | `typo3-extension` |
+| `typo3-extension-per-cs-comment/` | Negative control for PM-05's own-ruleset branch: `@PER-CS3x0` appears only in a docblock and a trailing `//` comment, the configured rule set is `@Symfony`. PM-05 fails. | `typo3-extension` |
 | `monorepo-minimal/` | Top-level project with `packages/foo` and `packages/bar` each carrying their own `composer.json`. | `monorepo-package` |
 | `fully-modern/` | Positive control: phpstan.neon (level: max + treatPhpDocTypesAsCertain: false), `.php-cs-fixer.dist.php` (@PER-CS), `rector.php`, composer scripts, and dev-deps for phpstan / php-cs-fixer / rector / phpat. **All checks pass.** | `generic-composer` |
 
