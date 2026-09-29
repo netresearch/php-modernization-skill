@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: Netresearch DTT GmbH
 """Behaviour tests for the shipped scripts under skills/php-modernization/scripts/.
 
 scripts/test_fixtures.py pins the verifier's JSON report against golden

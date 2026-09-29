@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # Immutability Boundaries: When `readonly` Is Wrong
 
 The `php-modernization` skill recommends `final readonly class` for data-shaped classes. That recommendation is correct for DTOs, value objects, and events. It is wrong for entities, form-bound models, and most deserialization targets. This document draws the line.

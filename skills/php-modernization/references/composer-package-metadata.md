@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # Composer Package Metadata
 
 **Source:** phpDocumentor/guides -- a monorepo whose ten `packages/*` directories are each published on their own

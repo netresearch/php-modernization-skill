@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: Netresearch DTT GmbH
 # A/B test runner for php-modernization skill evals
 # Runs each eval prompt WITHOUT skill (baseline) and WITH skill, collecting metrics.
 #

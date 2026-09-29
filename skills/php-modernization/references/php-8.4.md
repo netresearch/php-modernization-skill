@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # PHP 8.4 Modernization Reference
 
 PHP 8.4 was released 2024-11-21. This file covers the features that change how

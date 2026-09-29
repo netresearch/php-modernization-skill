@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: Netresearch DTT GmbH
 """Shared helpers for php-modernization skill scripts.
 
 Used by both verify_php_project.py and introspect.py.

@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # Doctrine ORM × PHP Modernization: Edges Only
 
 This document covers only the edges where modern PHP features and Doctrine ORM interact. It is **not** a Doctrine guide. For Doctrine ORM usage — mapping, DQL, query builder, schema management, migrations — consult the official documentation at https://www.doctrine-project.org/projects/orm.html.

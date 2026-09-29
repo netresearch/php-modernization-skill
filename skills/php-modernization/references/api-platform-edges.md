@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # API Platform × PHP Modernization: Edges Only
 
 This document covers only the edges where modern PHP features and API Platform interact. For API Platform usage, see https://api-platform.com/docs/.

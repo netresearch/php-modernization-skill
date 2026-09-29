@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # PHP 8.5 Modernization Reference
 
 PHP 8.5 was released 2025-11-20. This file covers what changes for

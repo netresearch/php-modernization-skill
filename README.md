@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # PHP Modernization Skill
 
 Expert patterns for modernizing PHP applications to PHP 8.x with type safety, PSR / PER-CS compliance, static-analysis tooling, and Symfony-grade architecture. The skill ships an **agent contract** — a small set of executable tools that emit machine-readable verification reports, archetype profiles, and fix-loop transcripts.

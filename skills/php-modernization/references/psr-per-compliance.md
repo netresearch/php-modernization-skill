@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # PSR and PER Compliance
 
 This reference covers **active** PHP-FIG standards. All modern PHP code should follow these interoperability recommendations.
