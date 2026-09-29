@@ -18,7 +18,7 @@ Skills are portable packages of procedural knowledge that work across any AI age
 ## Features
 
 - **Agent contract**: a Python verifier (`verify_php_project.py`), orchestrator (`modernize_loop.py`), and cheap profiler (`introspect.py`). stable structured output (JSON with `schema_version 1.0.0`, SARIF 2.1.0, or JUnit XML), archetype detection, and machine-readable `agent_actions[]` recommendations downstream agents can act on without re-reading the prose references.
-- **Hard guardrails**: five binding refusal cases enforced in `SKILL.md` (no `readonly` on Doctrine entities, no Rector without `--dry-run`, baseline shrink-not-delete, no blanket `final` on mock targets, no editing generated files).
+- **Hard guardrails**: five binding refusal cases stated in `SKILL.md` (no `readonly` on Doctrine entities, no Rector without `--dry-run`, baseline shrink-not-delete, no blanket `final` on mock targets, no editing generated files).
 - **PHP 8.x feature coverage**: 8.0–8.3 baseline, dedicated 8.4 reference (released 2024-11: property hooks, asymmetric visibility, lazy objects, `array_find` / `array_any` / `array_all`), and dedicated 8.5 reference (released 2025-11: pipe `|>`, `array_first` / `array_last`, `#[\NoDiscard]`).
 - **Static-analysis stack**: PHPStan (level 9+, level 10 recommended), PHPat (architecture testing), Rector (automated refactoring), PHP-CS-Fixer (`@PER-CS`), Infection (mutation testing in PR-diff mode), `composer audit`.
 - **Type-safety patterns**: DTOs and Value Objects over arrays, generic collection typing via PHPDoc, strict typing everywhere, immutability boundaries (`readonly` vs. property hooks vs. classic mutation).
@@ -161,7 +161,7 @@ The verifier and orchestrator branch on archetype. Detection is pure (no subproc
 | `typo3-extension` | `ext_emconf.php` or `Configuration/Services.yaml` |
 | `symfony-app` | `bin/console` plus `config/bundles.php` |
 | `monorepo-package` | `packages/<name>/composer.json` for two or more children |
-| `generic-composer` | `composer.json` plus `src/` plus `tests/` |
+| `generic-composer` | `composer.json` plus either `src/` or a non-empty PSR-4 `autoload` map |
 
 A regression suite under [`fixtures/`](fixtures/) covers each archetype plus a `fully-modern/` positive control where every check passes. See [`fixtures/README.md`](fixtures/README.md) for the snapshot workflow.
 
@@ -172,7 +172,7 @@ php-modernization-skill/
 ├── skills/php-modernization/
 │   ├── SKILL.md                       # Agent contract (router + guardrails)
 │   ├── checkpoints.yaml               # PM-XX checkpoints
-│   ├── references/                    # 19 lazy-loaded reference docs
+│   ├── references/                    # 26 lazy-loaded reference docs
 │   ├── scripts/                       # verify_php_project.py + orchestrator + introspector
 │   └── templates/                     # composer-scripts.json + GitHub Actions workflow
 ├── schemas/                           # JSON Schema 2020-12 (output contracts)
