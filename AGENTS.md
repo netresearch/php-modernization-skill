@@ -53,6 +53,8 @@
 ├── scripts/
 │   ├── test_fixtures.py                      # Golden-snapshot diff runner
 │   └── verify-harness.sh                     # AGENTS.md/docs harness check
+├── tests/
+│   └── test_scripts.py                       # Behaviour tests for the shipped scripts
 ├── docs/
 │   ├── ARCHITECTURE.md                       # Architecture overview
 │   ├── SECURITY-ASSURANCE.md                 # Security assurance case
@@ -76,6 +78,7 @@
 - `uv run skills/php-modernization/scripts/verify_php_project.py --root . --format sarif` — SARIF output for GitHub code scanning.
 - `uv run skills/php-modernization/scripts/modernize_loop.py --mode dry-run` — orchestrated fix preview (no mutations).
 - `uv run scripts/test_fixtures.py` — regression suite for the verifier itself.
+- `python3 tests/test_scripts.py` — behaviour tests for the introspector, verifier, orchestrator and Bash wrapper.
 - `bash scripts/verify-harness.sh` — agent-harness consistency check (this file, docs, refs).
 
 ## Hard Guardrails

@@ -181,7 +181,8 @@ php-modernization-skill/
 ├── schemas/                           # JSON Schema 2020-12 (output contracts)
 ├── fixtures/                          # Synthetic-project regression suite
 ├── scripts/                           # test_fixtures.py + verify-harness.sh
-├── docs/ARCHITECTURE.md               # Architecture overview
+├── tests/                             # test_scripts.py (behaviour tests)
+├── docs/                              # ARCHITECTURE.md, SECURITY-ASSURANCE.md, php-rules.md
 ├── evals/                             # Skill evaluation suite
 ├── composer.json                      # Composer manifest
 ├── .claude-plugin/plugin.json         # Claude Code plugin manifest
@@ -264,6 +265,44 @@ Why: compile-time type checks, IDE autocompletion, exhaustive `match()` enforcem
 - **security-audit-skill** — security patterns for PHP applications.
 - **typo3-conformance** and **typo3-extension-upgrade** — TYPO3-specific checkpoints (the IDs `PM-26/27/28/33/35/36` were relocated there).
 - **typo3-testing-skill** — PHPUnit patterns applicable to any PHP project.
+
+## Contributing
+
+Open issues and pull requests on [GitHub](https://github.com/netresearch/php-modernization-skill). The commands for working on this repository are listed in [AGENTS.md](AGENTS.md#commands).
+
+### Tests
+
+Two stdlib-only Python suites test the shipped scripts. They run with `python3` or `uv run`:
+
+- `python3 scripts/test_fixtures.py` runs the verifier against every synthetic project under [`fixtures/`](fixtures/) and diffs its normalized JSON against `expected/verifier.json`. A failure prints `FAIL` and a unified diff per fixture; `--update` regenerates the snapshots when a change to the output is intended (see [`fixtures/README.md`](fixtures/README.md)).
+- `python3 tests/test_scripts.py` runs the introspector, the verifier, the orchestrator and the Bash wrapper as subprocesses and checks their exit codes, output formats, dry-run flags, the `--confirm` requirement of `--mode apply`, and that the reported version equals `.claude-plugin/plugin.json`. A failure names the test and the assertion.
+
+CI runs both suites on every pull request and every push to `main` through [`.github/workflows/tests.yml`](.github/workflows/tests.yml). `pre-commit run --all-files` runs the hooks of [`.pre-commit-config.yaml`](.pre-commit-config.yaml) locally; Skill Validation runs the linters among them (the skill validator, markdownlint, yamllint, actionlint, Ruff, ShellCheck) in CI.
+
+### Dependencies
+
+- **Python tools:** standard library only. Each script declares `requires-python = ">=3.11"` and `dependencies = []` in its PEP 723 block, so `uv run` installs nothing. `uv` is the recommended runner, not a dependency.
+- **Composer:** `composer.json` requires `netresearch/composer-agent-skill-plugin`, which installs the skill into a PHP project. No `composer.lock` is committed (`.gitignore`).
+- **Development tools:** the hooks in `.pre-commit-config.yaml` are pinned by `rev:`. Renovate ([`renovate.json`](renovate.json), `config:recommended` with the pre-commit manager enabled) proposes updates for them. The Composer requirement is `*` and resolves to the latest release at install time.
+- **CI:** the workflows call reusable workflows of `netresearch/.github`, `netresearch/skill-repo-skill` and `netresearch/typo3-ci-workflows`; those reusables pin the actions they use by commit SHA (for example `validate.yml` and `tests.yml` of `netresearch/skill-repo-skill`).
+- **PHP tools** such as PHPStan, Rector or PHP-CS-Fixer are not dependencies of this repository. The scripts run them from the analysed project's `vendor/bin` or `.Build/bin` when they are installed there.
+
+## Governance and policies
+
+This repository follows the Netresearch organisation policies:
+
+- [Governance](https://github.com/netresearch/.github/blob/main/GOVERNANCE.md): ownership, roles, how decisions are made and disputes resolved, and continuity.
+- [Roadmap](https://github.com/netresearch/.github/blob/main/ROADMAP.md): planned and explicitly excluded work for the coming year.
+- [Handling of dependency and code analysis findings](https://github.com/netresearch/.github/blob/main/SECURITY.md#handling-of-dependency-and-code-analysis-findings): thresholds, deadlines and the exception process for dependency (SCA) and static analysis (SAST) findings.
+- [Secret management](https://github.com/netresearch/.github/blob/main/SECURITY.md#secret-management): how CI and release credentials are stored, accessed and rotated.
+- [Access roster](https://github.com/netresearch/.github/blob/main/docs/access-roster.md): who holds administrative access to this repository and the organisation.
+
+The security assurance case for this skill (threat model, trust boundaries, countermeasures and limits) is in [docs/SECURITY-ASSURANCE.md](docs/SECURITY-ASSURANCE.md).
+
+Checks that run on pull requests in this repository:
+
+- Every pull request: Skill Validation (`lint.yml`: skill structure, markdownlint, yamllint, actionlint, JSON syntax, ShellCheck, Ruff, checkpoint schema), Eval Validation (`eval-validate.yml`) and Skill Tests (`tests.yml`: `scripts/test_fixtures.py` and `tests/test_scripts.py`).
+- Pull requests to `main`: `security.yml` with Betterleaks (secret scanning), zizmor (workflow static analysis), dependency review (fails on vulnerabilities of severity high or above), Composer Audit and Opengrep SAST (fails on findings of severity WARNING or above); Harness Verification (`harness-verify.yml`) and Template Drift (`check-template-drift.yml`).
 
 ## License
 
