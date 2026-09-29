@@ -1,0 +1,31 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: Netresearch DTT GmbH
+name: Skill Tests
+
+# Runs the repository's own test suites through the skill-repo-skill tests
+# reusable: scripts/test_fixtures.py (verifier output against the golden
+# snapshots under fixtures/) and tests/*.py (behaviour tests for the shipped
+# scripts). Both are stdlib-only Python and need no uv; the reusable runs each
+# file with python3 and fails the job when one exits non-zero. require_tests
+# makes the job fail if the globs ever match no test file while the skill
+# ships scripts.
+#
+# The suite ran in fixtures-test.yml until that workflow was removed in May
+# 2026 because it called external actions directly; this caller uses only the
+# organisation reusable.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions: {}
+
+jobs:
+  tests:
+    uses: netresearch/skill-repo-skill/.github/workflows/tests.yml@main
+    permissions:
+      contents: read
+    with:
+      python_glob: "scripts/test_fixtures.py tests/*.py"
+      require_tests: true
