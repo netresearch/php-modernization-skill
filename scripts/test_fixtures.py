@@ -19,6 +19,9 @@ Designed to be invoked via uv:
     uv run scripts/test_fixtures.py --update
     uv run scripts/test_fixtures.py --fixture generic-composer-minimal
 
+``python3 scripts/test_fixtures.py`` works as well; without ``uv`` on PATH the
+verifier then runs with the same interpreter.
+
 Stdlib only. Exits 0 if all fixtures pass, 1 otherwise.
 """
 
@@ -27,6 +30,7 @@ from __future__ import annotations
 import argparse
 import difflib
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -61,10 +65,15 @@ def discover_fixtures() -> list[Path]:
 
 
 def run_verifier(fixture: Path) -> dict[str, Any]:
-    """Invoke the verifier on a fixture and return the parsed JSON output."""
+    """Invoke the verifier on a fixture and return the parsed JSON output.
+
+    Runs the verifier through ``uv`` when it is installed, otherwise with the
+    interpreter running this suite: the verifier is stdlib-only, and CI
+    runners do not necessarily ship ``uv``.
+    """
+    runner = ["uv", "run"] if shutil.which("uv") else [sys.executable]
     cmd = [
-        "uv",
-        "run",
+        *runner,
         str(VERIFIER),
         "--root",
         str(fixture),
