@@ -114,6 +114,25 @@ class IntrospectTest(unittest.TestCase):
         self.assertEqual(json.loads(result.stdout)["archetype"], "unknown")
 
 
+class VersionTest(unittest.TestCase):
+    def test_reports_carry_the_released_skill_version(self) -> None:
+        manifest = REPO_ROOT / ".claude-plugin" / "plugin.json"
+        released = json.loads(manifest.read_text(encoding="utf-8"))["version"]
+        result = run_py(
+            "verify_php_project.py",
+            "--root",
+            FIXTURES / "fully-modern",
+            "--no-tools",
+            "--no-cache",
+        )
+        self.assertEqual(
+            json.loads(result.stdout)["skill_version"],
+            released,
+            "update SKILL_VERSION in scripts/_common.py and regenerate the "
+            "snapshots with scripts/test_fixtures.py --update",
+        )
+
+
 class VerifierTest(unittest.TestCase):
     def test_missing_root_exits_two(self) -> None:
         result = run_py("verify_php_project.py", "--root", REPO_ROOT / "does-not-exist")

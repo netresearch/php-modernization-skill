@@ -64,9 +64,11 @@ intend the new shape to become the contract. Common triggers:
 
 - A new mechanical check (PM-NN) was added.
 - An existing check's `message`, `severity`, or `evidence` shape changed.
-- `skill_version` was bumped (the version is hardcoded in the verifier source
-  and appears in every snapshot — every release of the skill regenerates all
-  snapshots; this is expected).
+- `skill_version` was bumped (the version is hardcoded as `SKILL_VERSION` in
+  `skills/php-modernization/scripts/_common.py` and appears in every snapshot —
+  every release of the skill regenerates all snapshots; this is expected).
+  `tests/test_scripts.py` fails while `SKILL_VERSION` differs from the version
+  in `.claude-plugin/plugin.json`.
 - An `agent_actions[]` entry's `target` / `operation` / `rationale` changed.
 
 Before running `--update`, confirm the diff is intentional. Review the

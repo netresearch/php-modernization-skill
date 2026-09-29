@@ -12,7 +12,9 @@ from typing import Any
 
 SCHEMA_VERSION = "1.0.0"
 SKILL_ID = "php-modernization"
-SKILL_VERSION = "1.17.0"
+# Keep equal to the version in .claude-plugin/plugin.json; tests/test_scripts.py
+# fails when the two differ.
+SKILL_VERSION = "1.23.6"
 
 
 def detect_archetype(root: Path) -> str:
