@@ -627,23 +627,22 @@ def check_pm04(root: Path) -> tuple[Check, Path | None]:
 # config/php-cs-fixer/rules.php. A project that requires it carries no literal
 # @PER-CS, and the resolved rule set is not readable before `composer install`.
 # Only a require of it counts: a comment that merely names the path enables
-# nothing, and neither does a require on a comment line (`//`, `#`, ` * `).
-# Same expression as the PM-05 checkpoint pattern.
-SHARED_PHP_CS_FIXER_CONFIG_RE = re.compile(
-    r"^[ \t]*(?:[^/#*\s][^;\n]*)?"
-    r"require[^;\n]*netresearch/typo3-ci-workflows/config/php-cs-fixer/",
+# nothing. Neither `@PER-CS` nor the require counts inside a comment: the line
+# must not start one (`//`, `#`, `/*`, ` * `), and no `//`, `#` or `;` may
+# precede the match. Same expression as the PM-05 checkpoint pattern.
+PER_CS_OR_SHARED_CONFIG_RE = re.compile(
+    r"^[ \t]*(?:[^/#*\s;](?:[^;/#\n]|/[^/*;\n])*)?"
+    r"(?:@PER-CS|require[^;\n]*netresearch/typo3-ci-workflows/config/php-cs-fixer/)",
     re.MULTILINE,
 )
 
 
 def uses_per_cs(config: Path) -> bool:
-    if text_contains(config, "@PER-CS"):
-        return True
     try:
         text = config.read_text(encoding="utf-8", errors="replace")
     except OSError:
         return False
-    return SHARED_PHP_CS_FIXER_CONFIG_RE.search(text) is not None
+    return PER_CS_OR_SHARED_CONFIG_RE.search(text) is not None
 
 
 def check_pm05(root: Path, config: Path | None) -> Check:
