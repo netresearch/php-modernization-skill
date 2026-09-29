@@ -19,6 +19,7 @@ test fails.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import stat
 import subprocess
@@ -178,15 +179,28 @@ class VerifierTest(unittest.TestCase):
 
     def test_cache_is_written_and_reused(self) -> None:
         with TempProject("generic-composer-minimal") as root:
-            first = run_py("verify_php_project.py", "--root", root, "--no-tools")
+            run_py("verify_php_project.py", "--root", root, "--no-tools")
             cache = root / ".build" / "php-modernization" / "last-run.json"
             self.assertTrue(cache.is_file())
-            second = run_py("verify_php_project.py", "--root", root, "--no-tools")
-            # A cache hit returns the stored report, generated_at included.
-            self.assertEqual(
-                json.loads(first.stdout)["generated_at"],
-                json.loads(second.stdout)["generated_at"],
+            # Mark the stored report: only a cache hit can print the marker.
+            payload = json.loads(cache.read_text(encoding="utf-8"))
+            payload["report"]["archetype"] = "from-cache"
+            cache.write_text(json.dumps(payload), encoding="utf-8")
+
+            hit = run_py("verify_php_project.py", "--root", root, "--no-tools")
+            self.assertEqual(json.loads(hit.stdout)["archetype"], "from-cache")
+
+            bypass = run_py(
+                "verify_php_project.py", "--root", root, "--no-tools", "--no-cache"
             )
+            self.assertEqual(json.loads(bypass.stdout)["archetype"], "generic-composer")
+
+            # A changed composer.json invalidates the stored report.
+            composer = root / "composer.json"
+            stat_ = composer.stat()
+            os.utime(composer, ns=(stat_.st_atime_ns, stat_.st_mtime_ns + 10**9))
+            stale = run_py("verify_php_project.py", "--root", root, "--no-tools")
+            self.assertEqual(json.loads(stale.stdout)["archetype"], "generic-composer")
 
 
 class ModernizeLoopTest(unittest.TestCase):
