@@ -627,9 +627,12 @@ def check_pm04(root: Path) -> tuple[Check, Path | None]:
 # config/php-cs-fixer/rules.php. A project that requires it carries no literal
 # @PER-CS, and the resolved rule set is not readable before `composer install`.
 # Only a require of it counts: a comment that merely names the path enables
-# nothing. Same expression as the PM-05 checkpoint pattern.
+# nothing, and neither does a require on a comment line (`//`, `#`, ` * `).
+# Same expression as the PM-05 checkpoint pattern.
 SHARED_PHP_CS_FIXER_CONFIG_RE = re.compile(
-    r"require[^;\n]*netresearch/typo3-ci-workflows/config/php-cs-fixer/"
+    r"^[ \t]*(?:[^/#*\s][^;\n]*)?"
+    r"require[^;\n]*netresearch/typo3-ci-workflows/config/php-cs-fixer/",
+    re.MULTILINE,
 )
 
 

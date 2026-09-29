@@ -82,11 +82,13 @@ mechanical:
   # literal @PER-CS, and the resolved rule set cannot be read before
   # `composer install` has populated .Build/, so the require is accepted —
   # the require expression, not any mention of the path (a comment naming the
-  # shared config enables nothing).
+  # shared config enables nothing). The `^[[:space:]]*([^/#*[:space:]][^;]*)?`
+  # prefix keeps the require out of comment lines (`//`, `#`, ` * `), so a
+  # commented-out require or a copied usage docblock does not count either.
   - id: PM-05
     type: regex
     target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
-    pattern: "@PER-CS|require[^;]*netresearch/typo3-ci-workflows/config/php-cs-fixer/"
+    pattern: "@PER-CS|^[[:space:]]*([^/#*[:space:]][^;]*)?require[^;]*netresearch/typo3-ci-workflows/config/php-cs-fixer/"
     severity: error
     desc: "PHP-CS-Fixer must use the @PER-CS ruleset, directly or via the shared netresearch/typo3-ci-workflows config"
 
@@ -95,10 +97,11 @@ mechanical:
   # enforces one. The check now needs the `declare_strict_types` rule switched
   # on, or the shared netresearch/typo3-ci-workflows config, whose rules.php
   # sets `'declare_strict_types' => true` (v1.5.0 and v1.12.0, line 55).
+  # A commented-out rule or require does not count (same line prefix as PM-05).
   - id: PM-06
     type: regex
     target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
-    pattern: "declare_strict_types[\"']?[[:space:]]*=>[[:space:]]*true|require[^;]*netresearch/typo3-ci-workflows/config/php-cs-fixer/"
+    pattern: "^[[:space:]]*([^/#*[:space:]][^;]*)?(declare_strict_types[\"']?[[:space:]]*=>[[:space:]]*true|require[^;]*netresearch/typo3-ci-workflows/config/php-cs-fixer/)"
     severity: warning
     desc: "PHP-CS-Fixer should enforce strict_types declaration (declare_strict_types rule, directly or via the shared netresearch/typo3-ci-workflows config)"
 
@@ -129,26 +132,27 @@ mechanical:
   # SetList::CODE_QUALITY, SetList::DEAD_CODE and LevelSetList::UP_TO_PHP_82
   # from it unconditionally (lines 95-104 at v1.5.0 and v1.12.0). The project
   # file names none of them, and .Build/ is empty before `composer install`,
-  # so the require itself is accepted. The match is line-based: a require
-  # whose path continues on the next line is not seen.
+  # so the require itself is accepted, but not inside a comment line (same
+  # line prefix as PM-05). The match is line-based: a require whose path
+  # continues on the next line is not seen.
   - id: PM-10
     type: regex
     target: "{rector.php,Build/rector.php,Build/rector/rector.php}"
-    pattern: "LevelSetList|require[^;]*netresearch/typo3-ci-workflows/config/rector/rector\\.php"
+    pattern: "LevelSetList|^[[:space:]]*([^/#*[:space:]][^;]*)?require[^;]*netresearch/typo3-ci-workflows/config/rector/rector\\.php"
     severity: warning
     desc: "Rector should use LevelSetList for PHP version upgrades"
 
   - id: PM-11
     type: regex
     target: "{rector.php,Build/rector.php,Build/rector/rector.php}"
-    pattern: "SetList::DEAD_CODE|require[^;]*netresearch/typo3-ci-workflows/config/rector/rector\\.php"
+    pattern: "SetList::DEAD_CODE|^[[:space:]]*([^/#*[:space:]][^;]*)?require[^;]*netresearch/typo3-ci-workflows/config/rector/rector\\.php"
     severity: info
     desc: "Rector should include DeadCodeSet rules"
 
   - id: PM-12
     type: regex
     target: "{rector.php,Build/rector.php,Build/rector/rector.php}"
-    pattern: "SetList::CODE_QUALITY|require[^;]*netresearch/typo3-ci-workflows/config/rector/rector\\.php"
+    pattern: "SetList::CODE_QUALITY|^[[:space:]]*([^/#*[:space:]][^;]*)?require[^;]*netresearch/typo3-ci-workflows/config/rector/rector\\.php"
     severity: info
     desc: "Rector should include CodeQualitySetList rules"
 
@@ -232,21 +236,23 @@ mechanical:
     # The factory of the shared netresearch/typo3-ci-workflows config
     # (config/php-cs-fixer/config.php, v1.5.0 line 33, v1.12.0 line 56) sets
     # header_comment from the header string the project passes. Requiring
-    # rules.php alone does not, so only config.php is accepted.
-    pattern: "header_comment|require[^;]*netresearch/typo3-ci-workflows/config/php-cs-fixer/config\\.php"
+    # rules.php alone does not, so only config.php is accepted — and not
+  # inside a comment line (same line prefix as PM-05).
+    pattern: "header_comment|^[[:space:]]*([^/#*[:space:]][^;]*)?require[^;]*netresearch/typo3-ci-workflows/config/php-cs-fixer/config\\.php"
     severity: info
     desc: "PHP-CS-Fixer should configure the header_comment rule for consistent copyright headers across all PHP files"
 
   # === PHP-CS-FIXER RISKY RULES ===
   # `contains: risky` was satisfied by setRiskyAllowed(true), a comment, or any
   # other `:risky` set. It now needs a PER-CS risky set by name (@PER-CS:risky,
-  # @PER-CS2.0:risky, @PER-CS3x0:risky). The shared netresearch/typo3-ci-workflows
+  # @PER-CS2.0:risky, @PER-CS3x0:risky) switched on with `=> true`, outside a
+  # comment line (same line prefix as PM-05). The shared netresearch/typo3-ci-workflows
   # config is deliberately NOT accepted: its rules.php (v1.5.0 and v1.12.0)
   # enables @PER-CS3x0, not @PER-CS3x0:risky.
   - id: PM-24
     type: regex
     target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
-    pattern: "@PER-CS[0-9x.]*:risky"
+    pattern: "^[[:space:]]*([^/#*[:space:]][^;]*)?@PER-CS[0-9x.]*:risky[\"']?[[:space:]]*=>[[:space:]]*true"
     severity: info
     desc: "PHP-CS-Fixer should enable @PER-CS:risky for comprehensive enforcement"
 
