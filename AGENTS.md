@@ -55,6 +55,7 @@
 │   └── verify-harness.sh                     # AGENTS.md/docs harness check
 ├── docs/
 │   ├── ARCHITECTURE.md                       # Architecture overview
+│   ├── SECURITY-ASSURANCE.md                 # Security assurance case
 │   └── php-rules.md                          # PHP coding rules (scoped to **/*.php)
 ├── evals/evals.json                          # Skill evaluation suite
 ├── .claude-plugin/plugin.json                # Plugin manifest
@@ -98,6 +99,7 @@ against Markdown and YAML changes too (#116).
 
 - [SKILL.md](skills/php-modernization/SKILL.md) — agent contract and reference-routing table
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — architecture overview
+- [docs/SECURITY-ASSURANCE.md](docs/SECURITY-ASSURANCE.md) — security assurance case: trust boundaries, threats, countermeasures and limits
 - [docs/php-rules.md](docs/php-rules.md) — PHP coding rules, scoped to `**/*.php`
 - [CHANGELOG.md](CHANGELOG.md) — release history
 - [fixtures/README.md](fixtures/README.md) — regression-suite layout and snapshot rules
