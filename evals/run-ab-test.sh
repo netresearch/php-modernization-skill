@@ -19,7 +19,7 @@ EVAL_COUNT=$(python3 -c "import json; print(len(json.load(open('$EVALS_FILE'))))
 if [[ "${1:-}" == "--indices" && -n "${2:-}" ]]; then
     IFS=',' read -ra INDICES <<< "$2"
 else
-    INDICES=($(seq 0 $((EVAL_COUNT - 1))))
+    mapfile -t INDICES < <(seq 0 $((EVAL_COUNT - 1)))
 fi
 
 echo "Running A/B tests for ${#INDICES[@]} of $EVAL_COUNT evals..."
