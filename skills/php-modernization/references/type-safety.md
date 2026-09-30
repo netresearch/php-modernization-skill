@@ -401,7 +401,7 @@ attributed to whatever template called it, naming neither the input nor its
 origin. Validate the encoding where the value enters, and keep the raw value out
 of the log message: it is the one thing that cannot be written safely.
 
-### `$` accepts a trailing newline — anchor validation with `\z`
+### `$` accepts a trailing newline — anchor validation with `\A…\z`
 
 In PCRE `$` matches at the very end of the subject **or before a final
 newline**. A pattern meant to say "the whole string is of this form" therefore
@@ -412,12 +412,16 @@ preg_match('/^[a-z0-9._-]+$/', "file.html\n");    // 1 - the newline gets throug
 preg_match('/^[a-z0-9._-]+\z/', "file.html\n");   // 0
 preg_match('/^[a-z0-9._-]+$/D', "file.html\n");   // 0 - D: $ means end only
 preg_match('/^[a-z0-9._-]+\Z/', "file.html\n");   // 1 - \Z behaves like $
+
+// with m, ^ also matches after an inner newline, and D is ignored
+preg_match('/^[a-z0-9-]+\z/m', "bad!\nvalid-slug");    // 1
+preg_match('/\A[a-z0-9-]+\z/m', "bad!\nvalid-slug");   // 0
 ```
 
 For a whitelist, a fast path that skips a stricter parser, or any check whose
-job is to reject what does not match, end the pattern with `\z` (or add the
-`D` modifier, which `m` overrides). `\Z` is not the fix; it has the same
-trailing-newline allowance as `$`.
+job is to reject what does not match, anchor both ends absolutely: `\A…\z`.
+`^…\z` and `^…$` with `D` hold only as long as nobody adds `m`. `\Z` is not
+the fix; it has the same trailing-newline allowance as `$`.
 
 It stays invisible because hand-picked examples never end in a newline. A
 fast path in front of `League\Uri` (`~^(?!/)[\x21-\x39\x3B-\x7E]+$~`) let

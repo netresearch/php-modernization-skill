@@ -601,11 +601,11 @@
       {
         "type": "content_regex",
         "value": "(\\\\z|/D\\b|D modifier)",
-        "description": "Gives the fix: anchor with \\z or add the D modifier"
+        "description": "Gives the fix: end with \\z (ideally \\A...\\z) or add the D modifier"
       }
     ],
     "samples": {
-      "passing": "No. In PCRE `$` also matches before a final newline, so `\"my-slug\\n\"` passes and the newline gets stored. End the pattern with `\\z` (`/^[a-z0-9-]+\\z/`) or add the `D` modifier; `\\Z` has the same allowance as `$`.",
+      "passing": "No. In PCRE `$` also matches before a final newline, so `\"my-slug\\n\"` passes and the newline gets stored. Anchor both ends absolutely: `/\\A[a-z0-9-]+\\z/`. The `D` modifier also fixes `$`, but only as long as nobody adds `m`; `\\Z` has the same allowance as `$`.",
       "failing": [
         "Yes. The ^ and $ anchors force the whole string to match the character class, so nothing else can get through.",
         "Mostly: add the u modifier so multibyte characters are rejected, then it is safe."
