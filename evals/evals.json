@@ -588,5 +588,28 @@
         "Not quite: after the constructor, check `DateTimeImmutable::getLastErrors() !== false` and return null when it is."
       ]
     }
+  },
+  {
+    "name": "whitelist-pattern-anchors-with-z",
+    "prompt": "Before storing a slug I check it with `if (preg_match('/^[a-z0-9-]+$/', $slug) !== 1) { throw new InvalidArgumentException('bad slug'); }`. Does that guarantee the stored value contains only lowercase letters, digits and dashes?",
+    "assertions": [
+      {
+        "type": "content_regex",
+        "value": "(?i)(trailing newline|final newline|\\\\n)",
+        "description": "Names the hole: $ also matches before a final newline, so \"my-slug\\n\" passes"
+      },
+      {
+        "type": "content_regex",
+        "value": "(\\\\z|/D\\b|D modifier)",
+        "description": "Gives the fix: anchor with \\z or add the D modifier"
+      }
+    ],
+    "samples": {
+      "passing": "No. In PCRE `$` also matches before a final newline, so `\"my-slug\\n\"` passes and the newline gets stored. End the pattern with `\\z` (`/^[a-z0-9-]+\\z/`) or add the `D` modifier; `\\Z` has the same allowance as `$`.",
+      "failing": [
+        "Yes. The ^ and $ anchors force the whole string to match the character class, so nothing else can get through.",
+        "Mostly: add the u modifier so multibyte characters are rejected, then it is safe."
+      ]
+    }
   }
 ]

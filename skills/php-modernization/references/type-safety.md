@@ -401,6 +401,30 @@ attributed to whatever template called it, naming neither the input nor its
 origin. Validate the encoding where the value enters, and keep the raw value out
 of the log message: it is the one thing that cannot be written safely.
 
+### `$` accepts a trailing newline — anchor validation with `\z`
+
+In PCRE `$` matches at the very end of the subject **or before a final
+newline**. A pattern meant to say "the whole string is of this form" therefore
+also accepts the same string followed by `\n`:
+
+```php
+preg_match('/^[a-z0-9._-]+$/', "file.html\n");    // 1 - the newline gets through
+preg_match('/^[a-z0-9._-]+\z/', "file.html\n");   // 0
+preg_match('/^[a-z0-9._-]+$/D', "file.html\n");   // 0 - D: $ means end only
+preg_match('/^[a-z0-9._-]+\Z/', "file.html\n");   // 1 - \Z behaves like $
+```
+
+For a whitelist, a fast path that skips a stricter parser, or any check whose
+job is to reject what does not match, end the pattern with `\z` (or add the
+`D` modifier, which `m` overrides). `\Z` is not the fix; it has the same
+trailing-newline allowance as `$`.
+
+It stays invisible because hand-picked examples never end in a newline. A
+fast path in front of `League\Uri` (`~^(?!/)[\x21-\x39\x3B-\x7E]+$~`) let
+`"~\n"` through as a relative path where the parser it replaced throws; only a
+differential test against the old implementation over every byte and a seeded
+random corpus found it. Pin the anchor with a case that ends in `"\n"`.
+
 ### Type Guards
 
 ```php
