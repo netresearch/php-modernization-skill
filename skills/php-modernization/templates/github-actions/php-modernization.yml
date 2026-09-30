@@ -89,10 +89,12 @@ jobs:
 
       - name: Run orchestrator (dry-run)
         if: ${{ inputs.enable-infection-diff && github.event_name == 'pull_request' }}
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           uv run skills/php-modernization/scripts/modernize_loop.py \
             --mode dry-run \
-            --git-diff-base=origin/${{ github.base_ref }} \
+            --git-diff-base="origin/${BASE_REF}" \
             | tee modernize-loop.json
 
       - name: Run orchestrator (dry-run, no infection)

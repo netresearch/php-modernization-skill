@@ -125,12 +125,13 @@ GitHub Actions, diff mode on PRs:
   if: github.event_name == 'pull_request'
   run: |
     vendor/bin/infection \
-      --git-diff-base=origin/${{ github.base_ref }} \
+      --git-diff-base="origin/${BASE_REF}" \
       --git-diff-lines \
       --threads=$(nproc) \
       --min-msi=80 \
       --logger-github
   env:
+    BASE_REF: ${{ github.base_ref }}
     INFECTION_BADGE_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
 ```
 
