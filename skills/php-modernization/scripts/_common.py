@@ -63,14 +63,19 @@ def detect_archetype(root: Path) -> str:
 
 
 def read_composer_json(root: Path) -> dict[str, Any] | None:
-    """Parse composer.json at the project root, or None if missing/invalid."""
+    """Parse composer.json at the project root, or None if missing/invalid.
+
+    A file that parses to something other than a JSON object is invalid too:
+    every caller reads it with ``.get``.
+    """
     p = root / "composer.json"
     if not p.is_file():
         return None
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        data = json.loads(p.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
+    return data if isinstance(data, dict) else None
 
 
 def php_version_constraint(composer: dict[str, Any] | None) -> str:

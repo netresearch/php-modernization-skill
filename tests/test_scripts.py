@@ -116,6 +116,18 @@ class IntrospectTest(unittest.TestCase):
         self.assertIn("is not a directory", result.stderr)
         self.assertEqual(json.loads(result.stdout)["archetype"], "unknown")
 
+    def test_non_object_composer_json_counts_as_missing(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "composer.json").write_text("[]", encoding="utf-8")
+            for script, extra in (
+                ("introspect.py", ()),
+                ("verify_php_project.py", ("--no-tools", "--no-cache")),
+            ):
+                with self.subTest(script=script):
+                    result = run_py(script, "--root", tmp, *extra)
+                    self.assertNotIn("Traceback", result.stderr)
+                    json.loads(result.stdout)
+
 
 class VersionTest(unittest.TestCase):
     def test_reports_carry_the_released_skill_version(self) -> None:
