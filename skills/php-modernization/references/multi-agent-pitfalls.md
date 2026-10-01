@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # Multi-Agent Modernization Pitfalls
 
 Empirical hazards when dispatching parallel sub-agents for a PHP

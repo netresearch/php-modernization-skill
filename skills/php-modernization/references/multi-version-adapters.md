@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # Multi-Version Library Adapter Pattern
 
 **Source:** an image-processing extension supporting intervention/image v2 and v4 side by side

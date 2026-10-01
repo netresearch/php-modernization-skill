@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # Static Analysis Tools
 
 Modern PHP projects require a comprehensive static analysis toolchain. This reference covers the **required tools** for quality PHP development.

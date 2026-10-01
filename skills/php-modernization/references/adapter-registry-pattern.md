@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # Adapter Registry Pattern
 
 **Purpose:** Dynamic adapter instantiation from runtime configuration

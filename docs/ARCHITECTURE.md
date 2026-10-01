@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # Architecture — php-modernization-skill
 
 ## Purpose
@@ -44,8 +47,8 @@ Three Python tools form the executable layer. All three are PEP 723 self-describ
 | Tool | Role | Side effects | Exit code |
 | --- | --- | --- | --- |
 | `scripts/introspect.py` | Cheap first-touch profiler. Emits a project-profile JSON: archetype, PHP version, tooling fingerprints, PSR-4 mapping, baseline presence. | `php --version` only. | Always 0. |
-| `scripts/verify_php_project.py` | Primary mechanical verifier. Runs the curated `PM-XX` checks and (optionally) shells out to PHPStan, Rector, PHP-CS-Fixer for live tool runs. Emits JSON, SARIF, or JUnit. Includes `agent_actions[]` recommendations. | Subprocesses if tools are present and `--no-tools` is not set; cache file under `.build/php-modernization/`. | 0 on pass/warn, 1 on fail. |
-| `scripts/modernize_loop.py` | Fix orchestrator. Chains PHP-CS-Fixer, Rector, PHPStan, and Infection (diff-mode) into a transcript the agent reasons about. `--mode dry-run` is default; `apply` requires `--confirm`. | None in `dry-run`; mutates in `apply`. | 0 if every required tool passes, 1 otherwise. |
+| `scripts/verify_php_project.py` | Primary mechanical verifier. Runs the curated `PM-XX` checks by reading project files and, unless `--no-tools` is set, runs the project's own PHPStan (`vendor/bin/phpstan` or `.Build/bin/phpstan`) and `composer audit` (when `composer.lock` exists). Emits JSON, SARIF, or JUnit. Includes `agent_actions[]` recommendations. | `php -r` for the runtime version; without `--no-tools` the two tool runs, with their output in `.build/php-modernization/`; the cache file `.build/php-modernization/last-run.json` unless `--no-cache`. | 0 on pass/warn, 1 on fail, 2 when `--root` is not a directory. |
+| `scripts/modernize_loop.py` | Fix orchestrator. Chains PHP-CS-Fixer, Rector, PHPStan, and Infection (diff-mode) into a transcript the agent reasons about. `--mode dry-run` is default; `apply` requires `--confirm`. | Runs the project's own tool binaries from `vendor/bin` or `.Build/bin`. In `dry-run` it passes `--dry-run` to PHP-CS-Fixer and Rector and writes their reports to `.build/php-modernization/`; source files are not changed. In `apply` PHP-CS-Fixer and Rector rewrite files. | 0 unless a required tool fails, times out or errors (a missing tool is not a failure); 2 on usage errors. |
 
 `scripts/_common.py` holds shared archetype detection, composer parsing, and version helpers used by the verifier and the introspector.
 
@@ -79,7 +82,7 @@ The verifier and orchestrator branch on archetype. Detection is pure (no subproc
 1. `typo3-extension` — `ext_emconf.php` or `Configuration/Services.yaml`
 2. `symfony-app` — `bin/console` plus `config/bundles.php`
 3. `monorepo-package` — `packages/<name>/composer.json` for two or more children
-4. `generic-composer` — `composer.json` plus `src/` plus `tests/`
+4. `generic-composer` — `composer.json` plus either `src/` or a non-empty PSR-4 `autoload` map
 5. `unknown` — fallback
 
 ## Data Flow

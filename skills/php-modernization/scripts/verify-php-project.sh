@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: Netresearch DTT GmbH
 # Backward-compatible wrapper. Delegates to verify_php_project.py (default)
 # or introspect.py (when first arg is "introspect").
 #

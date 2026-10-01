@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # PSR-15 Middleware Architecture
 
 PSR-15 (https://www.php-fig.org/psr/psr-15/) defines two interfaces — `RequestHandlerInterface` and `MiddlewareInterface` — that frame how HTTP request processing is composed. This reference covers the architectural patterns that make PSR-15 stacks modernizable, testable, and analyzable.

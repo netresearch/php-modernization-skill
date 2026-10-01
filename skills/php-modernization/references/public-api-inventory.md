@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # Inventorying a Public API Against Its Consumers
 
 Use when a library's public surface (`@api` tags, a frozen API snapshot, a 1.0

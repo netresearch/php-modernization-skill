@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # Lexing PHP Across Versions
 
 Read this before writing anything that reads PHP source as tokens — a doc

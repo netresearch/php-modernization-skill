@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # Agent Guide — php-modernization-skill
 
 ## Repo Structure
@@ -50,8 +53,11 @@
 ├── scripts/
 │   ├── test_fixtures.py                      # Golden-snapshot diff runner
 │   └── verify-harness.sh                     # AGENTS.md/docs harness check
+├── tests/
+│   └── test_scripts.py                       # Behaviour tests for the shipped scripts
 ├── docs/
 │   ├── ARCHITECTURE.md                       # Architecture overview
+│   ├── SECURITY-ASSURANCE.md                 # Security assurance case
 │   └── php-rules.md                          # PHP coding rules (scoped to **/*.php)
 ├── evals/evals.json                          # Skill evaluation suite
 ├── .claude-plugin/plugin.json                # Plugin manifest
@@ -72,6 +78,7 @@
 - `uv run skills/php-modernization/scripts/verify_php_project.py --root . --format sarif` — SARIF output for GitHub code scanning.
 - `uv run skills/php-modernization/scripts/modernize_loop.py --mode dry-run` — orchestrated fix preview (no mutations).
 - `uv run scripts/test_fixtures.py` — regression suite for the verifier itself.
+- `python3 tests/test_scripts.py` — behaviour tests for the introspector, verifier, orchestrator and Bash wrapper.
 - `bash scripts/verify-harness.sh` — agent-harness consistency check (this file, docs, refs).
 
 ## Hard Guardrails
@@ -95,6 +102,7 @@ against Markdown and YAML changes too (#116).
 
 - [SKILL.md](skills/php-modernization/SKILL.md) — agent contract and reference-routing table
 - [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — architecture overview
+- [docs/SECURITY-ASSURANCE.md](docs/SECURITY-ASSURANCE.md) — security assurance case: trust boundaries, threats, countermeasures and limits
 - [docs/php-rules.md](docs/php-rules.md) — PHP coding rules, scoped to `**/*.php`
 - [CHANGELOG.md](CHANGELOG.md) — release history
 - [fixtures/README.md](fixtures/README.md) — regression-suite layout and snapshot rules

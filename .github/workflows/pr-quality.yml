@@ -1,3 +1,6 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: Netresearch DTT GmbH
+
 # SECURITY: This caller runs on `pull_request_target`, so the job receives
 # base-branch permissions (including `pull-requests: write`). Do NOT add an
 # `actions/checkout` of the PR head or otherwise execute PR-controlled code

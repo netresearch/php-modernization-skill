@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # Mutation Testing with Infection
 
 Operational guide for Infection (https://infection.github.io/), the de-facto mutation testing framework for PHP. Three modes, configuration, CI integration, and how to read the report.

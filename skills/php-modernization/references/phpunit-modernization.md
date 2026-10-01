@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # PHPUnit Modernization (12 → 13)
 
 PHPUnit 12.5 deprecated and 13 removed several long-standing idioms. The

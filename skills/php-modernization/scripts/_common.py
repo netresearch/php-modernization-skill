@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: Netresearch DTT GmbH
 """Shared helpers for php-modernization skill scripts.
 
 Used by both verify_php_project.py and introspect.py.
@@ -12,7 +14,9 @@ from typing import Any
 
 SCHEMA_VERSION = "1.0.0"
 SKILL_ID = "php-modernization"
-SKILL_VERSION = "1.17.0"
+# Keep equal to the version in .claude-plugin/plugin.json; tests/test_scripts.py
+# fails when the two differ.
+SKILL_VERSION = "1.23.6"
 
 
 def detect_archetype(root: Path) -> str:
@@ -59,14 +63,19 @@ def detect_archetype(root: Path) -> str:
 
 
 def read_composer_json(root: Path) -> dict[str, Any] | None:
-    """Parse composer.json at the project root, or None if missing/invalid."""
+    """Parse composer.json at the project root, or None if missing/invalid.
+
+    A file that parses to something other than a JSON object is invalid too:
+    every caller reads it with ``.get``.
+    """
     p = root / "composer.json"
     if not p.is_file():
         return None
     try:
-        return json.loads(p.read_text(encoding="utf-8"))
+        data = json.loads(p.read_text(encoding="utf-8"))
     except (json.JSONDecodeError, OSError):
         return None
+    return data if isinstance(data, dict) else None
 
 
 def php_version_constraint(composer: dict[str, Any] | None) -> str:

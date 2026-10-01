@@ -1,3 +1,6 @@
+<!-- SPDX-License-Identifier: CC-BY-SA-4.0 -->
+<!-- SPDX-FileCopyrightText: Netresearch DTT GmbH -->
+
 # Reading a PHP config file without executing it
 
 Legacy PHP declares configuration as a PHP file that assigns an array —
