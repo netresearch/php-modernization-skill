@@ -483,6 +483,38 @@ same `getLastErrors()` check after it.
 
 Verified on PHP 8.1.34, 8.2.33, 8.3.33, 8.4.25 and 8.5.10.
 
+## Value Objects from Database Rows
+
+Replacing raw-row access (`$row['status'] ?? 'queued'`) with one strict
+`fromRow()` that throws on a malformed row is the same move as a request DTO,
+with one trap: where the code used to check a guard on the raw row first, the
+strict parse now runs **before** that guard. A guard that protects finished
+state — "skip a job that is already done", "never reprocess a paid order" — then
+stops protecting it, because a parse failure on a finished record takes the
+error path and overwrites its state.
+
+Check such a guard on the raw field, and parse only the records that pass it:
+
+```php
+$status = $row['status'] ?? null;
+if (is_string($status) && JobStatus::tryFrom($status)?->isTerminal() === true) {
+    return; // finished: left as it is, even if another column no longer parses
+}
+
+try {
+    $job = JobSnapshot::fromRow($row);
+} catch (MalformedJobRowException $e) {
+    $this->failJob($jobUid, $e); // reached only by a row whose raw status is not recognised as terminal
+    return;
+}
+```
+
+A test for it starts from a finished row with one malformed column and asserts
+the row is unchanged afterwards. Observed in `netresearch/t3x-nr-repurpose#154`:
+the refactor moved `fromRow()` ahead of the terminal check, so a redelivered
+message would set a `done` job to `failed`; a review caught it before the merge,
+and the test above fails without the raw-field check.
+
 ## Command/Query DTOs
 
 For complex operations, separate command and query objects:
@@ -640,6 +672,7 @@ final readonly class ListSecretsQuery
 | Query DTO | Read operations with optional filters |
 | Safe Integer Parsing | Prevent overflow without bcmath |
 | Safe Date Parsing | Refuse dates PHP rolls over (`2026-02-30`, `24:00`) |
+| Value Object from Row | Guard finished state on the raw field before the strict parse |
 
 **Benefits:**
 - Type safety preserved through entire flow
