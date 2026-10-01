@@ -1602,7 +1602,9 @@ def main(argv: list[str] | None = None) -> int:
         if not os.path.isabs(args.cache_file)
         else Path(args.cache_file)
     )
-    flags = {"no_tools": bool(args.no_tools)}
+    # The skill version is part of the key: a report cached by an older release
+    # would otherwise be printed with that release's skill_version.
+    flags = {"no_tools": bool(args.no_tools), "skill_version": SKILL_VERSION}
     signature = cache_signature(root)
 
     report_dict: dict[str, Any] | None = None

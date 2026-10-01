@@ -202,6 +202,20 @@ class VerifierTest(unittest.TestCase):
             stale = run_py("verify_php_project.py", "--root", root, "--no-tools")
             self.assertEqual(json.loads(stale.stdout)["archetype"], "generic-composer")
 
+    def test_cache_from_an_older_release_is_not_reused(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            run_py("verify_php_project.py", "--root", root, "--no-tools")
+            cache = root / ".build" / "php-modernization" / "last-run.json"
+            # A cache written by an earlier release, in the format it used:
+            # flags without a version, and the old version in the report.
+            payload = json.loads(cache.read_text(encoding="utf-8"))
+            payload["flags"] = {"no_tools": True}
+            payload["report"]["skill_version"] = "1.17.0"
+            cache.write_text(json.dumps(payload), encoding="utf-8")
+
+            result = run_py("verify_php_project.py", "--root", root, "--no-tools")
+            self.assertNotEqual(json.loads(result.stdout)["skill_version"], "1.17.0")
+
 
 class ModernizeLoopTest(unittest.TestCase):
     def test_dry_run_without_tools_reports_them_missing(self) -> None:
