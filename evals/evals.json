@@ -611,5 +611,33 @@
         "Mostly: add the u modifier so multibyte characters are rejected, then it is safe."
       ]
     }
+  },
+  {
+    "name": "phpstan-stale-baseline-entries-without-regenerating",
+    "prompt": "I fixed about 40 of the 300 errors recorded in our phpstan-baseline.neon. How do I get the now-obsolete entries out of the baseline? I was going to simply rerun `vendor/bin/phpstan analyse --generate-baseline`.",
+    "assertions": [
+      {
+        "type": "content_regex",
+        "value": "reportUnmatchedIgnoredErrors",
+        "description": "Uses reportUnmatchedIgnoredErrors to make PHPStan list the stale entries"
+      },
+      {
+        "type": "content_regex",
+        "value": "(?i)(absorb|swallow|hides?|mask|new (errors|findings))",
+        "description": "Names the risk of regenerating: errors introduced since the last run are silently absorbed into the baseline"
+      },
+      {
+        "type": "content_regex",
+        "value": "(?i)was not matched",
+        "description": "Reads the 'Ignored error pattern ... was not matched in reported errors' lines to identify exactly which entries to remove"
+      }
+    ],
+    "samples": {
+      "passing": "Do not regenerate: `--generate-baseline` rewrites the whole file from the current findings, so any new errors introduced since the last run are silently absorbed. Instead write a scratch config outside the repo that includes your project's `phpstan.neon` by absolute path and sets `reportUnmatchedIgnoredErrors: true`, run `phpstan analyse -c` against it into a file, and remove by hand exactly the entries named by the `Ignored error pattern ... was not matched in reported errors.` lines.",
+      "failing": [
+        "Yes, just rerun `vendor/bin/phpstan analyse --generate-baseline`; it rebuilds the file from the current errors and drops the 40 you fixed.",
+        "Set `reportUnmatchedIgnoredErrors: true` in phpstan.neon and then regenerate the baseline with `--generate-baseline` so it only contains the remaining errors."
+      ]
+    }
   }
 ]

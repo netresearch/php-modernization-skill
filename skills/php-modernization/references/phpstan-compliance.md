@@ -475,10 +475,29 @@ vendor/bin/phpstan analyse --generate-baseline
 # phpstan.neon:
 includes:
     - phpstan-baseline.neon
-
-# Gradually fix errors by regenerating baseline
-vendor/bin/phpstan analyse --generate-baseline
 ```
+
+Generate the baseline when adopting PHPStan or raising the level, not to tidy up after fixing errors. `--generate-baseline` rewrites the whole file from the current findings: every error introduced since the last run is silently absorbed instead of failing the build, and the diff mixes removed entries with added ones so nobody can review it. Never chain `--generate-baseline` in front of a verification run — the verification then checks against the baseline it just wrote.
+
+### Finding Stale Baseline Entries
+
+Fixed errors leave stale entries behind. To list them without touching the baseline, run PHPStan once with `reportUnmatchedIgnoredErrors` switched on through a scratch config **outside the repository**:
+
+```neon
+# /tmp/phpstan-stale/stale.neon (scratch file, never committed)
+includes:
+    - /absolute/path/to/project/phpstan.neon
+parameters:
+    reportUnmatchedIgnoredErrors: true
+```
+
+The include must be an absolute path, because a relative include resolves against the directory of the scratch file. The baseline needs no line of its own: the project config already includes it.
+
+```bash
+vendor/bin/phpstan analyse -c /tmp/phpstan-stale/stale.neon --memory-limit=1G --no-progress > /tmp/phpstan-stale/out.txt 2>&1; echo $?
+```
+
+Read the whole output file, not a `tail` of it. Every `Ignored error pattern ... was not matched in reported errors.` line names one stale entry; remove exactly those entries from `phpstan-baseline.neon` by hand. An `is expected to occur N times, but occurred only M times` line means the entry is still needed with a lower `count:`. Any other error in the output is a real finding, not baseline housekeeping. Finish with the project's normal `phpstan analyse` run against the edited baseline.
 
 ### Baseline Reduction Strategy
 
@@ -536,7 +555,7 @@ if (!is_array($firstItem)) {
 3. Remove dropped rules from config (e.g., symplify regex rules)
 4. Regenerate baseline: `vendor/bin/phpstan analyse --generate-baseline`
 5. Fix errors genuinely (see Baseline Reduction Strategy above)
-6. Re-generate baseline for remaining unfixable entries
+6. Remove the entries the fixes made stale (see Finding Stale Baseline Entries) instead of regenerating
 7. Verify: `vendor/bin/phpstan analyse` should report 0 errors
 
 ## Custom Rules
