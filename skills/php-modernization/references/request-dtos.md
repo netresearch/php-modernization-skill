@@ -504,7 +504,7 @@ if (is_string($status) && JobStatus::tryFrom($status)?->isTerminal() === true) {
 try {
     $job = JobSnapshot::fromRow($row);
 } catch (MalformedJobRowException $e) {
-    $this->failJob($jobUid, $e); // only an unfinished job can get here
+    $this->failJob($jobUid, $e); // reached only by a row whose raw status is not recognised as terminal
     return;
 }
 ```
