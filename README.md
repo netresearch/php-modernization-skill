@@ -304,7 +304,7 @@ Checks that run on pull requests in this repository:
 - Every pull request: Skill Validation (`lint.yml`: skill structure, markdownlint, yamllint, actionlint, JSON syntax, ShellCheck, Ruff, checkpoint schema), Eval Validation (`eval-validate.yml`), Skill Tests (`tests.yml`: `scripts/test_fixtures.py` and `tests/test_scripts.py`), PR Quality Gates (`pr-quality.yml`: approves pull requests whose author has write access or higher) and Label PR (`labeler.yml`).
 - Every pull request, skipped unless Renovate or Dependabot opened it: Auto-merge dependency PRs (`auto-merge-deps.yml`).
 - Pull requests to `main` or `master`: `security.yml` with Betterleaks (secret scanning), zizmor (workflow static analysis), dependency review (fails on vulnerabilities of severity high or above), Composer Audit and Opengrep SAST (thresholds as in the organisation's [static analysis rule](https://github.com/netresearch/.github/blob/main/SECURITY.md#static-analysis-sast)); Harness Verification (`harness-verify.yml`) and Template Drift (`check-template-drift.yml`).
-- Configured outside the workflow files: CodeQL default setup (actions, python), SonarCloud Code Analysis and the DCO check.
+- Configured outside the workflow files: CodeQL default setup (actions, python), SonarCloud Code Analysis, the DCO check and the CodeRabbit review status. Code scanning also reports each analyser's results as a check run of its own: `CodeQL`, `SonarCloud`, `zizmor`, `betterleaks` and `Opengrep OSS`. GitHub secret scanning with push protection is enabled as a repository setting.
 
 ## License
 
