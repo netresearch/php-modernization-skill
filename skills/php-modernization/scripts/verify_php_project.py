@@ -30,7 +30,7 @@ import sys
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -1325,7 +1325,7 @@ def evaluate(root: Path, *, run_tools: bool) -> Report:
         schema_version=SCHEMA_VERSION,
         skill=SKILL_ID,
         skill_version=SKILL_VERSION,
-        generated_at=datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        generated_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         project_root=str(root.resolve()),
         archetype=archetype,
         summary=summary,
