@@ -22,7 +22,7 @@ import re
 import shutil
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -124,7 +124,7 @@ def build_profile(root: Path) -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
         "skill": SKILL_ID,
-        "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "project_root": str(root.resolve()),
         "archetype": archetype,
         "php_version_constraint": php_version_constraint(composer),
@@ -161,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
         profile = {
             "schema_version": SCHEMA_VERSION,
             "skill": SKILL_ID,
-            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "project_root": str(root),
             "archetype": "unknown",
             "php_version_constraint": "unknown",
