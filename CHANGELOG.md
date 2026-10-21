@@ -11,6 +11,8 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-10-21
+
 ### Fixed
 
 - PM-05 (checkpoint and verifier) no longer fails a project whose `.php-cs-fixer.dist.php` requires the shared `netresearch/typo3-ci-workflows` config: that config enables `@PER-CS3x0` in `config/php-cs-fixer/rules.php`, but the project file carries no literal `@PER-CS`, and the resolved rule set is not readable before `composer install`. New regression fixtures `typo3-extension-shared-cs-config` and `typo3-extension-shared-cs-config-comment`. Only a `require` of the shared config counts; a comment naming its path, a commented-out `require` or a copied usage docblock does not satisfy PM-05. Neither does `@PER-CS` inside a comment (new fixture `typo3-extension-per-cs-comment`)
@@ -221,7 +223,8 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 (historical — pre-CHANGELOG)
 
-[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.6...HEAD
+[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.0...HEAD
+[1.24.0]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.6...v1.24.0
 [1.23.6]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.5...v1.23.6
 [1.23.5]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.4...v1.23.5
 [1.23.4]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.3...v1.23.4
