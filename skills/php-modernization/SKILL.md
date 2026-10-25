@@ -4,7 +4,7 @@
 name: php-modernization
 description: "Use when modernizing PHP code: PHP 8.1-8.5 features, PSR/PHP-FIG/PER-CS compliance, PHPStan/Rector/PHP-CS-Fixer/PHPat tooling, DTOs/enums/readonly/property hooks, type safety. Triggers: PHP modernization, type safety, PHPStan, Rector, PHP-CS-Fixer, enum, DTO, readonly, strict_types, property hooks, PHP 8.4, PHP 8.5."
 license: "(MIT AND CC-BY-SA-4.0)"
-compatibility: "Requires php 8.1+, composer."
+compatibility: "Requires uv (runs the scripts on Python 3.11 or later), php 8.1+, composer."
 metadata:
   version: "1.24.0"
   repository: "https://github.com/netresearch/php-modernization-skill"
