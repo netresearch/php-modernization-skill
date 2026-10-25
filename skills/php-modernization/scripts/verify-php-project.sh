@@ -32,11 +32,13 @@ case "$SUBCOMMAND" in
 esac
 
 if ! command -v uv >/dev/null 2>&1; then
-    echo "ERROR: 'uv' is required to run this tool (install: https://docs.astral.sh/uv/)" >&2
-    echo "       Falls back to direct python3 invocation if available..." >&2
-    if command -v python3 >/dev/null 2>&1; then
+    # The scripts need Python 3.11 or later (datetime.UTC, tomllib); an older
+    # python3 would die on an ImportError, so it is not a fallback.
+    if command -v python3 >/dev/null 2>&1 \
+        && python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' 2>/dev/null; then
         exec python3 "$TARGET" "${ARGS[@]}"
     fi
+    echo "ERROR: this tool needs 'uv' (install: https://docs.astral.sh/uv/) or python3 3.11 or later" >&2
     exit 1
 fi
 

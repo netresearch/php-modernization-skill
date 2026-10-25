@@ -55,7 +55,7 @@ uv run skills/php-modernization/scripts/verify_php_project.py --root . --check P
 uv run skills/php-modernization/scripts/modernize_loop.py --mode dry-run
 ```
 
-`uv` is the recommended runner for the Python tools (it resolves the PEP 723 inline dependencies automatically). The Bash wrapper transparently falls back to `python3` if `uv` is not installed.
+`uv` is the recommended runner for the Python tools (it resolves the PEP 723 inline dependencies automatically). Without `uv`, the Bash wrapper falls back to `python3` only when that is Python 3.11 or later.
 
 ### Output formats
 
@@ -272,16 +272,16 @@ Open issues and pull requests on [GitHub](https://github.com/netresearch/php-mod
 
 ### Tests
 
-Two stdlib-only Python suites test the shipped scripts. They run with `python3` or `uv run`:
+Two stdlib-only Python suites test the shipped scripts. They need Python 3.11 or later, which `uv run --python 3.11` provides:
 
-- `python3 scripts/test_fixtures.py` runs the verifier against every synthetic project under [`fixtures/`](fixtures/) and diffs its normalized JSON against `expected/verifier.json`. A failure prints `FAIL` and a unified diff per fixture; `--update` regenerates the snapshots when a change to the output is intended (see [`fixtures/README.md`](fixtures/README.md)).
-- `python3 tests/test_scripts.py` runs the introspector, the verifier, the orchestrator and the Bash wrapper as subprocesses and checks their exit codes, output formats, dry-run flags, the `--confirm` requirement of `--mode apply`, and that the reported version equals `.claude-plugin/plugin.json`. A failure names the test and the assertion.
+- `uv run --python 3.11 python scripts/test_fixtures.py` runs the verifier against every synthetic project under [`fixtures/`](fixtures/) and diffs its normalized JSON against `expected/verifier.json`. A failure prints `FAIL` and a unified diff per fixture; `--update` regenerates the snapshots when a change to the output is intended (see [`fixtures/README.md`](fixtures/README.md)).
+- `uv run --python 3.11 python tests/test_scripts.py` runs the introspector, the verifier, the orchestrator and the Bash wrapper as subprocesses and checks their exit codes, output formats, dry-run flags, the `--confirm` requirement of `--mode apply`, and that the reported version equals `.claude-plugin/plugin.json`. A failure names the test and the assertion.
 
 CI runs both suites on every pull request and every push to `main` through [`.github/workflows/tests.yml`](.github/workflows/tests.yml). `pre-commit run --all-files` runs the hooks of [`.pre-commit-config.yaml`](.pre-commit-config.yaml) locally; Skill Validation runs the linters among them (the skill validator, markdownlint, yamllint, actionlint, Ruff, ShellCheck) in CI.
 
 ### Dependencies
 
-- **Python tools:** standard library only. Each script declares `requires-python = ">=3.11"` and `dependencies = []` in its PEP 723 block, so `uv run` installs nothing. `uv` is the recommended runner, not a dependency.
+- **Python tools:** standard library only. Each script declares `requires-python = ">=3.11"` and `dependencies = []` in its PEP 723 block, so `uv run` installs nothing. `uv` runs them on Python 3.11 or later; when `uv` is missing, the Bash wrapper uses `python3` only if that is 3.11 or later, and otherwise stops with an install hint.
 - **Composer:** `composer.json` requires `netresearch/composer-agent-skill-plugin`, which installs the skill into a PHP project. No `composer.lock` is committed (`.gitignore`).
 - **Development tools:** the hooks in `.pre-commit-config.yaml` are pinned by `rev:`. Renovate ([`renovate.json`](renovate.json), `config:recommended` with the pre-commit manager enabled) proposes updates for them. The Composer requirement is `*` and resolves to the latest release at install time.
 - **CI:** the workflows call reusable workflows of `netresearch/.github`, `netresearch/skill-repo-skill` and `netresearch/typo3-ci-workflows`; those reusables pin the actions they use by commit SHA (for example `validate.yml` and `tests.yml` of `netresearch/skill-repo-skill`).

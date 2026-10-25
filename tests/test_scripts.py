@@ -322,5 +322,53 @@ class WrapperTest(unittest.TestCase):
             self.assertEqual(report["summary"]["status"], "pass")
 
 
+class WrapperWithoutUvTest(unittest.TestCase):
+    """Without uv the wrapper may use python3 only when it is 3.11 or later.
+
+    An older python3 dies on `from datetime import UTC`, which is the failure
+    the 3.11 floor exists to prevent. PATH holds a directory with one python3
+    and the system directories for `dirname`; uv must not be reachable.
+    """
+
+    SYSTEM_PATH = "/usr/bin:/bin"
+
+    def setUp(self) -> None:
+        if shutil.which("uv", path=self.SYSTEM_PATH):
+            self.skipTest("uv is installed in a system directory")
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.bin = Path(tmp.name)
+
+    def run_wrapper(self, root: Path) -> subprocess.CompletedProcess[str]:
+        env = dict(os.environ, PATH=f"{self.bin}:{self.SYSTEM_PATH}")
+        return subprocess.run(
+            ["/bin/bash", str(SCRIPTS / "verify-php-project.sh"), str(root)],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+            env=env,
+        )
+
+    def test_python_older_than_3_11_is_refused(self) -> None:
+        marker = self.bin / "ran"
+        stub = self.bin / "python3"
+        # Answers the version probe like Python 3.9; records any other call.
+        stub.write_text(f'#!/bin/sh\n[ "$1" = "-c" ] && exit 1\ntouch "{marker}"\n')
+        stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
+        with TempProject("fully-modern") as root:
+            result = self.run_wrapper(root)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("3.11 or later", result.stderr)
+        self.assertFalse(marker.exists(), "the old python3 ran the script")
+
+    def test_python_3_11_or_later_runs_the_verifier(self) -> None:
+        (self.bin / "python3").symlink_to(sys.executable)
+        with TempProject("fully-modern") as root:
+            result = self.run_wrapper(root)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(result.stdout)["summary"]["status"], "pass")
+
+
 if __name__ == "__main__":
     unittest.main()
