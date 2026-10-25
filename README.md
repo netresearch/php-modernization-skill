@@ -55,7 +55,7 @@ uv run skills/php-modernization/scripts/verify_php_project.py --root . --check P
 uv run skills/php-modernization/scripts/modernize_loop.py --mode dry-run
 ```
 
-`uv` is the recommended runner for the Python tools (it resolves the PEP 723 inline dependencies automatically). The Bash wrapper transparently falls back to `python3` if `uv` is not installed.
+`uv` is the recommended runner for the Python tools (it resolves the PEP 723 inline dependencies automatically). Without `uv`, the Bash wrapper falls back to `python3` only when that is Python 3.11 or later.
 
 ### Output formats
 
@@ -281,7 +281,7 @@ CI runs both suites on every pull request and every push to `main` through [`.gi
 
 ### Dependencies
 
-- **Python tools:** standard library only. Each script declares `requires-python = ">=3.11"` and `dependencies = []` in its PEP 723 block, so `uv run` installs nothing. `uv` runs them on Python 3.11 or later; the Bash wrapper falls back to `python3` when `uv` is missing.
+- **Python tools:** standard library only. Each script declares `requires-python = ">=3.11"` and `dependencies = []` in its PEP 723 block, so `uv run` installs nothing. `uv` runs them on Python 3.11 or later; when `uv` is missing, the Bash wrapper uses `python3` only if that is 3.11 or later, and otherwise stops with an install hint.
 - **Composer:** `composer.json` requires `netresearch/composer-agent-skill-plugin`, which installs the skill into a PHP project. No `composer.lock` is committed (`.gitignore`).
 - **Development tools:** the hooks in `.pre-commit-config.yaml` are pinned by `rev:`. Renovate ([`renovate.json`](renovate.json), `config:recommended` with the pre-commit manager enabled) proposes updates for them. The Composer requirement is `*` and resolves to the latest release at install time.
 - **CI:** the workflows call reusable workflows of `netresearch/.github`, `netresearch/skill-repo-skill` and `netresearch/typo3-ci-workflows`; those reusables pin the actions they use by commit SHA (for example `validate.yml` and `tests.yml` of `netresearch/skill-repo-skill`).
