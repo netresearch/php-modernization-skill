@@ -11,6 +11,8 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.24.1] - 2026-11-04
+
 ### Changed
 
 - `introspect.py`, `modernize_loop.py` and `verify_php_project.py` start through `uv run --script` when run directly (shebang `#!/usr/bin/env -S uv run --script`), so uv applies their `requires-python = ">=3.11"` instead of the host using the first `python3` on `PATH`. The `compatibility` field of `SKILL.md` names uv and the Python 3.11 floor
@@ -231,7 +233,8 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 (historical — pre-CHANGELOG)
 
-[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.0...HEAD
+[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.1...HEAD
+[1.24.1]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.0...v1.24.1
 [1.24.0]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.6...v1.24.0
 [1.23.6]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.5...v1.23.6
 [1.23.5]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.4...v1.23.5
