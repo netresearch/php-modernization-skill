@@ -11,6 +11,14 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+### Changed
+
+- `introspect.py`, `modernize_loop.py` and `verify_php_project.py` start through `uv run --script` when run directly (shebang `#!/usr/bin/env -S uv run --script`), so uv applies their `requires-python = ">=3.11"` instead of the host using the first `python3` on `PATH`. The `compatibility` field of `SKILL.md` names uv and the Python 3.11 floor
+
+### Fixed
+
+- `verify-php-project.sh` without uv falls back to `python3` only when it is Python 3.11 or later, and otherwise exits 1 with an install hint. With Python 3.9, such as the `python3` of the macOS Command Line Tools, `verify_php_project.py` died with `ImportError: cannot import name 'UTC' from 'datetime'`
+
 ## [1.24.0] - 2026-10-21
 
 ### Fixed
