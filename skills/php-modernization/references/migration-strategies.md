@@ -221,6 +221,48 @@ refreshed lock, not just the check that was red. Pin the blast radius with
 `composer update <vendor>/<package> --with-dependencies` when only one package
 needs to move.
 
+### Full or targeted update
+
+Pick the update scope from what changed in `composer.json`:
+
+- **Raised PHP floor** (`require.php` and `config.platform.php`): run a full
+  `composer update`. The lock was resolved against the old platform; only a
+  full update re-resolves every locked package against the new one. A targeted
+  update leaves everything outside its argument list at versions chosen for the
+  old floor.
+- **One library moved**: `composer update <vendor>/<package>
+  --with-all-dependencies`. `-W` also lets the package's dependencies move when
+  they are root requirements; `-w` (`--with-dependencies`) keeps those fixed.
+  Every other package stays at its locked version, so unrelated upgrades do not
+  enter the change.
+- **`composer update --lock`** is not an update. It keeps every package at its
+  locked version and rewrites only the lock's `content-hash` (plus mirror and
+  URL metadata), which silences the "lock file is not up to date" warning after
+  a hand edit to `composer.json`. It does not resolve the edited requirements,
+  so it cannot stand in for either update above.
+
+### Resolving a `composer.lock` conflict
+
+Never merge `composer.lock` by hand: its `content-hash` and package set must
+come out of one resolver run. Resolve `composer.json` first, because the
+regeneration reads it. Then take one side of the lock whole and regenerate:
+
+```bash
+# during `git rebase`: --ours is the branch being rebased onto plus the
+# commits already replayed; --theirs is the commit being replayed
+# (the reverse of `git merge`)
+git checkout --ours composer.lock     # the lock the replay is landing on
+# re-apply the replayed commit's intent against the resolved composer.json:
+composer update <vendor>/<package> --with-all-dependencies   # it moved one package
+# or `composer update` when it raised the PHP floor,
+# or `composer update --lock` when its composer.json edit changes no requirement
+git add composer.lock
+git rebase --continue
+```
+
+During `git merge` the sides are the usual ones: `--ours` is the branch you
+are on, `--theirs` is the branch being merged in.
+
 ## Framework-Specific Migrations
 
 ### Symfony Upgrade
