@@ -85,6 +85,9 @@ public function process(mixed $data): void
 }
 ```
 
+`JsonSerializable` is not generic: `@implements \JsonSerializable<…>` fails with
+`generics.notGeneric` (PHPStan 2.3.5). Put the shape on `jsonSerialize()` as `@return array{…}`.
+
 ### CI Integration
 
 ```yaml
