@@ -233,6 +233,7 @@ Pick the update scope from what changed in `composer.json`:
 - **One library moved**: `composer update <vendor>/<package>
   --with-all-dependencies`. `-W` also lets the package's dependencies move when
   they are root requirements; `-w` (`--with-dependencies`) keeps those fixed.
+  Neither unlocks packages that require it; list a blocking one as well.
   Every other package stays at its locked version, so unrelated upgrades do not
   enter the change.
 - **`composer update --lock`** is not an update. It keeps every package at its
@@ -252,16 +253,20 @@ regeneration reads it. Then take one side of the lock whole and regenerate:
 # commits already replayed; --theirs is the commit being replayed
 # (the reverse of `git merge`)
 git checkout --ours composer.lock     # the lock the replay is landing on
-# re-apply the replayed commit's intent against the resolved composer.json:
-composer update <vendor>/<package> --with-all-dependencies   # it moved one package
-# or `composer update` when it raised the PHP floor,
-# or `composer update --lock` when its composer.json edit changes no requirement
-git add composer.lock
-git rebase --continue
+# re-apply the replayed commit's intent against the resolved composer.json,
+# and stage and continue only if that succeeds:
+composer update <vendor>/<package> --with-all-dependencies \
+  && git add composer.lock && git rebase --continue   # the packages it moved
+# instead of that update: `composer update` when it raised the PHP floor or
+# refreshed the whole lock, `composer update --lock` when its composer.json
+# edit changes no requirement
 ```
 
 During `git merge` the sides are the usual ones: `--ours` is the branch you
 are on, `--theirs` is the branch being merged in.
+
+Run `composer install` after the rebase has finished: a later replayed commit
+can change the lock again after the update installed it.
 
 ## Framework-Specific Migrations
 
