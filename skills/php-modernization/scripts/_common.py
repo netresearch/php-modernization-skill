@@ -20,6 +20,26 @@ SKILL_MD = Path(__file__).resolve().parent.parent / "SKILL.md"
 UNKNOWN_VERSION = "unknown"
 
 
+def _frontmatter_lines(skill_md: Path) -> list[str]:
+    """Return the non-blank, non-comment lines of the first frontmatter block.
+
+    Empty when the file is missing or unreadable or has no frontmatter.
+    """
+    try:
+        lines = skill_md.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+    if not lines or lines[0].strip() != "---":
+        return []
+    block: list[str] = []
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if line.strip() and not line.lstrip().startswith("#"):
+            block.append(line)
+    return block
+
+
 def read_skill_version(skill_md: Path = SKILL_MD) -> str:
     """Return ``metadata.version`` from the SKILL.md frontmatter.
 
@@ -29,19 +49,9 @@ def read_skill_version(skill_md: Path = SKILL_MD) -> str:
     the verifier still runs then. Only a ``version:`` directly under
     ``metadata:`` counts.
     """
-    try:
-        lines = skill_md.read_text(encoding="utf-8").splitlines()
-    except (OSError, UnicodeDecodeError):
-        return UNKNOWN_VERSION
-    if not lines or lines[0].strip() != "---":
-        return UNKNOWN_VERSION
     in_metadata = False
     child_indent: int | None = None
-    for line in lines[1:]:
-        if line.strip() == "---":
-            break
-        if not line.strip() or line.lstrip().startswith("#"):
-            continue
+    for line in _frontmatter_lines(skill_md):
         if not line[0].isspace():
             in_metadata = line.split("#", 1)[0].strip() == "metadata:"
             child_indent = None
