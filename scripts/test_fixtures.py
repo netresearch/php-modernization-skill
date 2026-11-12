@@ -13,7 +13,9 @@ applies a normalization pass to scrub fields that vary per environment, and
 diffs the result against ``<fixture>/expected/verifier.json``.
 
 Use ``--update`` to regenerate the golden snapshots when verifier output
-legitimately changes (e.g. a new check is added or skill_version bumps).
+legitimately changes (e.g. a new check is added). ``skill_version`` is
+normalized too: the verifier reads it from SKILL.md, so a release bump leaves
+the snapshots unchanged; tests/test_scripts.py checks the reported version.
 
 Designed to be invoked via uv:
 
@@ -49,6 +51,7 @@ NORMALIZED = "<NORMALIZED>"
 TOP_LEVEL_VOLATILE_FIELDS: tuple[str, ...] = (
     "generated_at",
     "project_root",
+    "skill_version",
 )
 ENVIRONMENT_VOLATILE_FIELDS: tuple[str, ...] = ("php_runtime",)
 

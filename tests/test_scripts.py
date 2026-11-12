@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import stat
 import subprocess
@@ -129,10 +130,51 @@ class IntrospectTest(unittest.TestCase):
                     json.loads(result.stdout)
 
 
+class SkillCopy:
+    """Copy of the skill directory (SKILL.md and scripts/) in a temporary dir."""
+
+    def __enter__(self) -> Path:
+        self._tmp = tempfile.TemporaryDirectory()
+        skill = Path(self._tmp.name) / "php-modernization"
+        shutil.copytree(
+            SCRIPTS, skill / "scripts", ignore=shutil.ignore_patterns("__pycache__")
+        )
+        shutil.copy2(SCRIPTS.parent / "SKILL.md", skill / "SKILL.md")
+        return skill
+
+    def __exit__(self, *exc: object) -> None:
+        self._tmp.cleanup()
+
+
+def verify_with(skill: Path, *extra: str) -> subprocess.CompletedProcess[str]:
+    """Run the verifier from a skill copy against the fully-modern fixture."""
+    return run(
+        sys.executable,
+        skill / "scripts" / "verify_php_project.py",
+        "--root",
+        FIXTURES / "fully-modern",
+        "--no-tools",
+        "--no-cache",
+        *extra,
+    )
+
+
 class VersionTest(unittest.TestCase):
     def test_reports_carry_the_released_skill_version(self) -> None:
-        manifest = REPO_ROOT / ".claude-plugin" / "plugin.json"
-        released = json.loads(manifest.read_text(encoding="utf-8"))["version"]
+        # The verifier reads SKILL.md; both manifests are compared with what it
+        # reports, so SKILL.md drifting from either plugin.json fails here.
+        result = run_py(
+            "verify_php_project.py",
+            "--root",
+            FIXTURES / "fully-modern",
+            "--no-tools",
+            "--no-cache",
+            "--format",
+            "sarif",
+        )
+        sarif_version = json.loads(result.stdout)["runs"][0]["tool"]["driver"][
+            "version"
+        ]
         result = run_py(
             "verify_php_project.py",
             "--root",
@@ -140,12 +182,86 @@ class VersionTest(unittest.TestCase):
             "--no-tools",
             "--no-cache",
         )
-        self.assertEqual(
-            json.loads(result.stdout)["skill_version"],
-            released,
-            "update SKILL_VERSION in scripts/_common.py and regenerate the "
-            "snapshots with scripts/test_fixtures.py --update",
-        )
+        reported = json.loads(result.stdout)["skill_version"]
+        self.assertNotEqual(reported, "unknown")
+        self.assertEqual(sarif_version, reported)
+        for manifest in ("plugin.json", ".claude-plugin/plugin.json"):
+            with self.subTest(manifest=manifest):
+                released = json.loads(
+                    (REPO_ROOT / manifest).read_text(encoding="utf-8")
+                )["version"]
+                self.assertEqual(
+                    reported,
+                    released,
+                    f"metadata.version in skills/php-modernization/SKILL.md "
+                    f"differs from {manifest}",
+                )
+
+    def test_version_follows_skill_md(self) -> None:
+        with SkillCopy() as skill:
+            skill_md = skill / "SKILL.md"
+            text, replaced = re.subn(
+                r'(?m)^  version: ".*"$',
+                '  version: "9.9.9"',
+                skill_md.read_text(encoding="utf-8"),
+                count=1,
+            )
+            self.assertEqual(replaced, 1)
+            skill_md.write_text(text, encoding="utf-8")
+            result = verify_with(skill)
+            self.assertEqual(json.loads(result.stdout)["skill_version"], "9.9.9")
+
+    def test_version_without_skill_md_is_unknown(self) -> None:
+        with SkillCopy() as skill:
+            (skill / "SKILL.md").unlink()
+            for fmt in ("json", "sarif"):
+                with self.subTest(format=fmt):
+                    result = verify_with(skill, "--format", fmt)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertNotIn("Traceback", result.stderr)
+                    payload = json.loads(result.stdout)
+                    if fmt == "json":
+                        version = payload["skill_version"]
+                    else:
+                        version = payload["runs"][0]["tool"]["driver"]["version"]
+                    self.assertEqual(version, "unknown")
+
+    def test_only_metadata_version_counts(self) -> None:
+        cases = {
+            "no metadata.version": "---\nname: x\nmetadata:\n  author: y\n---\n",
+            "top-level version only": "---\nversion: 1.0.0\nmetadata:\n  a: b\n---\n",
+            "version under another key": "---\ncompat:\n  version: 1.5.0\n---\n",
+            "version in the body": "---\nname: x\n---\n\nmetadata:\n  version: 2.0.0\n",
+            "no frontmatter": "# Title\n\nmetadata:\n  version: 3.0.0\n",
+        }
+        with SkillCopy() as skill:
+            for case, content in cases.items():
+                with self.subTest(case=case):
+                    (skill / "SKILL.md").write_text(content, encoding="utf-8")
+                    result = verify_with(skill)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertEqual(
+                        json.loads(result.stdout)["skill_version"], "unknown"
+                    )
+
+    def test_version_quoting_styles(self) -> None:
+        cases = {
+            "double": '  version: "4.5.6"',
+            "single": "  version: '4.5.6'",
+            "bare": "  version: 4.5.6",
+            "comment": '  version: "4.5.6"  # bumped by bump-version.sh',
+        }
+        with SkillCopy() as skill:
+            for case, line in cases.items():
+                with self.subTest(case=case):
+                    (skill / "SKILL.md").write_text(
+                        f"---\r\nname: x\r\nmetadata:\r\n{line}\r\n---\r\n",
+                        encoding="utf-8",
+                    )
+                    result = verify_with(skill)
+                    self.assertEqual(
+                        json.loads(result.stdout)["skill_version"], "4.5.6"
+                    )
 
 
 class VerifierTest(unittest.TestCase):

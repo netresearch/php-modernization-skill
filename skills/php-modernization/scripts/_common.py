@@ -14,9 +14,44 @@ from typing import Any
 
 SCHEMA_VERSION = "1.0.0"
 SKILL_ID = "php-modernization"
-# Keep equal to the version in .claude-plugin/plugin.json; tests/test_scripts.py
-# fails when the two differ.
-SKILL_VERSION = "1.24.2"
+# The skill's SKILL.md sits next to scripts/ in the repository, in the
+# Composer install and in both release archives.
+SKILL_MD = Path(__file__).resolve().parent.parent / "SKILL.md"
+UNKNOWN_VERSION = "unknown"
+
+
+def read_skill_version(skill_md: Path = SKILL_MD) -> str:
+    """Return ``metadata.version`` from the SKILL.md frontmatter.
+
+    The release bump rewrites that line, so the reports follow it without a
+    second copy of the version. Returns ``UNKNOWN_VERSION`` when the file is
+    missing or unreadable, or when its frontmatter has no ``metadata.version``;
+    the verifier still runs then. Only a ``version:`` directly under
+    ``metadata:`` counts.
+    """
+    try:
+        lines = skill_md.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return UNKNOWN_VERSION
+    if not lines or lines[0].strip() != "---":
+        return UNKNOWN_VERSION
+    in_metadata = False
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if not line[0].isspace():
+            in_metadata = line.split("#", 1)[0].strip() == "metadata:"
+            continue
+        key, sep, value = line.strip().partition(":")
+        if in_metadata and sep and key == "version":
+            value = value.split(" #", 1)[0].strip().strip("\"'").strip()
+            return value or UNKNOWN_VERSION
+    return UNKNOWN_VERSION
+
+
+SKILL_VERSION = read_skill_version()
 
 
 def detect_archetype(root: Path) -> str:

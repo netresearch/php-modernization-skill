@@ -38,6 +38,7 @@ before diffing:
 | --- | --- |
 | `generated_at` | Replaced with the literal string `"<NORMALIZED>"`. |
 | `project_root` | Replaced with `"<NORMALIZED>"` (absolute path differs per checkout). |
+| `skill_version` | Replaced with `"<NORMALIZED>"`. The verifier reads it from `metadata.version` in `skills/php-modernization/SKILL.md`, so a release bump changes no snapshot; `tests/test_scripts.py` (`VersionTest`) compares the reported version with both `plugin.json` files. |
 | `environment.php_runtime` | Replaced with `"<NORMALIZED>"` (varies per runner; can also be `"unknown"` if `php` is not on PATH). |
 | `tool_runs[]` | Replaced with `[]` — these are subprocess outcomes, not deterministic. The runner invokes the verifier with `--no-tools`, so this should already be empty, but the normalization makes the contract explicit. |
 | `checks[]` | Sorted by `id`. |
@@ -67,11 +68,6 @@ intend the new shape to become the contract. Common triggers:
 
 - A new mechanical check (PM-NN) was added.
 - An existing check's `message`, `severity`, or `evidence` shape changed.
-- `skill_version` was bumped (the version is hardcoded as `SKILL_VERSION` in
-  `skills/php-modernization/scripts/_common.py` and appears in every snapshot —
-  every release of the skill regenerates all snapshots; this is expected).
-  `tests/test_scripts.py` fails while `SKILL_VERSION` differs from the version
-  in `.claude-plugin/plugin.json`.
 - An `agent_actions[]` entry's `target` / `operation` / `rationale` changed.
 
 Before running `--update`, confirm the diff is intentional. Review the
