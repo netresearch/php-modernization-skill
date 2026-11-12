@@ -36,6 +36,7 @@ def read_skill_version(skill_md: Path = SKILL_MD) -> str:
     if not lines or lines[0].strip() != "---":
         return UNKNOWN_VERSION
     in_metadata = False
+    child_indent: int | None = None
     for line in lines[1:]:
         if line.strip() == "---":
             break
@@ -43,9 +44,17 @@ def read_skill_version(skill_md: Path = SKILL_MD) -> str:
             continue
         if not line[0].isspace():
             in_metadata = line.split("#", 1)[0].strip() == "metadata:"
+            child_indent = None
             continue
+        if not in_metadata:
+            continue
+        # The first key under metadata: sets the indentation of its direct
+        # children; a version: nested deeper belongs to another mapping.
+        indent = len(line) - len(line.lstrip())
+        if child_indent is None:
+            child_indent = indent
         key, sep, value = line.strip().partition(":")
-        if in_metadata and sep and key == "version":
+        if indent == child_indent and sep and key == "version":
             value = value.split(" #", 1)[0].strip().strip("\"'").strip()
             return value or UNKNOWN_VERSION
     return UNKNOWN_VERSION

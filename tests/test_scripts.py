@@ -244,6 +244,30 @@ class VersionTest(unittest.TestCase):
                         json.loads(result.stdout)["skill_version"], "unknown"
                     )
 
+    def test_nested_version_under_metadata_is_ignored(self) -> None:
+        cases = {
+            "nested before": (
+                (
+                    '---\nmetadata:\n  release:\n    version: "9.9.9"\n'
+                    '  version: "1.2.3"\n---\n'
+                ),
+                "1.2.3",
+            ),
+            "nested only": (
+                '---\nmetadata:\n  release:\n    version: "9.9.9"\n---\n',
+                "unknown",
+            ),
+        }
+        with SkillCopy() as skill:
+            for case, (content, expected) in cases.items():
+                with self.subTest(case=case):
+                    (skill / "SKILL.md").write_text(content, encoding="utf-8")
+                    result = verify_with(skill)
+                    self.assertNotIn("Traceback", result.stderr)
+                    self.assertEqual(
+                        json.loads(result.stdout)["skill_version"], expected
+                    )
+
     def test_version_quoting_styles(self) -> None:
         cases = {
             "double": '  version: "4.5.6"',
