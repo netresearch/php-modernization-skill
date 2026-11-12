@@ -11,6 +11,8 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.24.2] - 2026-11-12
+
 ### Added
 
 - `references/migration-strategies.md`: how to choose the update scope — a full `composer update` after raising the PHP floor, `composer update <vendor>/<package> --with-all-dependencies` when one library moves, and why `composer update --lock` resolves nothing and only rewrites the lock's `content-hash` plus mirror and URL metadata — and how to resolve a `composer.lock` conflict: resolve `composer.json` first, take one side of the lock whole and regenerate it, with which side `--ours` is during a rebase and during a merge
@@ -238,7 +240,8 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 (historical — pre-CHANGELOG)
 
-[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.1...HEAD
+[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.2...HEAD
+[1.24.2]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.1...v1.24.2
 [1.24.1]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.0...v1.24.1
 [1.24.0]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.6...v1.24.0
 [1.23.6]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.5...v1.23.6
