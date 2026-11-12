@@ -14,9 +14,63 @@ from typing import Any
 
 SCHEMA_VERSION = "1.0.0"
 SKILL_ID = "php-modernization"
-# Keep equal to the version in .claude-plugin/plugin.json; tests/test_scripts.py
-# fails when the two differ.
-SKILL_VERSION = "1.24.2"
+# The skill's SKILL.md sits next to scripts/ in the repository, in the
+# Composer install and in both release archives.
+SKILL_MD = Path(__file__).resolve().parent.parent / "SKILL.md"
+UNKNOWN_VERSION = "unknown"
+
+
+def _frontmatter_lines(skill_md: Path) -> list[str]:
+    """Return the non-blank, non-comment lines of the first frontmatter block.
+
+    Empty when the file is missing or unreadable or has no frontmatter.
+    """
+    try:
+        lines = skill_md.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return []
+    if not lines or lines[0].strip() != "---":
+        return []
+    block: list[str] = []
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        if line.strip() and not line.lstrip().startswith("#"):
+            block.append(line)
+    return block
+
+
+def read_skill_version(skill_md: Path = SKILL_MD) -> str:
+    """Return ``metadata.version`` from the SKILL.md frontmatter.
+
+    The release bump rewrites that line, so the reports follow it without a
+    second copy of the version. Returns ``UNKNOWN_VERSION`` when the file is
+    missing or unreadable, or when its frontmatter has no ``metadata.version``;
+    the verifier still runs then. Only a ``version:`` directly under
+    ``metadata:`` counts.
+    """
+    in_metadata = False
+    child_indent: int | None = None
+    for line in _frontmatter_lines(skill_md):
+        if not line[0].isspace():
+            in_metadata = line.split("#", 1)[0].strip() == "metadata:"
+            child_indent = None
+            continue
+        if not in_metadata:
+            continue
+        # The first key under metadata: sets the indentation of its direct
+        # children; a version: nested deeper belongs to another mapping.
+        indent = len(line) - len(line.lstrip())
+        if child_indent is None:
+            child_indent = indent
+        key, sep, value = line.strip().partition(":")
+        if indent == child_indent and sep and key == "version":
+            value = value.split(" #", 1)[0].strip().strip("\"'").strip()
+            return value or UNKNOWN_VERSION
+    return UNKNOWN_VERSION
+
+
+SKILL_VERSION = read_skill_version()
 
 
 def detect_archetype(root: Path) -> str:
