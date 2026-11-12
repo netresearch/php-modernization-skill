@@ -11,6 +11,11 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+### Added
+
+- `references/migration-strategies.md`: how to choose the update scope — a full `composer update` after raising the PHP floor, `composer update <vendor>/<package> --with-all-dependencies` when one library moves, and why `composer update --lock` resolves nothing and only rewrites the lock's `content-hash` — and how to resolve a `composer.lock` conflict: resolve `composer.json` first, take one side of the lock whole and regenerate it, with which side `--ours` is during a rebase and during a merge
+- `references/static-analysis-tools.md`: `JsonSerializable` is not generic; `@implements \JsonSerializable<…>` fails with `generics.notGeneric` (PHPStan 2.3.5), so the shape goes on `jsonSerialize()` as `@return array{…}`
+
 ## [1.24.1] - 2026-11-04
 
 ### Changed
