@@ -390,14 +390,25 @@ def box_base(name: str) -> list[str]:
 def start_egress(args: argparse.Namespace, run_id: str) -> None:
     """An internal network for the agents and a proxy as its only way out.
 
-    The network has no route to the outside or to the host. The proxy
+    The network has no route to the outside, and the host has no address
+    on it: an --internal network alone gives the host a gateway address
+    there, and a host service listening on all interfaces answered on it
+    (measured, Docker 29.9.3); inhibit_ipv4 removes that address. The proxy
     (tinyproxy, configured in agent.Dockerfile) sits on it and on the
     default bridge and lets CONNECT through to api.anthropic.com:443 only.
     """
     args.network = f"pm-eval-{run_id}"
     args.proxy = f"pm-eval-proxy-{run_id}"
     for cmd in (
-        ["docker", "network", "create", "--internal", args.network],
+        [
+            "docker",
+            "network",
+            "create",
+            "--internal",
+            "-o",
+            "com.docker.network.bridge.inhibit_ipv4=true",
+            args.network,
+        ],
         [
             "docker",
             "run",
@@ -440,6 +451,9 @@ def docker_prefix(
         *box_base(name),
         "--network",
         args.network,
+        # Container names still resolve; nothing is forwarded upstream.
+        "--dns",
+        "0.0.0.0",
         "-e",
         f"HTTPS_PROXY={proxy}",
         "-e",

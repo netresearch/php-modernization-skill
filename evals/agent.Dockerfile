@@ -36,3 +36,8 @@ RUN printf '%s\n' '^api\.anthropic\.com$' > /etc/tinyproxy/allow \
         > /etc/tinyproxy/eval.conf
 
 ENV COMPOSER_NO_INTERACTION=1
+
+# The runner passes --user with the host's uid for agents and the checker;
+# this default covers the proxy and any container started without it.
+RUN useradd --uid 10001 --create-home eval
+USER eval
