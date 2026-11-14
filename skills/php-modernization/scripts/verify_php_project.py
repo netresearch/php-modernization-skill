@@ -41,7 +41,9 @@ from _common import (
     FRACTOR_CONFIG_CANDIDATES,
     PHP_CS_FIXER_CANDIDATES,
     PHPCS_CONFIG_CANDIDATES,
+    PHPSTAN_CONFIG_CANDIDATES,
     PHPUNIT_CONFIG_CANDIDATES,
+    RECTOR_CONFIG_CANDIDATES,
     SCHEMA_VERSION,
     SKILL_ID,
     SKILL_MD,
@@ -62,17 +64,6 @@ SARIF_SCHEMA_URI = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/cos02/schemas
 DEFAULT_CACHE_PATH = Path(".build/php-modernization/last-run.json")
 ARTIFACT_DIR = Path(".build/php-modernization")
 
-PHPSTAN_CONFIG_CANDIDATES: tuple[str, ...] = (
-    "phpstan.neon",
-    "phpstan.neon.dist",
-    "Build/phpstan.neon",
-    "Build/phpstan/phpstan.neon",
-)
-RECTOR_CONFIG_CANDIDATES: tuple[str, ...] = (
-    "rector.php",
-    "Build/rector.php",
-    "Build/rector/rector.php",
-)
 PHPSTAN_BASELINE_CANDIDATES: tuple[str, ...] = (
     "phpstan-baseline.neon",
     "Build/phpstan-baseline.neon",
@@ -1125,6 +1116,12 @@ def run_phpstan(root: Path) -> ToolRun | None:
     if binary is None:
         return None
     cmd = [str(binary), "analyse", "--no-progress", "--error-format=json"]
+    # PHPStan finds a config only in the working directory; one under Build/
+    # (the TYPO3 layout) has to be named, or the run ends with "At least one
+    # path must be specified to analyse".
+    config = find_first_existing(root, PHPSTAN_CONFIG_CANDIDATES)
+    if config is not None:
+        cmd.append(f"--configuration={config.relative_to(root)}")
     artifact = _ensure_artifact_dir(root) / "phpstan.json"
     try:
         completed = subprocess.run(

@@ -42,6 +42,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -55,7 +56,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import (
     PHP_CS_FIXER_CANDIDATES,
     PHPCS_CONFIG_CANDIDATES,
+    PHPSTAN_CONFIG_CANDIDATES,
     PHPUNIT_CONFIG_CANDIDATES,
+    RECTOR_CONFIG_CANDIDATES,
     coding_standard,
     find_binary,
     first_existing,
@@ -81,6 +84,7 @@ ALL_TOOLS: tuple[str, ...] = (
 # dry-run that proposes edits has work left for the agent.
 FAILING_STATUSES = frozenset({"changes", "fail", "timeout", "error"})
 FORMATTERS = frozenset({"php-cs-fixer", "phpcs"})
+ANSI_ESCAPE_RE = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
 
 
 @dataclass
@@ -124,6 +128,8 @@ class Context:
     php_cs_fixer_config: str | None
     phpcs_config: str | None
     phpunit_config: str | None
+    phpstan_config: str | None = None
+    rector_config: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +147,12 @@ def _run(
     cmd: list[str],
     cwd: Path,
     artifact: Path | None,
-) -> tuple[int | None, float, str | None]:
+) -> tuple[int | None, float, str | None, str]:
+    """Run ``cmd``; return exit code, duration, run error and stderr's last line.
+
+    The artifact receives stdout only, so a JSON report stays JSON; stderr
+    (deprecations, stack traces) goes to ``<artifact>.stderr`` when present.
+    """
     start = time.monotonic()
     try:
         completed = subprocess.run(
@@ -153,18 +164,25 @@ def _run(
             timeout=SUBPROCESS_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired:
-        return None, time.monotonic() - start, "timeout"
+        return None, time.monotonic() - start, "timeout", ""
     except OSError as exc:
-        return None, time.monotonic() - start, f"error: {exc}"
+        return None, time.monotonic() - start, f"error: {exc}", ""
     duration = time.monotonic() - start
+    stderr = completed.stderr or ""
     if artifact is not None:
         try:
-            artifact.write_text(
-                (completed.stdout or "") + (completed.stderr or ""), encoding="utf-8"
-            )
+            artifact.write_text(completed.stdout or "", encoding="utf-8")
+            if stderr.strip():
+                artifact.with_name(artifact.name + ".stderr").write_text(
+                    stderr, encoding="utf-8"
+                )
         except OSError:
+            # The reports are a convenience; status and summary do not
+            # depend on them.
             pass
-    return completed.returncode, duration, None
+    plain = ANSI_ESCAPE_RE.sub("", stderr)
+    lines = [line.strip() for line in plain.splitlines() if line.strip()]
+    return completed.returncode, duration, None, (lines[-1][:200] if lines else "")
 
 
 def _missing(tool: str, what: str) -> ToolResult:
@@ -198,13 +216,15 @@ def _execute(
 ) -> ToolResult:
     """Run ``cmd`` and map its exit code with ``classify(rc) -> (status, summary)``."""
     artifact = _ensure_artifact_dir(ctx.root) / artifact_name if artifact_name else None
-    rc, duration, err = _run(cmd, ctx.root, artifact)
+    rc, duration, err, stderr_tail = _run(cmd, ctx.root, artifact)
     command = " ".join(cmd)
     if err == "timeout":
         return ToolResult(tool, "timeout", None, command, duration, "exceeded timeout")
     if err:
         return ToolResult(tool, "error", None, command, duration, err)
     status, summary = classify(rc)
+    if status in {"fail", "error"} and stderr_tail:
+        summary = f"{summary} — stderr: {stderr_tail}"
     return ToolResult(
         tool=tool,
         status=status,
@@ -226,6 +246,9 @@ def run_rector(ctx: Context, *, dry_run: bool, tool: str = "rector") -> ToolResu
     if binary is None:
         return _missing(tool, "rector")
     cmd = [str(binary), "process", *ctx.paths]
+    # Rector reads rector.php from the working directory only.
+    if ctx.rector_config and ctx.rector_config != "rector.php":
+        cmd.append(f"--config={ctx.rector_config}")
     cmd += [f"--only={rule}" for rule in ctx.rector_rules]
     if dry_run:
         cmd += ["--dry-run", "--output-format=json"]
@@ -306,7 +329,7 @@ def run_phpcs(ctx: Context, *, dry_run: bool) -> ToolResult:
             return _missing("phpcs", "phpcbf")
         cmd = [str(phpcbf), *args]
         commands.append(" ".join(cmd))
-        rc, took, err = _run(cmd, ctx.root, None)
+        rc, took, err, _ = _run(cmd, ctx.root, None)
         duration += took
         if err:
             status = "timeout" if err == "timeout" else "error"
@@ -455,7 +478,12 @@ def run_phpstan(ctx: Context) -> ToolResult:
     binary = find_binary(ctx.root, "phpstan", ctx.composer)
     if binary is None:
         return _missing("phpstan", "phpstan")
-    cmd = [str(binary), "analyse", "--no-progress", "--error-format=json", *ctx.paths]
+    cmd = [str(binary), "analyse", "--no-progress", "--error-format=json"]
+    # PHPStan reads a config from the working directory only; one under
+    # Build/ has to be named.
+    if ctx.phpstan_config:
+        cmd.append(f"--configuration={ctx.phpstan_config}")
+    cmd += ctx.paths
     return _execute(
         ctx,
         "phpstan",
@@ -597,6 +625,8 @@ def build_context(
         php_cs_fixer_config=fixer_config,
         phpcs_config=first_existing(root, PHPCS_CONFIG_CANDIDATES),
         phpunit_config=first_existing(root, PHPUNIT_CONFIG_CANDIDATES),
+        phpstan_config=first_existing(root, PHPSTAN_CONFIG_CANDIDATES),
+        rector_config=first_existing(root, RECTOR_CONFIG_CANDIDATES),
     )
 
 

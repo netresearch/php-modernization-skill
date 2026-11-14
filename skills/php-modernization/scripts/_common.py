@@ -184,6 +184,18 @@ PHP_CS_FIXER_CANDIDATES: tuple[str, ...] = (
     "Build/.php-cs-fixer.php",
     "Build/.php-cs-fixer.dist.php",
 )
+# Same order as PM-01 in checkpoints.yaml and PHPStan's own precedence.
+PHPSTAN_CONFIG_CANDIDATES: tuple[str, ...] = (
+    "phpstan.neon",
+    "phpstan.neon.dist",
+    "Build/phpstan.neon",
+    "Build/phpstan/phpstan.neon",
+)
+RECTOR_CONFIG_CANDIDATES: tuple[str, ...] = (
+    "rector.php",
+    "Build/rector.php",
+    "Build/rector/rector.php",
+)
 # Root first, then Build/. PHPCS itself looks for .phpcs.xml, phpcs.xml,
 # .phpcs.xml.dist and phpcs.xml.dist in the working directory.
 PHPCS_CONFIG_CANDIDATES: tuple[str, ...] = (

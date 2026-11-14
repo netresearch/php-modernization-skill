@@ -723,6 +723,38 @@ class ModernizeLoopTest(unittest.TestCase):
             self.assertEqual(args[:3], ["process", "src", f"--only={rule}"])
             self.assertEqual(json.loads(result.stdout)["scope"], ["src"])
 
+    def test_configs_under_build_are_named_on_the_command_line(self) -> None:
+        # PHPStan and Rector read their config from the working directory
+        # only; without the flag a TYPO3 extension's Build/phpstan.neon is
+        # ignored and the run ends with "At least one path must be specified".
+        with TempProject("typo3-extension-minimal") as root:
+            (root / "Build").mkdir()
+            (root / "Build" / "phpstan.neon").write_text(
+                "parameters:\n  level: 9\n", "utf-8"
+            )
+            (root / "Build" / "rector.php").write_text("<?php\n", "utf-8")
+            for tool in ("rector", "phpstan"):
+                fake_tool(root, tool, exit_code=0)
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "rector,phpstan"
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            bin_dir = root / "vendor" / "bin"
+            self.assertIn(
+                "--config=Build/rector.php",
+                (bin_dir / "rector.args").read_text().split(),
+            )
+            self.assertIn(
+                "--configuration=Build/phpstan.neon",
+                (bin_dir / "phpstan.args").read_text().split(),
+            )
+            (bin_dir / "phpstan.args").unlink()
+            run_py("verify_php_project.py", "--root", root, "--no-cache")
+            self.assertIn(
+                "--configuration=Build/phpstan.neon",
+                (bin_dir / "phpstan.args").read_text().split(),
+            )
+
     def test_missing_path_is_a_usage_error(self) -> None:
         with TempProject("generic-composer-minimal") as root:
             result = run_py("modernize_loop.py", "--root", root, "--path", "nope")

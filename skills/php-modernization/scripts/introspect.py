@@ -37,7 +37,9 @@ from _common import (
     LINTER_PACKAGES,
     PHP_CS_FIXER_CANDIDATES,
     PHPCS_CONFIG_CANDIDATES,
+    PHPSTAN_CONFIG_CANDIDATES,
     PHPUNIT_CONFIG_CANDIDATES,
+    RECTOR_CONFIG_CANDIDATES,
     SCHEMA_VERSION,
     SKILL_ID,
     ci_files,
@@ -56,18 +58,6 @@ PHPSTAN_BASELINE_CANDIDATES: tuple[str, ...] = (
     "phpstan-baseline.neon",
     "Build/phpstan-baseline.neon",
     "Build/phpstan/phpstan-baseline.neon",
-)
-# Same lists and order as verify_php_project.py.
-PHPSTAN_CONFIG_CANDIDATES: tuple[str, ...] = (
-    "phpstan.neon",
-    "phpstan.neon.dist",
-    "Build/phpstan.neon",
-    "Build/phpstan/phpstan.neon",
-)
-RECTOR_CONFIG_CANDIDATES: tuple[str, ...] = (
-    "rector.php",
-    "Build/rector.php",
-    "Build/rector/rector.php",
 )
 PSALM_BASELINE_CANDIDATES: tuple[str, ...] = (
     "psalm-baseline.xml",
