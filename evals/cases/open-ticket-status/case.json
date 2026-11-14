@@ -1,0 +1,12 @@
+{
+  "id": "open-ticket-status",
+  "title": "A status set that installations extend through configuration",
+  "kind": "keep",
+  "namespace": "Cases\\OpenTicketStatus\\",
+  "php_floor": "8.2",
+  "task": "Modernize src/TicketWorkflow.php to PHP 8.2 idioms where that helps. Installations add their own statuses through the constructor's $extraStatuses argument, which comes from their configuration.",
+  "start_expect": "pass",
+  "bad": {
+    "fails_at": "phpunit"
+  }
+}

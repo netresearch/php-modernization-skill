@@ -1,0 +1,15 @@
+{
+    "name": "netresearch/php-modernization-eval-cases",
+    "description": "Tools for the executable eval cases: the acceptance checks (PHPUnit, PHPStan) and the tools an agent finds in a case project (Rector, PHPCS).",
+    "type": "project",
+    "license": "MIT",
+    "require-dev": {
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^11.5 || ^12.0 || ^13.0",
+        "rector/rector": "^2.2",
+        "squizlabs/php_codesniffer": "^4.0"
+    },
+    "config": {
+        "sort-packages": true
+    }
+}

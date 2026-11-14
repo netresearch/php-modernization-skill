@@ -1,0 +1,8 @@
+{
+  "bad": {
+    "finding": "StatusText::for() now takes int, but ResponseSummary::describe() (not changed by the pull request) passes the code it splits out of the status line, which is a string; under strict_types that is a TypeError, PHPStan reports it as argument.type, and the strict match would also send '404' to 'Unknown'."
+  },
+  "good": {
+    "verdict": "approve"
+  }
+}

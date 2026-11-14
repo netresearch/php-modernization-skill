@@ -1,0 +1,12 @@
+{
+  "id": "unknown-stored-shipment",
+  "title": "Legacy stored values the new enum does not know",
+  "kind": "convert",
+  "namespace": "Cases\\UnknownStoredShipment\\",
+  "php_floor": "8.2",
+  "task": "Replace the shipment status strings in src/ with a backed enum ShipmentStatus (namespace Cases\\UnknownStoredShipment, values 'in_transit' and 'delivered'). Shipment::status() returns ?ShipmentStatus. The shipments table still holds legacy rows with status values that no longer exist.",
+  "start_expect": "fail",
+  "bad": {
+    "fails_at": "phpunit"
+  }
+}

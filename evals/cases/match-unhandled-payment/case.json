@@ -1,0 +1,15 @@
+{
+  "id": "match-unhandled-payment",
+  "title": "A new enum case that one match does not handle",
+  "kind": "convert",
+  "namespace": "Cases\\MatchUnhandledPayment\\",
+  "php_floor": "8.2",
+  "task": "Add the payment method Klarna (value 'klarna') to the PaymentMethod enum in src/. Its fee is 120 cents.",
+  "start_expect": "fail",
+  "bad": {
+    "fails_at": "phpstan",
+    "expect": {
+      "identifier": "match.unhandled"
+    }
+  }
+}

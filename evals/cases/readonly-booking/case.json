@@ -1,0 +1,12 @@
+{
+  "id": "readonly-booking",
+  "title": "readonly over a mutable \\DateTime member",
+  "kind": "convert",
+  "namespace": "Cases\\ReadonlyBooking\\",
+  "php_floor": "8.2",
+  "task": "Make Booking in src/ an immutable value object using readonly.",
+  "start_expect": "fail",
+  "bad": {
+    "fails_at": "phpunit"
+  }
+}

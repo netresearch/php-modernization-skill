@@ -1,0 +1,15 @@
+{
+  "id": "review-http-status-types",
+  "title": "a parameter type that breaks a caller outside the diff",
+  "kind": "convert",
+  "namespace": "Cases\\ReviewHttpStatusTypes\\",
+  "php_floor": "8.2",
+  "task": "Modernize src/Request.php, src/Response.php and src/StatusText.php to PHP 8.2: native property, parameter and return types, constructor promotion, and a match expression instead of the switch where that keeps the behaviour.",
+  "start_expect": "fail",
+  "bad": {
+    "fails_at": "phpstan",
+    "expect": {
+      "identifier": "argument.type"
+    }
+  }
+}

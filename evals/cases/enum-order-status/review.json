@@ -1,0 +1,8 @@
+{
+  "bad": {
+    "finding": "Order::toArray() now puts the OrderStatus enum case into the array instead of the stored string, so callers of the array (the API, typed as status: string) get an object instead of 'paid'; the enum should stay inside the domain and toArray() should return ->value."
+  },
+  "good": {
+    "verdict": "approve"
+  }
+}

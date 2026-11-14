@@ -1,0 +1,12 @@
+{
+  "id": "enum-order-status",
+  "title": "Scattered order status strings that form one closed set",
+  "kind": "convert",
+  "namespace": "Cases\\EnumOrderStatus\\",
+  "php_floor": "8.2",
+  "task": "The order status values 'pending', 'paid' and 'shipped' are scattered as strings across src/. Introduce a backed enum OrderStatus in the namespace Cases\\EnumOrderStatus and use it inside the domain: Order::status() returns an OrderStatus and OrderLabel::label() takes an OrderStatus. Order::fromRow() reads database rows and Order::toArray() feeds a public JSON API.",
+  "start_expect": "fail",
+  "bad": {
+    "fails_at": "phpunit"
+  }
+}
