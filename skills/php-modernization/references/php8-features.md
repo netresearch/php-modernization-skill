@@ -124,7 +124,9 @@ $label = match($status) {
 //
 // 1. Comparison: switch compares with ==, match with ===. If the subject
 //    is untyped or int|string, `case 200:` also matched "200"; `200 =>`
-//    does not. Rector 2.8.4 converts such a switch without a warning.
+//    does not. Rector 2.8.4 converted such a switch on a parameter with no
+//    type and no docblock; with `@param int|string` it left it alone. A
+//    missing type is no guarantee the values are all one type.
 //    Keep the behaviour (normalise the subject first, or list both values)
 //    or state the change and pin it with a test.
 // 2. Fall-through: a case without break runs the next case too. match has

@@ -33,7 +33,7 @@ phpunit/phpunit 13.4.7, PHP 8.5.12.
 |---|---|
 | `ChangeSwitchToMatchRector`, `ReadOnlyPropertyRector`, `ReadOnlyClassRector`, the MyCLabs and Spatie enum rules exist | Present in `rules/Php80`, `Php81`, `Php82` |
 | `rector process --only=<FQCN>` exists | Present; repeatable |
-| `ChangeSwitchToMatchRector` keeps behaviour | **No.** An untyped `switch ($code) { case 200: … }` became `match ($code) { 200 => … }`. `switch` compares with `==`, `match` with `===`, so the input `"200"` now reaches `default`. |
+| `ChangeSwitchToMatchRector` keeps behaviour | **No.** On a parameter with no type and no docblock, `switch ($code) { case 200: … }` became `match ($code) { 200 => … }`. `switch` compares with `==`, `match` with `===`, so the input `"200"` now reaches `default`. With `@param int\|string $code` Rector left the `switch` alone. |
 | `ReadOnlyClassRector` is safe on value objects | **No.** A class holding a mutable `\DateTime` became `final readonly class`; the object is still mutable through the getter. |
 | Rector dry-run exit codes | `0` no change, `2` changes proposed. The orchestrator reports `2` as a failure. |
 | PHPStan reports a missing enum case in `match` | Yes, identifier `match.unhandled` |
