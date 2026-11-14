@@ -28,6 +28,21 @@ skill state: no php-modernization skill in ``without``; exactly the plugin
 under test in ``with:*``. Invalid runs are kept and reported, never scored.
 A valid run that did not finish (non-zero exit, timeout) counts as failed.
 
+Sandbox (``--sandbox``):
+
+- ``docker`` (default) — the agent runs in a container built from
+  ``evals/agent.Dockerfile`` with ``--permission-mode bypassPermissions``.
+  The container sees its own tree, the plugin under test (read-only), the
+  host's claude binary (read-only) and the Claude Code login file
+  (read-only); no other host file and no host environment variable. The
+  agent can read that login file: run evals with an account whose token
+  you can rotate.
+- ``host`` — the agent runs on the host with an allowlist
+  (``--allowedTools``) and a filtered environment. The allowlist is not a
+  sandbox, and it refuses some ordinary commands, so tool use is not
+  comparable to a run without it; ``result.permission_denials`` counts the
+  refusals.
+
 Isolation (``--isolation``):
 
 - ``project`` (default) — ``claude --setting-sources project``: the user's
@@ -40,6 +55,7 @@ Isolation (``--isolation``):
 - ``none`` — everything installed loads; for debugging only. In a profile
   that has the skill installed, every run is invalid by the rule above.
 
+    docker build -t php-modernization-evals -f evals/agent.Dockerfile evals
     uv run evals/run_agent_cases.py --arms without,with:origin/main,with:WORKTREE --runs 3
     uv run evals/run_agent_cases.py --cases switch-loose-http --runs 1 --model haiku
 
@@ -61,7 +77,9 @@ import shutil
 import subprocess
 import sys
 import time
+import uuid
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -69,6 +87,10 @@ REPO = Path(__file__).resolve().parent.parent
 CASES = REPO / "evals" / "cases"
 CHECKER = CASES / "check_case.py"
 SKILL = "php-modernization"
+# Paths inside the docker sandbox.
+BOX_TREE = "/work"
+BOX_PLUGIN = "/plugin"
+BOX_HOME = "/home/agent"
 PROMPT_SUFFIX = (
     "\n\nThe project is in the current directory. When the task is done, stop."
 )
@@ -307,6 +329,40 @@ def agent_env(isolation: str) -> dict[str, str]:
     return env
 
 
+def docker_prefix(
+    args: argparse.Namespace, tree: Path, plugin: Path | None, name: str
+) -> list[str]:
+    """``docker run`` up to the image; the claude command follows."""
+    uid, gid = os.getuid(), os.getgid()
+    claude_bin = Path(shutil.which(args.claude) or args.claude).resolve()
+    cmd = [
+        "docker",
+        "run",
+        "--rm",
+        "--name",
+        name,
+        "--user",
+        f"{uid}:{gid}",
+        "--tmpfs",
+        f"{BOX_HOME}:uid={uid},gid={gid}",
+        "-e",
+        f"HOME={BOX_HOME}",
+        "-v",
+        f"{claude_bin}:/usr/local/bin/claude:ro",
+        "-v",
+        f"{tree}:{BOX_TREE}",
+        "-w",
+        BOX_TREE,
+    ]
+    if args.isolation == "bare":
+        cmd += ["-e", "ANTHROPIC_API_KEY"]
+    else:
+        cmd += ["-v", f"{args.credentials}:{BOX_HOME}/.claude/.credentials.json:ro"]
+    if plugin is not None:
+        cmd += ["-v", f"{plugin}:{BOX_PLUGIN}:ro"]
+    return [*cmd, args.image, "claude"]
+
+
 def run_one(
     *,
     case: dict,
@@ -324,8 +380,12 @@ def run_one(
     tree = args.work_root / case["id"] / label
     run_dir.mkdir(parents=True)
     prepare_tree(case["id"], tree)
+    box = args.sandbox == "docker"
+    name = f"pm-eval-{uuid.uuid4().hex[:12]}"
+    # The plugin path the agent sees, and the one its init event must show.
+    seen_plugin = Path(BOX_PLUGIN) if box and plugin is not None else plugin
     cmd = [
-        args.claude,
+        *(docker_prefix(args, tree, plugin, name) if box else [args.claude]),
         "-p",
         case["task"] + PROMPT_SUFFIX,
         "--output-format",
@@ -335,15 +395,17 @@ def run_one(
         args.model,
         "--max-turns",
         str(args.max_turns),
-        "--allowedTools",
-        ",".join(allowed_tools(plugin)),
     ]
+    if box:
+        cmd += ["--permission-mode", "bypassPermissions"]
+    else:
+        cmd += ["--allowedTools", ",".join(allowed_tools(plugin))]
     if args.isolation == "bare":
         cmd.append("--bare")
     elif args.isolation == "project":
         cmd += ["--setting-sources", "project"]
-    if plugin is not None:
-        cmd += ["--plugin-dir", str(plugin)]
+    if seen_plugin is not None:
+        cmd += ["--plugin-dir", str(seen_plugin)]
     transcript = run_dir / "transcript.jsonl"
     start = time.monotonic()
     with transcript.open("w", encoding="utf-8") as fh:
@@ -352,7 +414,9 @@ def run_one(
                 cmd,
                 check=False,
                 cwd=str(tree),
-                env=agent_env(args.isolation),
+                # docker run passes no host variable into the container;
+                # the docker client itself needs the host environment.
+                env=os.environ.copy() if box else agent_env(args.isolation),
                 stdout=fh,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -362,6 +426,9 @@ def run_one(
             stderr = proc.stderr[-2000:]
         except subprocess.TimeoutExpired:
             exit_code, stderr = None, "timeout"
+            if box:
+                # Killing the docker client leaves the container running.
+                sh(["docker", "rm", "-f", name], REPO)
     duration = time.monotonic() - start
 
     sh(["git", "add", "-A"], tree)
@@ -385,7 +452,7 @@ def run_one(
     # (non-zero exit, timeout, turn limit) stays valid and counts as not
     # passed: dropping it would raise the pass rate of the arm that fails
     # to finish more often.
-    valid, reason = validity(arm, init_event(transcript), plugin)
+    valid, reason = validity(arm, init_event(transcript), seen_plugin)
     completed = exit_code == 0
     record = {
         "case": case["id"],
@@ -395,6 +462,7 @@ def run_one(
         "skill_commit": commit,
         "model": args.model,
         "isolation": args.isolation,
+        "sandbox": args.sandbox,
         "valid": valid,
         "invalid_reason": reason,
         "completed": completed,
@@ -408,8 +476,8 @@ def run_one(
     (run_dir / "run.json").write_text(
         json.dumps(record, indent=2) + "\n", encoding="utf-8"
     )
-    # The tree's vendor/ is a 100+ MB copy; the patch and the checks keep the result.
-    # patch.diff and checks.json keep the result; the tree goes.
+    # The tree's vendor/ is a 100+ MB copy; patch.diff and checks.json keep
+    # the result, so the tree goes.
     shutil.rmtree(tree, ignore_errors=True)
     return record
 
@@ -453,6 +521,26 @@ def main(argv: list[str] | None = None) -> int:
         "(default: ~/.cache/php-modernization-evals/<timestamp>)",
     )
     parser.add_argument(
+        "--sandbox",
+        choices=("docker", "host"),
+        default="docker",
+        help="docker: container with bypassPermissions (default); host: allowlist on the host",
+    )
+    parser.add_argument(
+        "--image",
+        default="php-modernization-evals",
+        help="image for --sandbox docker (build: evals/agent.Dockerfile)",
+    )
+    parser.add_argument(
+        "--credentials",
+        type=Path,
+        default=Path.home() / ".claude" / ".credentials.json",
+        help="Claude Code login file, mounted read-only into the container",
+    )
+    parser.add_argument(
+        "--jobs", type=int, default=1, help="runs in parallel (default: 1)"
+    )
+    parser.add_argument(
         "--isolation",
         choices=("project", "bare", "none"),
         default="project",
@@ -468,6 +556,17 @@ def main(argv: list[str] | None = None) -> int:
         )
     if shutil.which(args.claude) is None:
         parser.error(f"{args.claude!r} not found")
+    if args.sandbox == "docker":
+        image = sh(["docker", "image", "inspect", args.image], REPO)
+        if image.returncode != 0:
+            parser.error(
+                f"image {args.image!r} not found: docker build -t {args.image} "
+                "-f evals/agent.Dockerfile evals"
+            )
+        if args.isolation != "bare" and not args.credentials.is_file():
+            parser.error(f"--credentials {args.credentials} is not a file")
+    if args.jobs < 1:
+        parser.error("--jobs must be at least 1")
 
     available = sorted(p.parent.name for p in CASES.glob("*/case.json"))
     selected = [c for c in args.cases.split(",") if c] or available
@@ -495,31 +594,31 @@ def main(argv: list[str] | None = None) -> int:
         arm: plugin_root(arm, args.work_root) for arm in arms if arm != "without"
     }
 
-    records: list[dict] = []
-    for case_id in selected:
-        case = json.loads((CASES / case_id / "case.json").read_text(encoding="utf-8"))
-        for arm in arms:
-            plugin, commit = plugins.get(arm, (None, ""))
-            for n in range(1, args.runs + 1):
-                record = run_one(
-                    case=case,
-                    arm=arm,
-                    n=n,
-                    out=out,
-                    args=args,
-                    plugin=plugin,
-                    commit=commit,
-                )
-                records.append(record)
-                flag = "PASS" if record["passed"] else "fail"
-                if not record["valid"]:
-                    flag = f"INVALID ({record['invalid_reason'][:80]})"
-                print(f"{case_id:26} {arm:22} #{n} {flag}", flush=True)
+    def one(job: tuple[dict, str, int]) -> dict:
+        case, arm, n = job
+        plugin, commit = plugins.get(arm, (None, ""))
+        record = run_one(
+            case=case, arm=arm, n=n, out=out, args=args, plugin=plugin, commit=commit
+        )
+        flag = "PASS" if record["passed"] else "fail"
+        if not record["valid"]:
+            flag = f"INVALID ({record['invalid_reason'][:80]})"
+        print(f"{case['id']:26} {arm:22} #{n} {flag}", flush=True)
+        return record
+
+    cases = [
+        json.loads((CASES / c / "case.json").read_text(encoding="utf-8"))
+        for c in selected
+    ]
+    jobs = [(c, arm, n) for c in cases for arm in arms for n in range(1, args.runs + 1)]
+    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+        records = list(pool.map(one, jobs))
 
     summary = {
         "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "model": args.model,
         "isolation": args.isolation,
+        "sandbox": args.sandbox,
         "arms": {arm: plugins.get(arm, (None, ""))[1] for arm in arms},
         "table": summarise(records),
         "runs": records,

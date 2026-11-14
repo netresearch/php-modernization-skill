@@ -83,7 +83,7 @@
 - `uv run --python 3.11 python tests/test_scripts.py` — behaviour tests for the introspector, verifier, orchestrator and Bash wrapper.
 - `bash scripts/verify-harness.sh` — agent-harness consistency check (this file, docs, refs).
 - `composer install --working-dir=evals/cases && uv run evals/cases/check_case.py --self-test` — prove the eval-case checks (also `python3 tests/test_eval_cases.py`).
-- `uv run evals/run_agent_cases.py --arms without,with:origin/main,with:WORKTREE --runs 3` — agent evals on the cases, isolated from the user's plugins, skills and CLAUDE.md (`--setting-sources project`). Costs model tokens; run it for changes to the modernization rules, not on every commit.
+- `docker build -t php-modernization-evals -f evals/agent.Dockerfile evals`, then `uv run evals/run_agent_cases.py --arms without,with:origin/main,with:WORKTREE --runs 3` — agent evals on the cases, each agent in a container, isolated from the user's plugins, skills and CLAUDE.md (`--setting-sources project`). Costs model tokens; run it for changes to the modernization rules, not on every commit.
 
 ## Hard Guardrails
 
