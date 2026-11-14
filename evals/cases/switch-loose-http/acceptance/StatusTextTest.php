@@ -26,8 +26,13 @@ final class StatusTextTest extends TestCase
 
     public function testTheSwitchIsGone(): void
     {
-        $source = (string) file_get_contents((new \ReflectionClass(StatusText::class))->getFileName());
-        self::assertStringNotContainsString('switch', $source);
-        self::assertStringContainsString('match', $source);
+        $file = (string) (new \ReflectionClass(StatusText::class))->getFileName();
+        $tokens = array_map(
+            static fn (\PhpToken $t): int => $t->id,
+            \PhpToken::tokenize((string) file_get_contents($file)),
+        );
+        // Tokens, not text: a comment that mentions the switch is fine.
+        self::assertNotContains(T_SWITCH, $tokens);
+        self::assertContains(T_MATCH, $tokens);
     }
 }

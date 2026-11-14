@@ -23,8 +23,8 @@ final class OrderStatusTest extends TestCase
     public function testRowsAreReadIntoTheEnum(): void
     {
         $order = Order::fromRow(['id' => '7', 'status' => 'paid']);
-        self::assertSame(OrderStatus::Paid, $order->status());
-        self::assertSame(OrderStatus::Shipped, $order->ship()->status());
+        self::assertSame(OrderStatus::from('paid'), $order->status());
+        self::assertSame(OrderStatus::from('shipped'), $order->ship()->status());
     }
 
     public function testTheApiStillReceivesStrings(): void
@@ -48,7 +48,7 @@ final class OrderStatusTest extends TestCase
 
     public function testLabelsTakeTheEnum(): void
     {
-        self::assertSame('Awaiting payment', (new OrderLabel())->label(OrderStatus::Pending));
-        self::assertSame('Shipped', (new OrderLabel())->label(OrderStatus::Shipped));
+        self::assertSame('Awaiting payment', (new OrderLabel())->label(OrderStatus::from('pending')));
+        self::assertSame('Shipped', (new OrderLabel())->label(OrderStatus::from('shipped')));
     }
 }

@@ -26,7 +26,7 @@ The known-bad solutions of `switch-loose-http` and `readonly-booking` are byte-i
 ├── project/             what the agent works on: src/, composer.json,
 │                        phpstan.neon, rector.php, phpcs.xml.dist, phpunit.xml.dist
 ├── acceptance/          PHPUnit tests, copied in at check time
-└── solutions/{good,bad}/src/   files laid over project/
+└── solutions/{good,good-alt,bad}/src/   files laid over project/
 ```
 
 ## Checks
@@ -40,10 +40,10 @@ uv run evals/cases/check_case.py readonly-booking --solution bad
 uv run evals/cases/check_case.py readonly-booking --tree /path/to/result
 ```
 
-`--self-test` holds when, for every case, the start state does what `start_expect` says (a `convert` case fails unchanged, a `keep` case passes), the good solution passes everything, and the bad solution fails at its named check after the earlier checks passed — so it is a wrong answer, not a syntax or build error. `tests/test_eval_cases.py` runs it in CI.
+`--self-test` holds when, for every case, the start state does what `start_expect` says (a `convert` case fails unchanged, a `keep` case passes), every good solution passes everything (`good`, and `good-alt` where the task leaves room for a second correct answer), and the bad solution fails at its named check after the earlier checks passed — so it is a wrong answer, not a syntax or build error. `tests/test_eval_cases.py` runs it in CI.
 
 ## Agent runs
 
-`evals/run_agent_cases.py` runs `claude -p` on each case per arm (`without`, `with:<git-ref>`, `with:WORKTREE`) and scores each result with `check_case.py`. A run is valid only when its transcript's init event shows the intended skill state; isolation needs `ANTHROPIC_API_KEY` (`claude --bare`). Per run it keeps the transcript, the patch, the checks, the project tools the agent ran and the skills it invoked.
+`evals/run_agent_cases.py` runs `claude -p` on each case per arm (`without`, `with:<git-ref>`, `with:WORKTREE`) and scores each result with `check_case.py`. A run is valid only when its transcript's init event shows the intended skill state; a valid run that did not finish (non-zero exit, timeout, `error_max_turns`) counts as failed. Runs are isolated with `--setting-sources project` by default, so the user's installed plugins, user-level skills and user CLAUDE.md stay out; `--isolation bare` uses `claude --bare` and needs `ANTHROPIC_API_KEY`. Per run it keeps the transcript, the patch, the checks, the project tools the agent ran and the skills it invoked or read.
 
 `evals/run-ab-test.sh` compares output size and duration of text answers. Both of its arms pass `--disable-slash-commands`, and with that flag the session's init event lists 0 skills in either arm (measured with Claude Code 2.1.325), so neither arm has the skill to use. It cannot show whether the skill improves code.

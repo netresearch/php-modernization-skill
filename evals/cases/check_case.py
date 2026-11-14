@@ -219,7 +219,11 @@ def check_phpunit(work: Path) -> CheckResult:
     tests = failures = errors = 0
     if junit.is_file():
         try:
-            suite = ET.parse(junit).getroot()
+            # The log is written by the local PHPUnit run, not fetched input;
+            # expat resolves no external entities.
+            suite = ET.parse(
+                junit
+            ).getroot()  # nosemgrep: python.lang.security.use-defused-xml-parse.use-defused-xml-parse
             tests = int(suite.get("tests") or 0)
             failures = int(suite.get("failures") or 0)
             errors = int(suite.get("errors") or 0)
@@ -229,7 +233,9 @@ def check_phpunit(work: Path) -> CheckResult:
                 failures = int(first.get("failures") or 0)
                 errors = int(first.get("errors") or 0)
         except ET.ParseError:
-            pass
+            # An unreadable log leaves the counts at 0: the run is then
+            # classified as an error below, never as a pass.
+            tests = failures = errors = 0
     # A JUnit log with failing or erroring tests = the tests ran and some did
     # not pass (PHPUnit exits 1 for failures, 2 for errors such as a
     # ValueError from the code under test). No log, no test, or a fatal
@@ -282,9 +288,12 @@ def passed(results: list[CheckResult]) -> bool:
 def self_test_case(case: dict) -> list[str]:
     """Return the problems with one case's checks; empty when the case holds."""
     problems: list[str] = []
-    by = {}
-    for label in ("start", "good", "bad"):
-        by[label] = check_solution(case, None if label == "start" else label)
+    solutions = CASES_DIR / case["id"] / "solutions"
+    # Every good* variant must pass: a check that accepts only one way of
+    # solving the task would score a different correct answer as wrong.
+    goods = sorted(d.name for d in solutions.iterdir() if d.name.startswith("good"))
+    by = {label: check_solution(case, label) for label in [*goods, "bad"]}
+    by["start"] = check_solution(case, None)
 
     start_ok = passed(by["start"])
     if case["start_expect"] == "pass" and not start_ok:
@@ -293,8 +302,9 @@ def self_test_case(case: dict) -> list[str]:
         problems.append(
             "start state passes; an unchanged tree would count as a solved task"
         )
-    if not passed(by["good"]):
-        problems.append(f"good solution fails: {_brief(by['good'])}")
+    for label in goods:
+        if not passed(by[label]):
+            problems.append(f"{label} solution fails: {_brief(by[label])}")
 
     target = case["bad"]["fails_at"]
     for r in by["bad"]:
@@ -348,7 +358,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("case", nargs="?", help="case id (directory name)")
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
-        "--solution", choices=("good", "bad"), help="check a shipped solution"
+        "--solution", help="check a shipped solution: good, good-alt or bad"
     )
     group.add_argument(
         "--tree", type=Path, help="check this result tree (an agent's copy of project/)"
@@ -373,6 +383,11 @@ def main(argv: list[str] | None = None) -> int:
     if not args.case:
         parser.error("a case id is required without --self-test")
     case = load_case(args.case)
+    if (
+        args.solution
+        and not (CASES_DIR / case["id"] / "solutions" / args.solution).is_dir()
+    ):
+        parser.error(f"case {case['id']} has no solution {args.solution!r}")
     if args.tree:
         if not args.tree.is_dir():
             parser.error(f"--tree {args.tree} is not a directory")

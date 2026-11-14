@@ -14,7 +14,7 @@ final class ShipmentTest extends TestCase
     {
         self::assertTrue(enum_exists(ShipmentStatus::class));
         $shipment = Shipment::fromRow(['status' => 'delivered']);
-        self::assertSame(ShipmentStatus::Delivered, $shipment->status());
+        self::assertSame(ShipmentStatus::from('delivered'), $shipment->status());
         self::assertSame('Delivered', $shipment->label());
         self::assertSame('In transit', Shipment::fromRow(['status' => 'in_transit'])->label());
     }

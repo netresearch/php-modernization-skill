@@ -4,7 +4,7 @@
   "kind": "convert",
   "namespace": "Cases\\Php81FloorMoney\\",
   "php_floor": "8.1",
-  "task": "Make Money in src/ immutable with readonly. Check composer.json for the PHP versions the package supports.",
+  "task": "Make Money in src/ immutable with readonly.",
   "start_expect": "fail",
   "bad": {
     "fails_at": "phpstan",

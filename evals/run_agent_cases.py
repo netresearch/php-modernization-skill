@@ -26,12 +26,19 @@ Arms:
 A run is **valid** only when its transcript's init event shows the intended
 skill state: no php-modernization skill in ``without``; exactly the plugin
 under test in ``with:*``. Invalid runs are kept and reported, never scored.
+A valid run that did not finish (non-zero exit, timeout) counts as failed.
 
-Isolation: with ``ANTHROPIC_API_KEY`` set, every run uses ``claude --bare``,
-so no installed plugin, hook or CLAUDE.md reaches it. Without the key the
-script refuses, unless ``--allow-unisolated`` is given; then the user's
-installed plugins load too, and a ``without`` run in a profile that has the
-skill installed is invalid by the rule above.
+Isolation (``--isolation``):
+
+- ``project`` (default) — ``claude --setting-sources project``: the user's
+  settings, installed plugins, user-level skills and user CLAUDE.md are not
+  loaded; the login stays as it is. Measured with Claude Code 2.1.325: the
+  init event lists none of the installed plugins, and a model asked whether
+  its context names the user's instructions answered NO here and YES with
+  ``user,project``.
+- ``bare`` — ``claude --bare``; needs ``ANTHROPIC_API_KEY``.
+- ``none`` — everything installed loads; for debugging only. In a profile
+  that has the skill installed, every run is invalid by the rule above.
 
     uv run evals/run_agent_cases.py --arms without,with:origin/main,with:WORKTREE --runs 3
     uv run evals/run_agent_cases.py --cases switch-loose-http --runs 1 --model haiku
@@ -251,6 +258,8 @@ def run_one(
     ]
     if args.isolation == "bare":
         cmd.append("--bare")
+    elif args.isolation == "project":
+        cmd += ["--setting-sources", "project"]
     if plugin is not None:
         cmd += ["--plugin-dir", str(plugin)]
     transcript = run_dir / "transcript.jsonl"
@@ -289,12 +298,12 @@ def run_one(
         json.dumps(checks, indent=2) + "\n", encoding="utf-8"
     )
 
+    # valid = the skill state matched the arm. A run that did not finish
+    # (non-zero exit, timeout, turn limit) stays valid and counts as not
+    # passed: dropping it would raise the pass rate of the arm that fails
+    # to finish more often.
     valid, reason = validity(arm, init_event(transcript), plugin)
-    if exit_code != 0:
-        valid, reason = (
-            False,
-            reason or f"claude exited {exit_code}: {stderr.strip()[:300]}",
-        )
+    completed = exit_code == 0
     record = {
         "case": case["id"],
         "kind": case["kind"],
@@ -305,7 +314,10 @@ def run_one(
         "isolation": args.isolation,
         "valid": valid,
         "invalid_reason": reason,
-        "passed": bool(checks.get("passed")),
+        "completed": completed,
+        "exit_code": exit_code,
+        "stderr_tail": stderr.strip()[-300:],
+        "passed": completed and bool(checks.get("passed")),
         "checks": {c["check"]: c["status"] for c in checks.get("checks", [])},
         "duration_seconds": round(duration, 1),
         **tool_usage(transcript),
@@ -350,20 +362,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--claude", default="claude", help="claude CLI binary")
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument(
-        "--allow-unisolated",
-        action="store_true",
-        help="run without --bare when ANTHROPIC_API_KEY is not set (installed plugins load too)",
+        "--isolation",
+        choices=("project", "bare", "none"),
+        default="project",
+        help="project: --setting-sources project (default); bare: --bare, needs ANTHROPIC_API_KEY; none: debugging",
     )
     args = parser.parse_args(argv)
 
-    if os.environ.get("ANTHROPIC_API_KEY"):
-        args.isolation = "bare"
-    elif args.allow_unisolated:
-        args.isolation = "none"
-    else:
-        parser.error(
-            "set ANTHROPIC_API_KEY for isolated runs, or pass --allow-unisolated"
-        )
+    if args.isolation == "bare" and not os.environ.get("ANTHROPIC_API_KEY"):
+        parser.error("--isolation bare needs ANTHROPIC_API_KEY")
     if not (CASES / "vendor" / "bin" / "phpunit").is_file():
         parser.error(
             "evals/cases/vendor is missing: composer install --working-dir=evals/cases"
