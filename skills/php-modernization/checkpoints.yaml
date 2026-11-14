@@ -433,7 +433,8 @@ llm_reviews:
          match expressions? Before proposing one (or accepting a
          ChangeSwitchToMatchRector diff), check: switch compares with ==,
          match with === (an untyped or int|string subject changes
-         behaviour); a case without break falls through; a case with side
+         behaviour; match (true) with == keeps it, a cast such as
+         (int) $code does not); a case without break falls through; a case with side
          effects does not fit one arm; a missing default makes match throw
          UnhandledMatchError. A match over an enum has no default arm unless
          the fallback is the contract, so PHPStan reports a missing case
