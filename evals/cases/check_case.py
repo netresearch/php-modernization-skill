@@ -43,7 +43,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import xml.etree.ElementTree as ET
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -202,52 +201,38 @@ def check_phpstan(work: Path) -> CheckResult:
 
 
 def check_phpunit(work: Path) -> CheckResult:
-    junit = work / ".build" / "junit.xml"
-    junit.parent.mkdir(parents=True, exist_ok=True)
+    # The TeamCity log is line-based text: one testStarted event per test,
+    # one testFailed event per failing or erroring test. It needs no XML
+    # parser, and its format is the same in PHPUnit 11, 12 and 13.
+    log = work / ".build" / "phpunit.teamcity"
+    log.parent.mkdir(parents=True, exist_ok=True)
     done = _run(
         [
             str(VENDOR / "bin" / "phpunit"),
             "-c",
             "check-phpunit.xml",
             "--no-coverage",
-            f"--log-junit={junit}",
+            f"--log-teamcity={log}",
         ],
         work,
     )
     if done is None:
         return CheckResult("phpunit", "error", None, "timeout or not runnable")
-    tests = failures = errors = 0
-    if junit.is_file():
-        try:
-            # The log is written by the local PHPUnit run, not fetched input;
-            # expat resolves no external entities.
-            suite = ET.parse(
-                junit
-            ).getroot()  # nosemgrep: python.lang.security.use-defused-xml-parse.use-defused-xml-parse
-            tests = int(suite.get("tests") or 0)
-            failures = int(suite.get("failures") or 0)
-            errors = int(suite.get("errors") or 0)
-            first = suite.find("testsuite")
-            if first is not None and tests == 0:
-                tests = int(first.get("tests") or 0)
-                failures = int(first.get("failures") or 0)
-                errors = int(first.get("errors") or 0)
-        except ET.ParseError:
-            # An unreadable log leaves the counts at 0: the run is then
-            # classified as an error below, never as a pass.
-            tests = failures = errors = 0
-    # A JUnit log with failing or erroring tests = the tests ran and some did
-    # not pass (PHPUnit exits 1 for failures, 2 for errors such as a
-    # ValueError from the code under test). No log, no test, or a fatal
-    # (255) is an error of the run itself, not a verdict on the code.
+    events = log.read_text(encoding="utf-8", errors="replace") if log.is_file() else ""
+    tests = events.count("##teamcity[testStarted ")
+    failed = events.count("##teamcity[testFailed ")
+    # Failing tests = the tests ran and some did not pass (PHPUnit exits 1
+    # for failures, 2 for errors such as a ValueError from the code under
+    # test). No log, no test, or a fatal (255) is an error of the run
+    # itself, not a verdict on the code.
     if done.returncode == 0 and tests > 0:
         return CheckResult("phpunit", "pass", 0, f"{tests} tests")
-    if done.returncode in (1, 2) and junit.is_file() and failures + errors > 0:
+    if done.returncode in (1, 2) and tests > 0 and failed > 0:
         return CheckResult(
             "phpunit",
             "fail",
-            1,
-            f"{tests} tests, {failures} failures, {errors} errors",
+            done.returncode,
+            f"{tests} tests, {failed} failed",
             messages=[(done.stdout or "")[-2000:]],
         )
     return CheckResult(
