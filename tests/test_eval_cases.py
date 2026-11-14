@@ -179,6 +179,38 @@ class RunValidityTest(unittest.TestCase):
         self.assertTrue(runner.prompt("with:HEAD", "Do X.").startswith("Do X."))
 
 
+def load_reviewer():
+    sys.path.insert(0, str(REPO_ROOT / "evals"))
+    import run_review_cases
+
+    return run_review_cases
+
+
+class ReviewScoringTest(unittest.TestCase):
+    """What the review evals read from the agent's tree."""
+
+    def test_verdict_line(self) -> None:
+        r = load_reviewer()
+        self.assertEqual(r.verdict("Verdict: approve\n- ok"), "approve")
+        self.assertEqual(
+            r.verdict("# Review\n**Verdict:** Request changes"), "request changes"
+        )
+        self.assertIsNone(r.verdict("Looks good to me."))
+
+    def test_review_file_is_not_followed_through_a_link(self) -> None:
+        r = load_reviewer()
+        with tempfile.TemporaryDirectory() as tmp:
+            secret = Path(tmp) / "secret"
+            secret.write_text("host data", encoding="utf-8")
+            tree = Path(tmp) / "tree"
+            tree.mkdir()
+            (tree / "REVIEW.md").symlink_to(secret)
+            self.assertEqual(r.read_review(tree), "")
+            (tree / "REVIEW.md").unlink()
+            (tree / "REVIEW.md").write_text("Verdict: approve\n", encoding="utf-8")
+            self.assertEqual(r.read_review(tree), "Verdict: approve\n")
+
+
 class HostGitTest(unittest.TestCase):
     """The host records the patch without reading the agent's .git."""
 

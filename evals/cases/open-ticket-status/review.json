@@ -1,0 +1,8 @@
+{
+  "bad": {
+    "finding": "Statuses that an installation adds through configuration ($extraStatuses) are now rejected, because the check uses TicketStatus::tryFrom() only; the status set is open and must not be modelled as a closed enum check."
+  },
+  "good": {
+    "verdict": "approve"
+  }
+}

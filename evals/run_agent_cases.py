@@ -525,23 +525,21 @@ def score(case_id: str, tree: Path, args: argparse.Namespace) -> str:
         return ""
 
 
-def run_one(
+def run_agent(
     *,
-    case: dict,
     arm: str,
-    n: int,
-    out: Path,
+    text: str,
+    tree: Path,
+    run_dir: Path,
     args: argparse.Namespace,
     plugin: Path | None,
-    commit: str,
 ) -> dict:
-    label = f"{arm.replace(':', '_').replace('/', '_')}-{n}"
-    run_dir = out / case["id"] / label
-    # The agent's tree lives outside this repository: inside it, the agent
-    # could read evals/cases/*/solutions and the acceptance tests.
-    tree = args.work_root / case["id"] / label
-    run_dir.mkdir(parents=True)
-    prepare_tree(case["id"], tree)
+    """Run one agent on ``tree`` with prompt ``text``; return what it did.
+
+    The transcript goes to ``run_dir/transcript.jsonl``. The returned dict
+    holds the exit, the duration, the validity of the run for its arm and
+    the tool usage.
+    """
     box = args.sandbox == "docker"
     name = f"pm-eval-{uuid.uuid4().hex[:12]}"
     # The plugin path the agent sees, and the one its init event must show.
@@ -549,7 +547,7 @@ def run_one(
     cmd = [
         *(docker_prefix(args, tree, plugin, name) if box else [args.claude]),
         "-p",
-        prompt(arm, case["task"]),
+        text,
         "--output-format",
         "stream-json",
         "--verbose",
@@ -592,6 +590,43 @@ def run_one(
                 # Killing the docker client leaves the container running.
                 sh(["docker", "rm", "-f", name], REPO)
     duration = time.monotonic() - start
+    valid, reason = validity(arm, init_event(transcript), seen_plugin)
+    return {
+        "valid": valid,
+        "invalid_reason": reason,
+        "completed": exit_code == 0,
+        "exit_code": exit_code,
+        "stderr_tail": stderr.strip()[-300:],
+        "duration_seconds": round(duration, 1),
+        **tool_usage(transcript),
+    }
+
+
+def run_one(
+    *,
+    case: dict,
+    arm: str,
+    n: int,
+    out: Path,
+    args: argparse.Namespace,
+    plugin: Path | None,
+    commit: str,
+) -> dict:
+    label = f"{arm.replace(':', '_').replace('/', '_')}-{n}"
+    run_dir = out / case["id"] / label
+    # The agent's tree lives outside this repository: inside it, the agent
+    # could read evals/cases/*/solutions and the acceptance tests.
+    tree = args.work_root / case["id"] / label
+    run_dir.mkdir(parents=True)
+    prepare_tree(case["id"], tree)
+    agent = run_agent(
+        arm=arm,
+        text=prompt(arm, case["task"]),
+        tree=tree,
+        run_dir=run_dir,
+        args=args,
+        plugin=plugin,
+    )
 
     git = host_git(tree)
     sh([*git, "add", "-A"], tree.parent)
@@ -614,8 +649,6 @@ def run_one(
     # (non-zero exit, timeout, turn limit) stays valid and counts as not
     # passed: dropping it would raise the pass rate of the arm that fails
     # to finish more often.
-    valid, reason = validity(arm, init_event(transcript), seen_plugin)
-    completed = exit_code == 0
     record = {
         "case": case["id"],
         "kind": case["kind"],
@@ -625,15 +658,9 @@ def run_one(
         "model": args.model,
         "isolation": args.isolation,
         "sandbox": args.sandbox,
-        "valid": valid,
-        "invalid_reason": reason,
-        "completed": completed,
-        "exit_code": exit_code,
-        "stderr_tail": stderr.strip()[-300:],
-        "passed": completed and bool(checks.get("passed")),
+        **agent,
+        "passed": agent["completed"] and bool(checks.get("passed")),
         "checks": {c["check"]: c["status"] for c in checks.get("checks", [])},
-        "duration_seconds": round(duration, 1),
-        **tool_usage(transcript),
     }
     (run_dir / "run.json").write_text(
         json.dumps(record, indent=2) + "\n", encoding="utf-8"
@@ -658,10 +685,9 @@ def summarise(records: list[dict]) -> dict:
     return table
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        prog="run_agent_cases", description=__doc__.split("\n\n")[0]
-    )
+def build_parser(prog: str, description: str) -> argparse.ArgumentParser:
+    """The options every agent eval script shares."""
+    parser = argparse.ArgumentParser(prog=prog, description=description)
     parser.add_argument(
         "--cases", default="", help="comma-separated case ids (default: all)"
     )
@@ -709,8 +735,13 @@ def main(argv: list[str] | None = None) -> int:
         default="project",
         help="project: --setting-sources project (default); bare: --bare, needs ANTHROPIC_API_KEY; none: debugging",
     )
-    args = parser.parse_args(argv)
+    return parser
 
+
+def setup(
+    args: argparse.Namespace, parser: argparse.ArgumentParser, results: str
+) -> tuple[list[str], list[str], Path, dict[str, tuple[Path, str]]]:
+    """Check the options; return (case ids, arms, results dir, plugins per arm)."""
     if args.isolation == "bare" and not os.environ.get("ANTHROPIC_API_KEY"):
         parser.error("--isolation bare needs ANTHROPIC_API_KEY")
     if not (CASES / "vendor" / "bin" / "phpunit").is_file():
@@ -741,9 +772,9 @@ def main(argv: list[str] | None = None) -> int:
         if arm != "without" and not arm.startswith(("with:", "invoke:")):
             parser.error(f"unknown arm {arm!r}")
 
-    out = args.out or REPO / "evals" / "results" / "agent-cases" / datetime.now(
-        UTC
-    ).strftime("%Y%m%dT%H%M%SZ")
+    out = args.out or REPO / "evals" / "results" / results / datetime.now(UTC).strftime(
+        "%Y%m%dT%H%M%SZ"
+    )
     out.mkdir(parents=True, exist_ok=False)
     args.work_root = (
         args.work_root or Path.home() / ".cache" / "php-modernization-evals" / out.name
@@ -756,6 +787,25 @@ def main(argv: list[str] | None = None) -> int:
     plugins = {
         arm: plugin_root(arm, args.work_root) for arm in arms if arm != "without"
     }
+    return selected, arms, out, plugins
+
+
+def run_jobs(args: argparse.Namespace, out: Path, fn, jobs: list) -> list[dict]:
+    """Run ``fn`` over ``jobs`` with ``--jobs`` workers, inside the egress setup."""
+    if args.sandbox == "docker":
+        start_egress(args, out.name.lower())
+    try:
+        with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+            return list(pool.map(fn, jobs))
+    finally:
+        if args.sandbox == "docker":
+            stop_egress(args)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser("run_agent_cases", __doc__.split("\n\n")[0])
+    args = parser.parse_args(argv)
+    selected, arms, out, plugins = setup(args, parser, "agent-cases")
 
     def one(job: tuple[dict, str, int]) -> dict:
         case, arm, n = job
@@ -774,14 +824,7 @@ def main(argv: list[str] | None = None) -> int:
         for c in selected
     ]
     jobs = [(c, arm, n) for c in cases for arm in arms for n in range(1, args.runs + 1)]
-    if args.sandbox == "docker":
-        start_egress(args, out.name.lower())
-    try:
-        with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-            records = list(pool.map(one, jobs))
-    finally:
-        if args.sandbox == "docker":
-            stop_egress(args)
+    records = run_jobs(args, out, one, jobs)
 
     summary = {
         "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
