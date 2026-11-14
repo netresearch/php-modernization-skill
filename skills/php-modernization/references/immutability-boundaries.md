@@ -74,6 +74,30 @@ final readonly class OrderShipped
 
 These all share a property: the object is constructed once, fully populated by the constructor, and never modified.
 
+### `readonly` is shallow
+
+`readonly` stops reassignment of the property. It does not stop changes to the object the property holds. A `readonly` property of type `\DateTime`, `ArrayObject`, a collection or an entity is still mutable through that object:
+
+```php
+final readonly class Period
+{
+    public function __construct(public \DateTime $start) {}
+}
+
+$start = new \DateTime('2026-01-01');
+$period = new Period($start);
+$start->modify('+1 year');        // $period->start changed too
+$period->start->modify('+1 day'); // allowed: no reassignment
+```
+
+Rector's `ReadOnlyClassRector` makes such a class `readonly` without a warning (measured with Rector 2.8.4). Before calling a class immutable, check every property type:
+
+- Scalars, enums, `\DateTimeImmutable` and other `readonly` value objects: immutable.
+- Mutable objects: replace them with an immutable type (`\DateTimeImmutable`), or copy on the way in and on the way out (`clone`), and pin the behaviour with a test that changes the passed object and the returned object.
+- Arrays of objects: the array is copied, the objects in it are shared.
+
+A class with a mutable member can still be `readonly` when nothing relies on it being a value object; it is then not a value object, and the docblock does not call it one.
+
 ## Where `readonly` Is Incorrect — and Why
 
 ### Doctrine entities
