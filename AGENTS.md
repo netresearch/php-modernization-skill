@@ -86,7 +86,7 @@
 The agent contract in [SKILL.md](skills/php-modernization/SKILL.md#hard-guardrails) is binding. Five refusal cases:
 
 1. No `readonly` on Doctrine entities or mapped-superclasses (embeddables are nuanced — see references).
-2. Never run Rector without `--dry-run` first.
+2. Never apply Rector before a `--dry-run` of the same scope and a review of its diff.
 3. Raising the PHPStan level requires regenerating + committing the baseline in the same change. Shrink, never delete.
 4. No blanket `final` on mock targets or extension points without confirmation.
 5. Do not edit `@generated` files or files under `var/cache/`, `vendor/`, `node_modules/`, `.Build/`.

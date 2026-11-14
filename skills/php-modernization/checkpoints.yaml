@@ -357,7 +357,7 @@ llm_reviews:
     severity: error
     domain: code-quality
     prompt: |
-      Review all PHP classes in Classes/ marked as `readonly class`:
+      Review all PHP classes in the project's source directories (the autoload paths in composer.json — src/, Classes/, packages/*/src — and the paths in the PHPStan config) marked as `readonly class`:
       1. Check if any readonly class contains static properties (private static, protected static, public static)
       2. PHP 8.2+ readonly classes cannot have static properties
       3. Report each file and class where a readonly class declares a static property
@@ -376,7 +376,7 @@ llm_reviews:
       - Methods returning associative arrays that could be typed objects
       - Array-heavy constructors that should use named parameters or DTOs
 
-      Examine files in Classes/ directory. Report specific files and methods
+      Examine the project's source directories (the autoload paths in composer.json — src/, Classes/, packages/*/src — and the paths in the PHPStan config). Report specific files and methods
       that should be refactored to use typed objects instead of arrays.
 
       This is important for:
@@ -390,25 +390,33 @@ llm_reviews:
   - id: PM-21
     domain: code-quality
     prompt: |
-      Review the PHP codebase for class constants that should be converted
-      to backed enums (available since PHP 8.1).
+      Find value sets that should be backed enums (PHP 8.1+) and value sets
+      that must NOT become enums. Examine the project's source directories (the autoload paths in composer.json — src/, Classes/, packages/*/src — and the paths in the PHPStan config).
 
-      Look for patterns like:
-      - Classes with multiple related STATUS_*, TYPE_*, or STATE_* constants
-      - Constants used in switch statements or match expressions
-      - Constants that represent a finite set of valid values
-      - Method parameters typed as int|string that accept constant values
+      Candidates:
+      - Groups of related class constants (STATUS_*, TYPE_*, STATE_*)
+      - String or int literals repeated across classes for the same concept
+        (grep each literal; read every place it appears)
+      - Parameters typed int|string or string that accept only a few values
 
-      Examine files in Classes/ directory. Report specific files and constant
-      groups that would benefit from enum conversion.
+      For each candidate decide, with evidence from the code:
+      1. Same concept: do all occurrences mean the same thing? Equal literals
+         in unrelated domains are separate value sets.
+      2. Closed set: can configuration, a database table, a plugin or another
+         package add values? An open set stays a validated string or a value
+         object.
+      3. Stored and external values: which rows, payloads, cache entries or
+         API responses carry the value? Name how unknown stored values are
+         handled today and whether from() or tryFrom() keeps that behaviour.
+      4. Public contract: does the change alter a public signature or a
+         serialised format consumed outside the package?
 
-      Good candidates for enums:
-      - Status constants (PENDING, ACTIVE, COMPLETED)
-      - Type constants (TYPE_A, TYPE_B, TYPE_C)
-      - State machine states
-      - Configuration option values
+      Report per candidate: files and lines, the decision (convert / keep),
+      the reason, and the behaviour test that pins it. Rector converts only
+      existing MyCLabs/Spatie enum classes; everything else is converted by
+      hand.
     severity: warning
-    desc: "Identify class constants that should be backed enums"
+    desc: "Identify value sets that should be backed enums, and open value sets that must stay strings"
 
   - id: PM-22
     domain: code-quality
@@ -421,8 +429,16 @@ llm_reviews:
       2. Named arguments - are there function calls with many positional
          parameters that would benefit from named arguments?
 
-      3. Match expressions - are there complex switch statements that
-         could be simplified to match expressions?
+      3. Match expressions - are there switch statements that could be
+         match expressions? Before proposing one (or accepting a
+         ChangeSwitchToMatchRector diff), check: switch compares with ==,
+         match with === (an untyped or int|string subject changes
+         behaviour; match (true) with == keeps it, a cast such as
+         (int) $code does not); a case without break falls through; a case with side
+         effects does not fit one arm; a missing default makes match throw
+         UnhandledMatchError. A match over an enum has no default arm unless
+         the fallback is the contract, so PHPStan reports a missing case
+         (match.unhandled).
 
       4. Nullsafe operator - are there verbose null checks that could use ?->?
 
@@ -573,6 +589,12 @@ llm_reviews:
       2. Implements a Form-bound interface (e.g., extends Symfony AbstractType bound model)
       3. Implements __unserialize / Serializable / is restored via session/cache
       4. Used as a hydration target by a deserializer (Symfony Serializer, JMS, Symfony ObjectMapper)
+      5. Holds a property of a mutable object type (\DateTime, ArrayObject, a
+         collection, an entity) and is described or used as a value object:
+         readonly is shallow, so the object is still mutable through that
+         property unless it is copied on the way in and out
+      Review a ReadOnlyClassRector or ReadOnlyPropertyRector diff with the same
+      list before applying it.
       readonly is correct for DTOs, value objects, events, and command/query objects.
       readonly is INCORRECT for entities, hydration targets, and any class needing post-construct property assignment.
       Report specific files violating this boundary.

@@ -119,6 +119,29 @@ $label = match($status) {
     default => 'Unknown',
 };
 
+// Before converting a switch, check four things. Rector's
+// ChangeSwitchToMatchRector checks none of the first three.
+//
+// 1. Comparison: switch compares with ==, match with ===. If the subject
+//    is untyped or int|string, `case 200:` also matched "200"; `200 =>`
+//    does not. Rector 2.8.4 converted such a switch on a parameter with no
+//    type and no docblock; with `@param int|string` it left it alone. A
+//    missing type is no guarantee the values are all one type.
+//    To keep the behaviour, keep the comparison:
+//    `match (true) { $code == 200 => 'OK', ... }`. A cast or a list of
+//    values is not the same: `(int) '200abc'` is 200 where the switch
+//    gave the default, and `' 200' == 200` holds where `200, '200' =>`
+//    misses it (both measured with PHP 8.5). Otherwise state the change
+//    and pin it with a test.
+// 2. Fall-through: a case without break runs the next case too. match has
+//    no fall-through; a switch that relies on it stays a switch.
+// 3. Side effects: a case that does more than produce one value (logging,
+//    several assignments) does not fit one match arm.
+// 4. default: a switch without default does nothing for an unknown value;
+//    a match without default throws UnhandledMatchError. Decide which one
+//    the callers need — a default that hides a missing case is a defect,
+//    a default that is the documented fallback stays.
+
 // Match with multiple conditions
 $category = match(true) {
     $age < 13 => 'child',
@@ -325,19 +348,56 @@ public function injectAuth(
     array $options,
     SecretPlacement $placement,  // Type-safe, IDE autocompletion
 ): array {
+    // No default arm: PHPStan reports a case added later as
+    // match.unhandled, and at runtime an unhandled case throws
+    // UnhandledMatchError instead of being skipped.
     return match ($placement) {
         SecretPlacement::Bearer => $this->addBearerAuth($options),
         SecretPlacement::BasicAuth => $this->addBasicAuth($options),
         SecretPlacement::Header => $this->addHeaderAuth($options),
-        // match() ensures all cases are handled!
+        SecretPlacement::QueryParam => $this->addQueryParamAuth($options),
+        SecretPlacement::BodyField => $this->addBodyFieldAuth($options),
+        SecretPlacement::OAuth2 => $this->addOAuth2Auth($options),
+        SecretPlacement::ApiKey => $this->addApiKeyAuth($options),
     };
 }
 ```
 
+`match` does not check completeness when the code is compiled. A `match` that
+lists three of seven cases is valid PHP and fails only at runtime, for the
+input that reaches a missing case. The check that finds it before runtime is
+PHPStan (identifier `match.unhandled`), so a `match` over an enum carries no
+`default` arm unless the fallback is part of the contract.
+
+### Enum or not: deciding the value set
+
+An enum is a claim that the set of values is closed and known to the code.
+Before converting constants or string literals, answer from the code:
+
+1. **Same concept?** Collect every place that uses the literals (`grep` for
+   the value, the constant and the column or key). Two `'pending'` strings
+   in a payment and in a moderation queue are two concepts and two enums, or
+   none.
+2. **Closed set?** If configuration, a database table, a plugin or another
+   package can add values, the set is open. An enum would reject the added
+   values. Keep a validated string (or a value object) instead.
+3. **Unknown stored values?** Rows, queue messages and cache entries written
+   before the change may hold values the enum lacks. `Enum::from()` throws for
+   them, `tryFrom()` returns `null`. Decide which behaviour the old code had
+   and keep it, or change it on purpose with a test.
+4. **Boundaries:** a public method signature, a serialised payload, an API
+   response, a database column. The external value stays the string or int it
+   was (`->value` on the way out, `from()`/`tryFrom()` on the way in). A
+   changed public signature is a breaking change for the package's consumers.
+
+Rector converts only existing MyCLabs or Spatie enum classes
+(`MyCLabsClassToEnumRector`, `SpatieEnumClassToEnumRector`). Scattered
+literals and constant groups are converted by hand, one value set per change.
+
 **Benefits over string constants:**
-- Compile-time type checking
+- Type checking at the call (runtime `TypeError`, PHPStan before runtime)
 - IDE autocompletion
-- Exhaustive match() enforcement
+- Missing `match` cases reported by PHPStan (`match.unhandled`)
 - Methods encapsulate related logic
 - Self-documenting API
 ```
