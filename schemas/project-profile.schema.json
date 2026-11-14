@@ -13,6 +13,10 @@
     "php_version_constraint",
     "php_runtime",
     "tooling",
+    "config_files",
+    "coding_standard",
+    "source_dirs",
+    "project_commands",
     "autoload_psr4",
     "baselines"
   ],
@@ -63,6 +67,10 @@
         "phpat",
         "infection",
         "psalm",
+        "phpcs",
+        "fractor",
+        "phpunit",
+        "php_linter",
         "composer_audit_supported"
       ],
       "additionalProperties": false,
@@ -73,7 +81,66 @@
         "phpat": { "type": "boolean" },
         "infection": { "type": "boolean" },
         "psalm": { "type": "boolean" },
+        "phpcs": { "type": "boolean", "description": "squizlabs/php_codesniffer in composer.json/lock, or a PHPCS config file." },
+        "fractor": { "type": "boolean", "description": "a9f/fractor or a9f/typo3-fractor in composer.json/lock (non-PHP migrations: Fluid, TypoScript, XML, YAML)." },
+        "phpunit": { "type": "boolean", "description": "phpunit/phpunit in composer.json/lock, or a PHPUnit config file." },
+        "php_linter": { "type": "boolean", "description": "php-parallel-lint/php-parallel-lint or overtrue/phplint in composer.json/lock. False means `php -l`." },
         "composer_audit_supported": { "type": "boolean" }
+      }
+    },
+    "config_files": {
+      "type": "object",
+      "description": "First existing config file per tool, relative to the project root; null when none of the known paths exists.",
+      "required": ["phpstan", "rector", "php_cs_fixer", "phpcs", "phpunit", "fractor"],
+      "additionalProperties": false,
+      "properties": {
+        "phpstan": { "type": ["string", "null"] },
+        "rector": { "type": ["string", "null"] },
+        "php_cs_fixer": { "type": ["string", "null"] },
+        "phpcs": { "type": ["string", "null"] },
+        "phpunit": { "type": ["string", "null"] },
+        "fractor": { "type": ["string", "null"] }
+      }
+    },
+    "coding_standard": {
+      "type": "string",
+      "enum": ["php-cs-fixer", "phpcs", "both", "none"],
+      "description": "Which coding-standard tool the project configures. The skill uses that one and does not ask for the other."
+    },
+    "source_dirs": {
+      "type": "object",
+      "description": "Existing directories from composer.json autoload (src) and autoload-dev (tests): psr-4, psr-0 and classmap. Falls back to src/Classes and tests/Tests when composer declares none.",
+      "required": ["src", "tests"],
+      "additionalProperties": false,
+      "properties": {
+        "src": { "type": "array", "items": { "type": "string" } },
+        "tests": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "project_commands": {
+      "type": "object",
+      "description": "The project's own entry points, read from files and never executed. Prefer these over bare vendor/bin calls: they carry the runtime, config and paths.",
+      "required": ["composer_scripts", "makefile", "ddev", "ci_files"],
+      "additionalProperties": false,
+      "properties": {
+        "composer_scripts": { "type": "array", "items": { "type": "string" }, "description": "Script names in composer.json, in file order." },
+        "makefile": {
+          "oneOf": [
+            { "type": "null" },
+            {
+              "type": "object",
+              "required": ["file", "targets", "includes"],
+              "additionalProperties": false,
+              "properties": {
+                "file": { "type": "string" },
+                "targets": { "type": "array", "items": { "type": "string" } },
+                "includes": { "type": "boolean", "description": "True when the Makefile has an include line; the included targets are not listed." }
+              }
+            }
+          ]
+        },
+        "ddev": { "type": "boolean", "description": "True when .ddev/config.yaml exists." },
+        "ci_files": { "type": "array", "items": { "type": "string" } }
       }
     },
     "autoload_psr4": {

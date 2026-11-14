@@ -9,10 +9,11 @@ Stdlib-only — no third-party dependencies.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 SKILL_ID = "php-modernization"
 # The skill's SKILL.md sits next to scripts/ in the repository, in the
 # Composer install and in both release archives.
@@ -166,3 +167,216 @@ def composer_dep_mentions(root: Path, needle: str) -> bool:
         if p.is_file() and text_contains(p, needle):
             return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# Project tooling — read from files only; nothing here runs project code.
+# ---------------------------------------------------------------------------
+
+# Root first, then Build/ — the same list and the same order as PM-04/PM-05/
+# PM-06/PM-24/PM-30 in checkpoints.yaml. A TYPO3 extension that keeps its build
+# tooling under Build/ carries the config at Build/.php-cs-fixer.php; with a
+# root-only list this verifier reported PM-04 as failed for a project that has
+# one, while the YAML checkpoint passed.
+PHP_CS_FIXER_CANDIDATES: tuple[str, ...] = (
+    ".php-cs-fixer.php",
+    ".php-cs-fixer.dist.php",
+    "Build/.php-cs-fixer.php",
+    "Build/.php-cs-fixer.dist.php",
+)
+# Same order as PM-01 in checkpoints.yaml and PHPStan's own precedence.
+PHPSTAN_CONFIG_CANDIDATES: tuple[str, ...] = (
+    "phpstan.neon",
+    "phpstan.neon.dist",
+    "Build/phpstan.neon",
+    "Build/phpstan/phpstan.neon",
+)
+RECTOR_CONFIG_CANDIDATES: tuple[str, ...] = (
+    "rector.php",
+    "Build/rector.php",
+    "Build/rector/rector.php",
+)
+# Root first, then Build/. PHPCS itself looks for .phpcs.xml, phpcs.xml,
+# .phpcs.xml.dist and phpcs.xml.dist in the working directory.
+PHPCS_CONFIG_CANDIDATES: tuple[str, ...] = (
+    ".phpcs.xml",
+    "phpcs.xml",
+    ".phpcs.xml.dist",
+    "phpcs.xml.dist",
+    "Build/phpcs.xml",
+    "Build/phpcs.xml.dist",
+    "Build/.phpcs.xml",
+    "Build/.phpcs.xml.dist",
+)
+PHPUNIT_CONFIG_CANDIDATES: tuple[str, ...] = (
+    "phpunit.xml",
+    "phpunit.xml.dist",
+    "phpunit.dist.xml",
+    "Build/phpunit.xml",
+    "Build/phpunit.xml.dist",
+    # Unit tests only: a functional suite usually needs a database.
+    "Build/phpunit/UnitTests.xml",
+)
+FRACTOR_CONFIG_CANDIDATES: tuple[str, ...] = (
+    "fractor.php",
+    "Build/fractor.php",
+    "Build/fractor/fractor.php",
+)
+# Composer package name → tool. The lint tools are alternatives to `php -l`.
+LINTER_PACKAGES: tuple[str, ...] = (
+    "php-parallel-lint/php-parallel-lint",
+    "overtrue/phplint",
+)
+CI_FILE_CANDIDATES: tuple[str, ...] = (
+    ".gitlab-ci.yml",
+    "Jenkinsfile",
+    ".travis.yml",
+    "bitbucket-pipelines.yml",
+)
+_MAKE_TARGET_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9_.:/-]*)\s*:(?!=)", re.MULTILINE)
+
+
+def first_existing(root: Path, candidates: tuple[str, ...]) -> str | None:
+    """Return the first candidate (relative path) that is a file, or None."""
+    for rel in candidates:
+        if (root / rel).is_file():
+            return rel
+    return None
+
+
+def bin_dirs(root: Path, composer: dict[str, Any] | None) -> list[Path]:
+    """Directories that hold the project's Composer binaries.
+
+    ``config.bin-dir`` from composer.json first, then the two layouts the
+    skill knows: ``vendor/bin`` and the TYPO3 ``.Build/bin``.
+    """
+    dirs: list[Path] = []
+    config = (composer or {}).get("config")
+    if isinstance(config, dict) and isinstance(config.get("bin-dir"), str):
+        dirs.append(root / config["bin-dir"])
+    for rel in ("vendor/bin", ".Build/bin"):
+        candidate = root / rel
+        if candidate not in dirs:
+            dirs.append(candidate)
+    return dirs
+
+
+def find_binary(
+    root: Path, name: str, composer: dict[str, Any] | None = None
+) -> Path | None:
+    """Return the project's own binary ``name``, or None."""
+    for directory in bin_dirs(root, composer):
+        p = directory / name
+        if p.is_file():
+            return p
+    return None
+
+
+def _autoload_paths(section: Any) -> list[str]:
+    paths: list[str] = []
+    if not isinstance(section, dict):
+        return paths
+    for key in ("psr-4", "psr-0"):
+        mapping = section.get(key)
+        if not isinstance(mapping, dict):
+            continue
+        for value in mapping.values():
+            for entry in value if isinstance(value, list) else [value]:
+                if isinstance(entry, str):
+                    paths.append(entry)
+    classmap = section.get("classmap")
+    if isinstance(classmap, list):
+        paths.extend(e for e in classmap if isinstance(e, str))
+    return paths
+
+
+def source_dirs(root: Path, composer: dict[str, Any] | None) -> dict[str, list[str]]:
+    """Source and test directories from composer.json autoload sections.
+
+    Only directories that exist are returned, normalised without a trailing
+    slash. ``""`` and ``"."`` (the package root) become ``"."``. When composer
+    declares nothing, the conventional ``src``/``Classes`` and
+    ``tests``/``Tests`` directories are used if present.
+    """
+
+    def normalise(paths: list[str]) -> list[str]:
+        out: list[str] = []
+        for p in paths:
+            rel = p.strip().rstrip("/") or "."
+            if rel not in out and (root / rel).is_dir():
+                out.append(rel)
+        return out
+
+    composer = composer or {}
+    src = normalise(_autoload_paths(composer.get("autoload")))
+    tests = normalise(_autoload_paths(composer.get("autoload-dev")))
+    if not src:
+        src = normalise(["src", "Classes"])
+    if not tests:
+        tests = normalise(["tests", "Tests"])
+    return {"src": src, "tests": tests}
+
+
+def composer_scripts(composer: dict[str, Any] | None) -> list[str]:
+    """Names of the scripts in composer.json, in file order."""
+    scripts = (composer or {}).get("scripts")
+    if not isinstance(scripts, dict):
+        return []
+    return [name for name in scripts if isinstance(name, str)]
+
+
+def makefile(root: Path) -> dict[str, Any] | None:
+    """Targets of the top-level Makefile, or None without one.
+
+    Includes are not followed: ``includes`` is true when the Makefile has an
+    ``include`` line, and then ``make`` knows more targets than ``targets``
+    lists — the agent reads the included files before calling a target absent.
+    """
+    for name in ("Makefile", "makefile", "GNUmakefile"):
+        p = root / name
+        if not p.is_file():
+            continue
+        try:
+            text = p.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            return None
+        targets: list[str] = []
+        for match in _MAKE_TARGET_RE.finditer(text):
+            target = match.group(1)
+            if not target.startswith(".") and target not in targets:
+                targets.append(target)
+        return {
+            "file": name,
+            "targets": targets,
+            "includes": re.search(r"^-?include\s", text, re.MULTILINE) is not None,
+        }
+    return None
+
+
+def ci_files(root: Path) -> list[str]:
+    found = [rel for rel in CI_FILE_CANDIDATES if (root / rel).is_file()]
+    workflows = root / ".github" / "workflows"
+    if workflows.is_dir():
+        found.extend(
+            str(p.relative_to(root))
+            for p in sorted(workflows.iterdir())
+            if p.suffix in {".yml", ".yaml"} and p.is_file()
+        )
+    return found
+
+
+def coding_standard(root: Path, php_cs_fixer_config: str | None) -> str:
+    """Which coding-standard tool the project configures.
+
+    One of ``php-cs-fixer``, ``phpcs``, ``both`` or ``none``. A project picks
+    one; the skill uses that one and does not ask for the other.
+    """
+    phpcs = first_existing(root, PHPCS_CONFIG_CANDIDATES) is not None
+    fixer = php_cs_fixer_config is not None
+    if fixer and phpcs:
+        return "both"
+    if fixer:
+        return "php-cs-fixer"
+    if phpcs:
+        return "phpcs"
+    return "none"

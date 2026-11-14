@@ -38,11 +38,21 @@ from typing import Any
 # don't add their own directory to sys.path, so we add it explicitly.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import (
+    FRACTOR_CONFIG_CANDIDATES,
+    PHP_CS_FIXER_CANDIDATES,
+    PHPCS_CONFIG_CANDIDATES,
+    PHPSTAN_CONFIG_CANDIDATES,
+    PHPUNIT_CONFIG_CANDIDATES,
+    RECTOR_CONFIG_CANDIDATES,
     SCHEMA_VERSION,
     SKILL_ID,
+    SKILL_MD,
     SKILL_VERSION,
+    coding_standard,
     composer_dep_mentions,
     detect_archetype,
+    find_binary,
+    first_existing,
     php_version_constraint,
     read_composer_json,
     text_contains,
@@ -54,28 +64,6 @@ SARIF_SCHEMA_URI = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/cos02/schemas
 DEFAULT_CACHE_PATH = Path(".build/php-modernization/last-run.json")
 ARTIFACT_DIR = Path(".build/php-modernization")
 
-PHPSTAN_CONFIG_CANDIDATES: tuple[str, ...] = (
-    "phpstan.neon",
-    "phpstan.neon.dist",
-    "Build/phpstan.neon",
-    "Build/phpstan/phpstan.neon",
-)
-RECTOR_CONFIG_CANDIDATES: tuple[str, ...] = (
-    "rector.php",
-    "Build/rector.php",
-    "Build/rector/rector.php",
-)
-# Root first, then Build/ — the same list and the same order as PM-04/PM-05/
-# PM-06/PM-24/PM-30 in checkpoints.yaml. A TYPO3 extension that keeps its build
-# tooling under Build/ carries the config at Build/.php-cs-fixer.php; with a
-# root-only list this verifier reported PM-04 as failed for a project that has
-# one, while the YAML checkpoint passed.
-PHP_CS_FIXER_CANDIDATES: tuple[str, ...] = (
-    ".php-cs-fixer.php",
-    ".php-cs-fixer.dist.php",
-    "Build/.php-cs-fixer.php",
-    "Build/.php-cs-fixer.dist.php",
-)
 PHPSTAN_BASELINE_CANDIDATES: tuple[str, ...] = (
     "phpstan-baseline.neon",
     "Build/phpstan-baseline.neon",
@@ -169,6 +157,10 @@ class Tooling:
     phpat: dict[str, Any]
     infection: dict[str, Any]
     composer_audit_supported: bool
+    phpcs: dict[str, Any] = field(default_factory=dict)
+    phpunit: dict[str, Any] = field(default_factory=dict)
+    fractor: dict[str, Any] = field(default_factory=dict)
+    coding_standard: str = "none"
 
 
 @dataclass
@@ -181,10 +173,14 @@ class Environment:
 
 @dataclass
 class Summary:
-    status: str  # pass | warn | fail
+    status: str  # pass | warn | fail | not_evaluated
     errors: int
     warnings: int
     info: int
+    # Tool runs (phpstan, composer audit) that did not pass. They do not
+    # change ``status`` or the exit code; they are counted so that a failing
+    # PHPStan run is not hidden behind a passing config check.
+    tool_runs_failed: int = 0
 
 
 @dataclass
@@ -201,6 +197,11 @@ class Report:
     checks: list[Check]
     agent_actions: list[AgentAction]
     tool_runs: list[ToolRun]
+    # Which checkpoints this report covers and which it does not; see
+    # review_coverage(). None when checkpoints.yaml is not next to SKILL.md.
+    review_coverage: dict[str, Any] | None = None
+    # Set by --check for a checkpoint this verifier does not evaluate.
+    checkpoint: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -612,14 +613,29 @@ def check_pm04(root: Path) -> tuple[Check, Path | None]:
             ),
             config,
         )
+    # A project that enforces its coding standard with PHPCS has no reason to
+    # add PHP-CS-Fixer as well; its PHPCS config satisfies the checkpoint.
+    phpcs = first_existing(root, PHPCS_CONFIG_CANDIDATES)
+    if phpcs is not None:
+        return (
+            Check(
+                id="PM-04",
+                category="php-cs-fixer",
+                severity="error",
+                status="pass",
+                message=f"Coding standard is configured with PHPCS at {phpcs}",
+                evidence=[phpcs],
+            ),
+            None,
+        )
     return (
         Check(
             id="PM-04",
             category="php-cs-fixer",
             severity="error",
             status="fail",
-            message="PHP-CS-Fixer configuration is missing",
-            evidence=list(PHP_CS_FIXER_CANDIDATES),
+            message="Coding-standard configuration is missing (neither PHP-CS-Fixer nor PHPCS)",
+            evidence=list(PHP_CS_FIXER_CANDIDATES) + list(PHPCS_CONFIG_CANDIDATES),
         ),
         None,
     )
@@ -649,12 +665,18 @@ def uses_per_cs(config: Path) -> bool:
 
 def check_pm05(root: Path, config: Path | None) -> Check:
     if config is None:
+        phpcs = first_existing(root, PHPCS_CONFIG_CANDIDATES)
         return Check(
             id="PM-05",
             category="php-cs-fixer",
             severity="error",
             status="skipped",
-            message="PHP-CS-Fixer configuration not found",
+            message=(
+                f"Project uses PHPCS ({phpcs}); the @PER-CS check applies to PHP-CS-Fixer configs"
+                if phpcs
+                else "PHP-CS-Fixer configuration not found"
+            ),
+            evidence=[phpcs] if phpcs else [],
         )
     if uses_per_cs(config):
         return Check(
@@ -835,6 +857,28 @@ def check_pm17(root: Path) -> Check:
         severity="warning",
         status="fail",
         message="PHP-CS-Fixer is not available — neither binary nor composer dependency detected",
+    )
+
+
+def check_pm17_phpcs(root: Path) -> Check | None:
+    """PM-17 for a project that configures PHPCS and no PHP-CS-Fixer."""
+    if first_existing(root, PHP_CS_FIXER_CANDIDATES) is not None:
+        return None
+    if first_existing(root, PHPCS_CONFIG_CANDIDATES) is None:
+        return None
+    available = find_binary(root, "phpcs") is not None or composer_dep_mentions(
+        root, "squizlabs/php_codesniffer"
+    )
+    return Check(
+        id="PM-17",
+        category="dependencies",
+        severity="warning",
+        status="pass" if available else "fail",
+        message=(
+            "PHPCS is available (binary or composer dependency); the project uses PHPCS"
+            if available
+            else "The project configures PHPCS, but PHPCS is not available — neither binary nor composer dependency detected"
+        ),
     )
 
 
@@ -1037,6 +1081,12 @@ def build_actions(checks: Iterable[Check], tooling: Tooling) -> list[AgentAction
             target = tooling.php_cs_fixer["config_file"]
         elif c.id == "PM-09" and tooling.rector.get("config_file"):
             target = tooling.rector["config_file"]
+        if c.id == "PM-17" and tooling.coding_standard == "phpcs":
+            spec = {
+                **spec,
+                "operation": "require_dev_phpcs",
+                "rationale": "Add squizlabs/php_codesniffer to require-dev: the project configures PHPCS",
+            }
         out.append(
             AgentAction(
                 action=spec["action"],
@@ -1066,6 +1116,12 @@ def run_phpstan(root: Path) -> ToolRun | None:
     if binary is None:
         return None
     cmd = [str(binary), "analyse", "--no-progress", "--error-format=json"]
+    # PHPStan finds a config only in the working directory; one under Build/
+    # (the TYPO3 layout) has to be named, or the run ends with "At least one
+    # path must be specified to analyse".
+    config = find_first_existing(root, PHPSTAN_CONFIG_CANDIDATES)
+    if config is not None:
+        cmd.append(f"--configuration={config.relative_to(root)}")
     artifact = _ensure_artifact_dir(root) / "phpstan.json"
     try:
         completed = subprocess.run(
@@ -1250,7 +1306,7 @@ def evaluate(root: Path, *, run_tools: bool) -> Report:
     check_14 = check_pm14(composer)
     check_15 = check_pm15(composer)
     check_16 = check_pm16(root)
-    check_17 = check_pm17(root)
+    check_17 = check_pm17_phpcs(root) or check_pm17(root)
     check_19 = check_pm19(composer)
     check_25 = check_pm25(root)
     check_53 = check_pm53(root, phpstan_cfg, phpstan_level)
@@ -1301,6 +1357,21 @@ def evaluate(root: Path, *, run_tools: bool) -> Report:
             shutil.which("composer") is not None
             or (root / "vendor/bin/composer").is_file()
         ),
+        phpcs={
+            "configured": first_existing(root, PHPCS_CONFIG_CANDIDATES) is not None,
+            "config_file": first_existing(root, PHPCS_CONFIG_CANDIDATES),
+        },
+        phpunit={
+            "configured": first_existing(root, PHPUNIT_CONFIG_CANDIDATES) is not None,
+            "config_file": first_existing(root, PHPUNIT_CONFIG_CANDIDATES),
+        },
+        fractor={
+            "configured": first_existing(root, FRACTOR_CONFIG_CANDIDATES) is not None,
+            "config_file": first_existing(root, FRACTOR_CONFIG_CANDIDATES),
+        },
+        coding_standard=coding_standard(
+            root, str(phpcs_cfg.relative_to(root)) if phpcs_cfg else None
+        ),
     )
 
     environment = Environment(
@@ -1320,6 +1391,9 @@ def evaluate(root: Path, *, run_tools: bool) -> Report:
                 tool_runs.append(result)
 
     summary = build_summary(checks)
+    summary.tool_runs_failed = sum(
+        1 for t in tool_runs if t.status in {"fail", "timeout", "error"}
+    )
 
     return Report(
         schema_version=SCHEMA_VERSION,
@@ -1334,7 +1408,56 @@ def evaluate(root: Path, *, run_tools: bool) -> Report:
         checks=checks,
         agent_actions=actions,
         tool_runs=tool_runs,
+        review_coverage=review_coverage([c.id for c in checks]),
     )
+
+
+def checkpoint_catalog(path: Path | None = None) -> dict[str, list[str]] | None:
+    """Checkpoint ids per section of checkpoints.yaml, or None without the file.
+
+    Stdlib only: reads the two top-level sections ``mechanical:`` and
+    ``llm_reviews:`` and the ``  - id: PM-NN`` lines under them.
+    """
+    path = path or SKILL_MD.parent / "checkpoints.yaml"
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except (OSError, UnicodeDecodeError):
+        return None
+    sections: dict[str, list[str]] = {"mechanical": [], "llm_reviews": []}
+    current: str | None = None
+    for line in lines:
+        if line and not line[0].isspace() and not line.startswith("#"):
+            key = line.split(":", 1)[0].strip()
+            current = key if key in sections else None
+            continue
+        match = CHECKPOINT_ID_RE.match(line)
+        if current is not None and match:
+            sections[current].append(match.group(1))
+    return sections
+
+
+CHECKPOINT_ID_RE = re.compile(r"^  - id:\s*(PM-\d+)\s*$")
+
+
+def review_coverage(verifier_ids: Iterable[str]) -> dict[str, Any] | None:
+    """What this report covers, so that a green report is not read as a review.
+
+    ``verifier_checks`` are the checkpoints evaluated here. The other
+    mechanical checkpoints run in the checkpoint runner (``/assess``), not in
+    this verifier. ``llm_reviews`` need an agent's judgement and are never
+    evaluated by a script; they are listed as not reviewed.
+    """
+    catalog = checkpoint_catalog()
+    if catalog is None:
+        return None
+    ran = sorted(set(verifier_ids))
+    return {
+        "verifier_checks": ran,
+        "mechanical_not_in_verifier": [
+            i for i in catalog["mechanical"] if i not in ran
+        ],
+        "llm_reviews_not_reviewed": list(catalog["llm_reviews"]),
+    }
 
 
 def build_summary(checks: Iterable[Check]) -> Summary:
@@ -1372,15 +1495,49 @@ def report_to_dict(report: Report) -> dict[str, Any]:
 def filter_to_checkpoint(
     report_dict: dict[str, Any], checkpoint_id: str
 ) -> dict[str, Any]:
+    """Narrow the report to one checkpoint, summary and exit code included.
+
+    The summary describes the selected checkpoint, not the whole project. A
+    checkpoint this verifier does not evaluate gets ``status:
+    not_evaluated`` and a ``checkpoint`` entry naming why; it is never shown
+    as an empty, passing result.
+    """
     filtered = dict(report_dict)
-    filtered["checks"] = [
-        c for c in report_dict.get("checks", []) if c.get("id") == checkpoint_id
-    ]
+    checks = [c for c in report_dict.get("checks", []) if c.get("id") == checkpoint_id]
+    filtered["checks"] = checks
     filtered["agent_actions"] = [
         a
         for a in report_dict.get("agent_actions", [])
         if a.get("checkpoint") == checkpoint_id
     ]
+    if checks:
+        summary = build_summary(Check(**c) for c in checks)
+        filtered["summary"] = asdict(summary)
+        return filtered
+    coverage = report_dict.get("review_coverage") or {}
+    if checkpoint_id in coverage.get("llm_reviews_not_reviewed", []):
+        reason = (
+            "llm_review checkpoint: needs an agent's review of the code; "
+            "no script evaluates it. Read its prompt in checkpoints.yaml."
+        )
+        kind, status = "llm_review", "not_reviewed"
+    elif checkpoint_id in coverage.get("mechanical_not_in_verifier", []):
+        reason = (
+            "mechanical checkpoint evaluated by the checkpoint runner "
+            "(/assess), not by this verifier"
+        )
+        kind, status = "mechanical", "not_run"
+    else:
+        raise KeyError(checkpoint_id)
+    filtered["summary"] = asdict(
+        Summary(status="not_evaluated", errors=0, warnings=0, info=0)
+    )
+    filtered["checkpoint"] = {
+        "id": checkpoint_id,
+        "kind": kind,
+        "status": status,
+        "reason": reason,
+    }
     return filtered
 
 
@@ -1462,6 +1619,14 @@ def to_sarif(report: Report) -> dict[str, Any]:
                         "endTimeUtc": report.generated_at,
                     }
                 ],
+                "properties": {
+                    k: v
+                    for k, v in (
+                        ("checkpoint", report.checkpoint),
+                        ("reviewCoverage", report.review_coverage),
+                    )
+                    if v is not None
+                },
             }
         ],
     }
@@ -1527,7 +1692,7 @@ def to_junit(report: Report) -> str:
             },
         )
         if c.status == "skipped":
-            ET.SubElement(testcase, "skipped")
+            ET.SubElement(testcase, "skipped", {"message": msg})
         elif c.status == "fail":
             failure = ET.SubElement(
                 testcase,
@@ -1536,6 +1701,24 @@ def to_junit(report: Report) -> str:
             )
             if c.evidence:
                 failure.text = "\n".join(c.evidence)
+
+    if report.checkpoint:
+        # --check of a checkpoint no script evaluates: say so in the suite
+        # instead of emitting an empty one that reads like a pass.
+        cp = report.checkpoint
+        testcase = ET.SubElement(
+            testsuite,
+            "testcase",
+            {
+                "classname": f"php-modernization.{cp.get('kind', 'checkpoint')}",
+                "name": f"{cp.get('id')}: {cp.get('status')}",
+                "time": "0",
+            },
+        )
+        ET.SubElement(testcase, "skipped", {"message": str(cp.get("reason", ""))})
+        testsuite.set("tests", str(total + 1))
+        testsuite.set("skipped", str(skipped_count + 1))
+        testsuites.set("tests", str(total + 1))
 
     # Pretty-print for human readability; ElementTree.indent is stdlib (3.9+).
     ET.indent(testsuites, space="  ")
@@ -1604,7 +1787,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     # The skill version is part of the key: a report cached by an older release
     # would otherwise be printed with that release's skill_version.
-    flags = {"no_tools": bool(args.no_tools), "skill_version": SKILL_VERSION}
+    flags = {
+        "no_tools": bool(args.no_tools),
+        "skill_version": SKILL_VERSION,
+        # Bumped when the report gains fields, so that a report cached by the
+        # same release before the change is not printed without them.
+        "report_shape": 2,
+    }
     signature = cache_signature(root)
 
     report_dict: dict[str, Any] | None = None
@@ -1618,7 +1807,13 @@ def main(argv: list[str] | None = None) -> int:
             cache_store(cache_path, signature, flags, report_dict)
 
     if args.check:
-        report_dict = filter_to_checkpoint(report_dict, args.check)
+        try:
+            report_dict = filter_to_checkpoint(report_dict, args.check)
+        except KeyError:
+            sys.stderr.write(
+                f"error: unknown checkpoint {args.check!r} — not in checkpoints.yaml\n"
+            )
+            return 2
     if args.summary:
         report_dict = summarize(report_dict)
 
@@ -1633,6 +1828,8 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.write(json.dumps(report_dict, indent=2) + "\n")
 
     status = report_dict.get("summary", {}).get("status", "fail")
+    if status == "not_evaluated":
+        return 3
     return 1 if status == "fail" else 0
 
 
@@ -1652,6 +1849,7 @@ def _report_from_dict(d: dict[str, Any]) -> Report:
             errors=int(summary.get("errors", 0)),
             warnings=int(summary.get("warnings", 0)),
             info=int(summary.get("info", 0)),
+            tool_runs_failed=int(summary.get("tool_runs_failed", 0)),
         ),
         environment=Environment(
             php_version_constraint=env.get("php_version_constraint", "unknown"),
@@ -1668,10 +1866,16 @@ def _report_from_dict(d: dict[str, Any]) -> Report:
             composer_audit_supported=bool(
                 tooling.get("composer_audit_supported", False)
             ),
+            phpcs=tooling.get("phpcs", {}),
+            phpunit=tooling.get("phpunit", {}),
+            fractor=tooling.get("fractor", {}),
+            coding_standard=tooling.get("coding_standard", "none"),
         ),
         checks=[Check(**c) for c in d.get("checks", [])],
         agent_actions=[AgentAction(**a) for a in d.get("agent_actions", [])],
         tool_runs=[ToolRun(**t) for t in d.get("tool_runs", [])],
+        review_coverage=d.get("review_coverage"),
+        checkpoint=d.get("checkpoint"),
     )
 
 

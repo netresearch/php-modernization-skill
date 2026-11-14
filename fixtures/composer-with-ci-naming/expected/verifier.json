@@ -34,6 +34,7 @@
     }
   ],
   "archetype": "generic-composer",
+  "checkpoint": null,
   "checks": [
     {
       "category": "phpstan",
@@ -70,10 +71,18 @@
         ".php-cs-fixer.php",
         ".php-cs-fixer.dist.php",
         "Build/.php-cs-fixer.php",
-        "Build/.php-cs-fixer.dist.php"
+        "Build/.php-cs-fixer.dist.php",
+        ".phpcs.xml",
+        "phpcs.xml",
+        ".phpcs.xml.dist",
+        "phpcs.xml.dist",
+        "Build/phpcs.xml",
+        "Build/phpcs.xml.dist",
+        "Build/.phpcs.xml",
+        "Build/.phpcs.xml.dist"
       ],
       "id": "PM-04",
-      "message": "PHP-CS-Fixer configuration is missing",
+      "message": "Coding-standard configuration is missing (neither PHP-CS-Fixer nor PHPCS)",
       "severity": "error",
       "status": "fail"
     },
@@ -178,18 +187,76 @@
   },
   "generated_at": "<NORMALIZED>",
   "project_root": "<NORMALIZED>",
-  "schema_version": "1.0.0",
+  "review_coverage": {
+    "llm_reviews_not_reviewed": [
+      "PM-32",
+      "PM-20",
+      "PM-21",
+      "PM-22",
+      "PM-23",
+      "PM-29",
+      "PM-31",
+      "PM-34",
+      "PM-38",
+      "PM-80",
+      "PM-40",
+      "PM-41",
+      "PM-42",
+      "PM-43",
+      "PM-54"
+    ],
+    "mechanical_not_in_verifier": [
+      "PM-06",
+      "PM-07",
+      "PM-08",
+      "PM-10",
+      "PM-11",
+      "PM-12",
+      "PM-18",
+      "PM-30",
+      "PM-24",
+      "PM-37",
+      "PM-50",
+      "PM-51",
+      "PM-52",
+      "PM-39",
+      "PM-44"
+    ],
+    "verifier_checks": [
+      "PM-01",
+      "PM-02",
+      "PM-03",
+      "PM-04",
+      "PM-05",
+      "PM-09",
+      "PM-13",
+      "PM-14",
+      "PM-15",
+      "PM-16",
+      "PM-17",
+      "PM-19",
+      "PM-25",
+      "PM-53"
+    ]
+  },
+  "schema_version": "1.1.0",
   "skill": "php-modernization",
   "skill_version": "<NORMALIZED>",
   "summary": {
     "errors": 2,
     "info": 1,
     "status": "fail",
+    "tool_runs_failed": 0,
     "warnings": 1
   },
   "tool_runs": [],
   "tooling": {
+    "coding_standard": "none",
     "composer_audit_supported": false,
+    "fractor": {
+      "config_file": null,
+      "configured": false
+    },
     "infection": {
       "configured": false
     },
@@ -201,11 +268,19 @@
     "phpat": {
       "configured": false
     },
+    "phpcs": {
+      "config_file": null,
+      "configured": false
+    },
     "phpstan": {
       "baseline": null,
       "config_file": null,
       "configured": false,
       "level": null
+    },
+    "phpunit": {
+      "config_file": null,
+      "configured": false
     },
     "rector": {
       "config_file": null,
