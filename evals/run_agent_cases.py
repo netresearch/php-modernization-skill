@@ -22,10 +22,15 @@ Arms:
 - ``without``          no php-modernization skill
 - ``with:<git-ref>``   the skill as committed at that ref (``with:origin/main``)
 - ``with:WORKTREE``    the skill as it is in this working tree
+- ``invoke:<git-ref>``, ``invoke:WORKTREE``  the same plugin, and the task
+  starts with the slash command ``/php-modernization:php-modernization``.
+  ``with:*`` measures whether the skill triggers on its own and what it does
+  then; ``invoke:*`` measures what the skill does when it runs.
 
 A run is **valid** only when its transcript's init event shows the intended
 skill state: no php-modernization skill in ``without``; exactly the plugin
-under test in ``with:*``. Invalid runs are kept and reported, never scored.
+under test in ``with:*`` and ``invoke:*``, and in ``invoke:*`` the slash
+command of the skill. Invalid runs are kept and reported, never scored.
 A valid run that did not finish (non-zero exit, timeout) counts as failed.
 
 Sandbox (``--sandbox``):
@@ -96,6 +101,7 @@ SKILL = "php-modernization"
 BOX_TREE = "/work"
 BOX_PLUGIN = "/plugin"
 BOX_HOME = "/home/agent"
+INVOKE = f"/{SKILL}:{SKILL}"
 PROMPT_SUFFIX = (
     "\n\nThe project is in the current directory. When the task is done, stop."
 )
@@ -127,7 +133,7 @@ NOT_PLUGIN = ("evals", "tests", "fixtures")
 
 
 def plugin_root(arm: str, out: Path) -> tuple[Path, str]:
-    """Materialise the plugin for a ``with:*`` arm; return (path, commit).
+    """Materialise the plugin for a ``with:*``/``invoke:*`` arm; return (path, commit).
 
     Only the plugin: evals/, tests/ and fixtures/ are left out.
     """
@@ -218,6 +224,12 @@ def prepare_tree(case_id: str, tree: Path) -> None:
                 raise SystemExit(f"error: {' '.join(cmd)} in {tree}: {done.stderr}")
 
 
+def prompt(arm: str, task: str) -> str:
+    """The task as the agent gets it; ``invoke:*`` arms start with the skill."""
+    text = task + PROMPT_SUFFIX
+    return f"{INVOKE} {text}" if arm.startswith("invoke:") else text
+
+
 def init_event(transcript: Path) -> dict | None:
     for line in transcript.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
@@ -246,6 +258,10 @@ def validity(arm: str, init: dict | None, plugin: Path | None) -> tuple[bool, st
     stray = [s for s in ours if s != f"{SKILL}:{SKILL}"]
     if stray:
         return False, f"another copy of the skill is loaded as well: {stray}"
+    if arm.startswith("invoke:") and INVOKE[1:] not in (
+        init.get("slash_commands") or []
+    ):
+        return False, f"the slash command {INVOKE} is not available"
     return True, ""
 
 
@@ -533,7 +549,7 @@ def run_one(
     cmd = [
         *(docker_prefix(args, tree, plugin, name) if box else [args.claude]),
         "-p",
-        case["task"] + PROMPT_SUFFIX,
+        prompt(arm, case["task"]),
         "--output-format",
         "stream-json",
         "--verbose",
@@ -722,7 +738,7 @@ def main(argv: list[str] | None = None) -> int:
         parser.error(f"unknown case(s): {', '.join(sorted(unknown))}")
     arms = [a for a in args.arms.split(",") if a]
     for arm in arms:
-        if arm != "without" and not arm.startswith("with:"):
+        if arm != "without" and not arm.startswith(("with:", "invoke:")):
             parser.error(f"unknown arm {arm!r}")
 
     out = args.out or REPO / "evals" / "results" / "agent-cases" / datetime.now(

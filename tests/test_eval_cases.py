@@ -163,6 +163,21 @@ class RunValidityTest(unittest.TestCase):
         )
         self.assertFalse(runner.validity("with:HEAD", None, self.plugin)[0])
 
+    def test_invoke_arm_needs_the_slash_command(self) -> None:
+        runner = load_runner()
+        ok = self.init(["php-modernization:php-modernization"], [self.ours()])
+        valid, reason = runner.validity("invoke:HEAD", ok, self.plugin)
+        self.assertFalse(valid)
+        self.assertIn("slash command", reason)
+        ok["slash_commands"] = ["php-modernization:php-modernization"]
+        self.assertEqual(runner.validity("invoke:HEAD", ok, self.plugin), (True, ""))
+        self.assertTrue(
+            runner.prompt("invoke:HEAD", "Do X.").startswith(
+                "/php-modernization:php-modernization Do X."
+            )
+        )
+        self.assertTrue(runner.prompt("with:HEAD", "Do X.").startswith("Do X."))
+
 
 class HostGitTest(unittest.TestCase):
     """The host records the patch without reading the agent's .git."""
