@@ -1,0 +1,167 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: MIT
+# SPDX-FileCopyrightText: Netresearch DTT GmbH
+"""Prove the checks of the executable eval cases in evals/cases/.
+
+Runs ``evals/cases/check_case.py --self-test``: for every case the start
+state does what ``case.json`` says, the good solution passes lint, PHPStan
+and PHPUnit, and the bad solution fails at the named check. A broken case
+would let an agent eval score a wrong patch as correct, so this runs in CI
+with the other tests.
+
+Needs ``php`` and ``composer`` on PATH; installs the case tools into
+``evals/cases/vendor`` when they are missing. Without php or composer the
+test fails — a missing check is not a pass.
+
+Stdlib only. Run with ``python3 tests/test_eval_cases.py``.
+"""
+
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+import sys
+import unittest
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+CASES = REPO_ROOT / "evals" / "cases"
+CHECKER = CASES / "check_case.py"
+
+
+def run(*args: str | Path, timeout: int = 900) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [str(a) for a in args],
+        cwd=str(REPO_ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=timeout,
+    )
+
+
+class EvalCaseTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        missing = [tool for tool in ("php", "composer") if shutil.which(tool) is None]
+        if missing:
+            raise AssertionError(f"needs {', '.join(missing)} on PATH")
+        if not (CASES / "vendor" / "bin" / "phpunit").is_file():
+            done = run(
+                "composer",
+                "install",
+                "--no-interaction",
+                "--no-progress",
+                f"--working-dir={CASES}",
+            )
+            if done.returncode != 0:
+                raise AssertionError(f"composer install failed:\n{done.stderr}")
+
+    def test_every_case_has_the_parts_the_checker_needs(self) -> None:
+        cases = sorted(p.parent for p in CASES.glob("*/case.json"))
+        self.assertEqual(len(cases), 8)
+        for case in cases:
+            with self.subTest(case=case.name):
+                meta = json.loads((case / "case.json").read_text(encoding="utf-8"))
+                self.assertEqual(meta["id"], case.name)
+                self.assertIn(meta["kind"], {"convert", "keep"})
+                self.assertIn(meta["bad"]["fails_at"], {"lint", "phpstan", "phpunit"})
+                for part in (
+                    "project/src",
+                    "acceptance",
+                    "solutions/good/src",
+                    "solutions/bad/src",
+                ):
+                    self.assertTrue((case / part).is_dir(), part)
+
+    def test_self_test_holds_for_every_case(self) -> None:
+        done = run(sys.executable, CHECKER, "--self-test")
+        self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
+        self.assertIn("8 case(s), 0 broken", done.stdout)
+
+    def test_an_agent_cannot_pass_by_replacing_the_acceptance_tests(self) -> None:
+        # A result tree whose own tests/Acceptance claims success must still
+        # be judged by the checker's acceptance tests.
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp)
+            shutil.copytree(
+                CASES / "readonly-booking" / "project", tree, dirs_exist_ok=True
+            )
+            fake = tree / "tests" / "Acceptance"
+            fake.mkdir(parents=True)
+            (fake / "BookingTest.php").write_text(
+                "<?php\nnamespace Cases\\ReadonlyBooking\\Tests\\Acceptance;\n"
+                "final class BookingTest extends \\PHPUnit\\Framework\\TestCase\n"
+                "{ public function testNothing(): void { self::assertTrue(true); } }\n",
+                encoding="utf-8",
+            )
+            done = run(sys.executable, CHECKER, "readonly-booking", "--tree", tree)
+            self.assertEqual(done.returncode, 1, done.stdout)
+            self.assertFalse(json.loads(done.stdout)["passed"])
+
+
+def load_runner():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "run_agent_cases", REPO_ROOT / "evals" / "run_agent_cases.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class RunValidityTest(unittest.TestCase):
+    """An agent run counts only when its skill state is the intended one."""
+
+    plugin = Path("/tmp/plugins/abc")
+
+    def init(self, skills: list[str], plugins: list[dict]) -> dict:
+        return {
+            "type": "system",
+            "subtype": "init",
+            "skills": skills,
+            "plugins": plugins,
+        }
+
+    def ours(self) -> dict:
+        return {
+            "name": "php-modernization",
+            "path": str(self.plugin),
+            "source": "php-modernization@inline",
+        }
+
+    def test_without_arm(self) -> None:
+        runner = load_runner()
+        self.assertEqual(
+            runner.validity("without", self.init(["other"], []), None), (True, "")
+        )
+        valid, reason = runner.validity(
+            "without", self.init(["php-modernization"], []), None
+        )
+        self.assertFalse(valid)
+        self.assertIn("without arm", reason)
+
+    def test_with_arm_needs_exactly_the_plugin_under_test(self) -> None:
+        runner = load_runner()
+        ok = self.init(["php-modernization:php-modernization"], [self.ours()])
+        self.assertEqual(runner.validity("with:HEAD", ok, self.plugin), (True, ""))
+        # The installed user-level copy loads as well: invalid.
+        both = self.init(
+            ["php-modernization", "php-modernization:php-modernization"], [self.ours()]
+        )
+        self.assertFalse(runner.validity("with:HEAD", both, self.plugin)[0])
+        # Another plugin path: the run measured a different skill.
+        other = dict(self.ours(), path="/elsewhere")
+        self.assertFalse(
+            runner.validity("with:HEAD", self.init([], [other]), self.plugin)[0]
+        )
+        self.assertFalse(runner.validity("with:HEAD", None, self.plugin)[0])
+
+
+if __name__ == "__main__":
+    unittest.main()

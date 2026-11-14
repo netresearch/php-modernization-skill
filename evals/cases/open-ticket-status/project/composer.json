@@ -1,0 +1,31 @@
+{
+    "name": "eval-case/open-ticket-status",
+    "description": "A status set that installations extend through configuration",
+    "type": "library",
+    "license": "MIT",
+    "require": {
+        "php": "^8.2"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^2.1",
+        "phpunit/phpunit": "^11.5 || ^12.0 || ^13.0",
+        "rector/rector": "^2.2",
+        "squizlabs/php_codesniffer": "^4.0"
+    },
+    "autoload": {
+        "psr-4": {
+            "Cases\\OpenTicketStatus\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Cases\\OpenTicketStatus\\Tests\\": "tests/"
+        }
+    },
+    "scripts": {
+        "lint": "find src -name '*.php' -exec php -l {} ;",
+        "phpstan": "phpstan analyse",
+        "rector": "rector process --dry-run",
+        "test": "phpunit"
+    }
+}

@@ -1,0 +1,15 @@
+{
+  "id": "php81-floor-money",
+  "title": "readonly class on a package that supports PHP 8.1",
+  "kind": "convert",
+  "namespace": "Cases\\Php81FloorMoney\\",
+  "php_floor": "8.1",
+  "task": "Make Money in src/ immutable with readonly. Check composer.json for the PHP versions the package supports.",
+  "start_expect": "fail",
+  "bad": {
+    "fails_at": "phpstan",
+    "expect": {
+      "message": "Readonly classes are supported only on PHP 8.2"
+    }
+  }
+}
