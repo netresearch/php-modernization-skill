@@ -24,6 +24,14 @@ final class StatusTextTest extends TestCase
         self::assertSame('Unknown', (new HeaderParser())->statusText('HTTP/1.1 503 Service Unavailable'));
     }
 
+    public function testOtherStringsCompareAsTheSwitchDid(): void
+    {
+        // The switch compared with ==: ' 200' matched 200, '200abc' did not.
+        // A cast such as (int) $code turns '200abc' into 200.
+        self::assertSame('OK', (new StatusText())->for(' 200'));
+        self::assertSame('Unknown', (new StatusText())->for('200abc'));
+    }
+
     public function testTheSwitchIsGone(): void
     {
         $file = (string) (new \ReflectionClass(StatusText::class))->getFileName();
