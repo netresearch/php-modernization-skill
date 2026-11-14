@@ -1,0 +1,12 @@
+{
+  "id": "review-readonly-reschedule",
+  "title": "readonly value objects, one holding a date another class modifies",
+  "kind": "convert",
+  "namespace": "Cases\\ReviewReadonlyReschedule\\",
+  "php_floor": "8.2",
+  "task": "Make the value objects Booking, Room and Guest in src/ immutable with readonly (PHP 8.2).",
+  "start_expect": "fail",
+  "bad": {
+    "fails_at": "phpunit"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "review-invoice-enum-data",
+  "title": "an enum read with from() where stored data holds another value",
+  "kind": "convert",
+  "namespace": "Cases\\ReviewInvoiceEnumData\\",
+  "php_floor": "8.2",
+  "task": "Introduce a backed enum InvoiceStatus in the namespace Cases\\ReviewInvoiceEnumData with the cases Open = 'open' and Paid = 'paid'. Invoice::status() returns ?InvoiceStatus and InvoiceLabel::label() takes ?InvoiceStatus. InvoiceRepository keeps reading data/invoices.json.",
+  "start_expect": "fail",
+  "bad": {
+    "fails_at": "phpunit"
+  }
+}

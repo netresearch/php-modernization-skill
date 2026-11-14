@@ -3,7 +3,7 @@
 
 # Executable eval cases
 
-Eight small PHP projects. Each one poses a modernization task whose right answer depends on a judgement the tools do not make. An agent works on a copy of `project/`; `check_case.py` scores the result with acceptance tests the agent never sees.
+Twelve small PHP projects. Each one poses a modernization task whose right answer depends on a judgement the tools do not make. The four `review-*` cases hide the defect of their bad solution in a larger diff or in a file the diff does not touch (a caller, a data file, the PHP floor in `composer.json`), so a review has to look beyond the changed lines. An agent works on a copy of `project/`; `check_case.py` scores the result with acceptance tests the agent never sees.
 
 | Case | Task | Right answer | The known-bad solution fails at |
 | --- | --- | --- | --- |

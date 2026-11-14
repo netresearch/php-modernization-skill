@@ -61,7 +61,7 @@ class EvalCaseTest(unittest.TestCase):
 
     def test_every_case_has_the_parts_the_checker_needs(self) -> None:
         cases = sorted(p.parent for p in CASES.glob("*/case.json"))
-        self.assertEqual(len(cases), 8)
+        self.assertEqual(len(cases), 12)
         for case in cases:
             with self.subTest(case=case.name):
                 meta = json.loads((case / "case.json").read_text(encoding="utf-8"))
@@ -79,7 +79,7 @@ class EvalCaseTest(unittest.TestCase):
     def test_self_test_holds_for_every_case(self) -> None:
         done = run(sys.executable, CHECKER, "--self-test")
         self.assertEqual(done.returncode, 0, done.stdout + done.stderr)
-        self.assertIn("8 case(s), 0 broken", done.stdout)
+        self.assertIn("12 case(s), 0 broken", done.stdout)
 
     def test_an_agent_cannot_pass_by_replacing_the_acceptance_tests(self) -> None:
         # A result tree whose own tests/Acceptance claims success must still

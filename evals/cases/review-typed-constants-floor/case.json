@@ -1,0 +1,15 @@
+{
+  "id": "review-typed-constants-floor",
+  "title": "typed class constants in a package that supports PHP 8.2",
+  "kind": "convert",
+  "namespace": "Cases\\ReviewTypedConstantsFloor\\",
+  "php_floor": "8.2",
+  "task": "Modernize src/ to PHP 8.2 idioms: native types, constructor promotion, and readonly where the object never changes.",
+  "start_expect": "fail",
+  "bad": {
+    "fails_at": "phpstan",
+    "expect": {
+      "identifier": "classConstant.nativeTypeNotSupported"
+    }
+  }
+}

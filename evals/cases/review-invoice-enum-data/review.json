@@ -1,0 +1,8 @@
+{
+  "bad": {
+    "finding": "InvoiceRepository now reads the status with InvoiceStatus::from(), but data/invoices.json holds a row with status 'void', which is no enum case, so from() throws ValueError and the repository no longer loads; it needs tryFrom() so the row loads with a null status and the label 'Unknown'."
+  },
+  "good": {
+    "verdict": "approve"
+  }
+}
