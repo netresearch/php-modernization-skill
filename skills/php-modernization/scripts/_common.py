@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 SKILL_ID = "php-modernization"
 # The skill's SKILL.md sits next to scripts/ in the repository, in the
 # Composer install and in both release archives.
@@ -202,8 +202,8 @@ PHPUNIT_CONFIG_CANDIDATES: tuple[str, ...] = (
     "phpunit.dist.xml",
     "Build/phpunit.xml",
     "Build/phpunit.xml.dist",
+    # Unit tests only: a functional suite usually needs a database.
     "Build/phpunit/UnitTests.xml",
-    "Build/phpunit/FunctionalTests.xml",
 )
 FRACTOR_CONFIG_CANDIDATES: tuple[str, ...] = (
     "fractor.php",

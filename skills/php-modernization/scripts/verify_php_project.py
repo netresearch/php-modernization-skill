@@ -209,6 +209,8 @@ class Report:
     # Which checkpoints this report covers and which it does not; see
     # review_coverage(). None when checkpoints.yaml is not next to SKILL.md.
     review_coverage: dict[str, Any] | None = None
+    # Set by --check for a checkpoint this verifier does not evaluate.
+    checkpoint: dict[str, Any] | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -1088,6 +1090,12 @@ def build_actions(checks: Iterable[Check], tooling: Tooling) -> list[AgentAction
             target = tooling.php_cs_fixer["config_file"]
         elif c.id == "PM-09" and tooling.rector.get("config_file"):
             target = tooling.rector["config_file"]
+        if c.id == "PM-17" and tooling.coding_standard == "phpcs":
+            spec = {
+                **spec,
+                "operation": "require_dev_phpcs",
+                "rationale": "Add squizlabs/php_codesniffer to require-dev: the project configures PHPCS",
+            }
         out.append(
             AgentAction(
                 action=spec["action"],
@@ -1386,7 +1394,9 @@ def evaluate(root: Path, *, run_tools: bool) -> Report:
                 tool_runs.append(result)
 
     summary = build_summary(checks)
-    summary.tool_runs_failed = sum(1 for t in tool_runs if t.status != "pass")
+    summary.tool_runs_failed = sum(
+        1 for t in tool_runs if t.status in {"fail", "timeout", "error"}
+    )
 
     return Report(
         schema_version=SCHEMA_VERSION,
@@ -1612,6 +1622,14 @@ def to_sarif(report: Report) -> dict[str, Any]:
                         "endTimeUtc": report.generated_at,
                     }
                 ],
+                "properties": {
+                    k: v
+                    for k, v in (
+                        ("checkpoint", report.checkpoint),
+                        ("reviewCoverage", report.review_coverage),
+                    )
+                    if v is not None
+                },
             }
         ],
     }
@@ -1677,7 +1695,7 @@ def to_junit(report: Report) -> str:
             },
         )
         if c.status == "skipped":
-            ET.SubElement(testcase, "skipped")
+            ET.SubElement(testcase, "skipped", {"message": msg})
         elif c.status == "fail":
             failure = ET.SubElement(
                 testcase,
@@ -1686,6 +1704,24 @@ def to_junit(report: Report) -> str:
             )
             if c.evidence:
                 failure.text = "\n".join(c.evidence)
+
+    if report.checkpoint:
+        # --check of a checkpoint no script evaluates: say so in the suite
+        # instead of emitting an empty one that reads like a pass.
+        cp = report.checkpoint
+        testcase = ET.SubElement(
+            testsuite,
+            "testcase",
+            {
+                "classname": f"php-modernization.{cp.get('kind', 'checkpoint')}",
+                "name": f"{cp.get('id')}: {cp.get('status')}",
+                "time": "0",
+            },
+        )
+        ET.SubElement(testcase, "skipped", {"message": str(cp.get("reason", ""))})
+        testsuite.set("tests", str(total + 1))
+        testsuite.set("skipped", str(skipped_count + 1))
+        testsuites.set("tests", str(total + 1))
 
     # Pretty-print for human readability; ElementTree.indent is stdlib (3.9+).
     ET.indent(testsuites, space="  ")
@@ -1842,6 +1878,7 @@ def _report_from_dict(d: dict[str, Any]) -> Report:
         agent_actions=[AgentAction(**a) for a in d.get("agent_actions", [])],
         tool_runs=[ToolRun(**t) for t in d.get("tool_runs", [])],
         review_coverage=d.get("review_coverage"),
+        checkpoint=d.get("checkpoint"),
     )
 
 

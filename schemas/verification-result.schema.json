@@ -91,16 +91,21 @@
       ]
     },
     "checkpoint": {
-      "type": "object",
-      "description": "Present only with --check for a checkpoint this verifier does not evaluate.",
-      "required": ["id", "kind", "status", "reason"],
-      "additionalProperties": false,
-      "properties": {
-        "id": { "type": "string" },
-        "kind": { "type": "string", "enum": ["llm_review", "mechanical"] },
-        "status": { "type": "string", "enum": ["not_reviewed", "not_run"] },
-        "reason": { "type": "string" }
-      }
+      "description": "Set only with --check for a checkpoint this verifier does not evaluate; null otherwise.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["id", "kind", "status", "reason"],
+          "additionalProperties": false,
+          "properties": {
+            "id": { "type": "string" },
+            "kind": { "type": "string", "enum": ["llm_review", "mechanical"] },
+            "status": { "type": "string", "enum": ["not_reviewed", "not_run"] },
+            "reason": { "type": "string" }
+          }
+        }
+      ]
     },
     "environment": {
       "type": "object",

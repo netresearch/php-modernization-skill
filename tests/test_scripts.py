@@ -67,15 +67,16 @@ class TempProject:
         self._tmp.cleanup()
 
 
-def fake_tool(root: Path, name: str, exit_code: int) -> Path:
+def fake_tool(root: Path, name: str, exit_code: int, stdout: str = "{}") -> Path:
     """Install an executable vendor/bin/<name> that logs its arguments."""
     binary = root / "vendor" / "bin" / name
     binary.parent.mkdir(parents=True, exist_ok=True)
+    (binary.parent / f"{name}.stdout").write_text(stdout + "\n", encoding="utf-8")
     binary.write_text(
         "#!/bin/sh\n"
         f'printf "%s\\n" "$@" > "$(dirname "$0")/{name}.args"\n'
         f'echo "{name} $*" >> "$(dirname "$0")/calls.log"\n'
-        'echo "{}"\n'
+        f'cat "$(dirname "$0")/{name}.stdout"\n'
         f"exit {exit_code}\n",
         encoding="utf-8",
     )
@@ -418,6 +419,12 @@ class VerifierTest(unittest.TestCase):
         self.assertEqual(unknown.returncode, 2)
         self.assertIn("unknown checkpoint", unknown.stderr)
 
+        # JUnit says the checkpoint was not evaluated instead of an empty suite.
+        junit = run_py(*base, "PM-21", "--format", "junit")
+        self.assertEqual(junit.returncode, 3)
+        self.assertIn('name="PM-21: not_reviewed"', junit.stdout)
+        self.assertIn('skipped="1"', junit.stdout)
+
     def test_report_lists_review_checkpoints_as_not_reviewed(self) -> None:
         result = run_py(
             "verify_php_project.py",
@@ -481,6 +488,12 @@ class VerifierTest(unittest.TestCase):
 
             result = run_py("verify_php_project.py", "--root", root, "--no-tools")
             self.assertNotEqual(json.loads(result.stdout)["skill_version"], "1.17.0")
+
+
+def phpcs_totals(errors: int, fixable: int) -> str:
+    return json.dumps(
+        {"totals": {"errors": errors, "warnings": 0, "fixable": fixable}, "files": {}}
+    )
 
 
 def calls(root: Path) -> list[str]:
@@ -576,7 +589,7 @@ class ModernizeLoopTest(unittest.TestCase):
 
     def test_phpcs_project_uses_phpcs_and_not_php_cs_fixer(self) -> None:
         with TempProject("generic-composer-phpcs") as root:
-            fake_tool(root, "phpcs", exit_code=1)
+            fake_tool(root, "phpcs", exit_code=1, stdout=phpcs_totals(2, 2))
             result = run_py(
                 "modernize_loop.py", "--root", root, "--tools", "php-cs-fixer,phpcs"
             )
@@ -594,27 +607,46 @@ class ModernizeLoopTest(unittest.TestCase):
             tools = {a["tool"] for a in transcript["next_actions"]}
             self.assertNotIn("php-cs-fixer", tools)
 
-    def test_phpcs_findings_that_need_a_human_fail(self) -> None:
-        with TempProject("generic-composer-phpcs") as root:
-            fake_tool(root, "phpcs", exit_code=2)
-            result = run_py("modernize_loop.py", "--root", root, "--tools", "phpcs")
-            self.assertEqual(loop_status(result), {"phpcs": "fail"})
+    def test_phpcs_verdict_follows_the_json_totals_not_the_exit_code(self) -> None:
+        # PHPCS 3.x exits 2 for every finding, 4.x uses bit flags: the totals
+        # of --report=json are the same in both.
+        cases = (
+            (2, phpcs_totals(2, 2), "changes"),  # 3.x, all fixable
+            (1, phpcs_totals(2, 2), "changes"),  # 4.x, all fixable
+            (2, phpcs_totals(3, 1), "fail"),  # needs a human
+            (0, phpcs_totals(0, 0), "pass"),
+            (16, "not json", "error"),
+        )
+        for code, stdout, expected in cases:
+            with (
+                self.subTest(code=code, expected=expected),
+                TempProject("generic-composer-phpcs") as root,
+            ):
+                fake_tool(root, "phpcs", exit_code=code, stdout=stdout)
+                result = run_py("modernize_loop.py", "--root", root, "--tools", "phpcs")
+                self.assertEqual(loop_status(result), {"phpcs": expected})
 
-    def test_apply_with_phpcs_runs_phpcbf(self) -> None:
-        with TempProject("generic-composer-phpcs") as root:
-            fake_tool(root, "phpcbf", exit_code=0)
-            result = run_py(
-                "modernize_loop.py",
-                "--root",
-                root,
-                "--mode",
-                "apply",
-                "--confirm",
-                "--tools",
-                "phpcs",
-            )
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(calls(root), ["phpcbf "])
+    def test_apply_with_phpcs_runs_phpcbf_then_checks(self) -> None:
+        for leftover, expected in ((0, "pass"), (2, "fail")):
+            with (
+                self.subTest(leftover=leftover),
+                TempProject("generic-composer-phpcs") as root,
+            ):
+                # PHPCS 3.x phpcbf exits 1 after a successful fix.
+                fake_tool(root, "phpcbf", exit_code=1)
+                fake_tool(root, "phpcs", exit_code=0, stdout=phpcs_totals(leftover, 0))
+                result = run_py(
+                    "modernize_loop.py",
+                    "--root",
+                    root,
+                    "--mode",
+                    "apply",
+                    "--confirm",
+                    "--tools",
+                    "phpcs",
+                )
+                self.assertEqual(loop_status(result), {"phpcs": expected})
+                self.assertEqual(calls(root), ["phpcbf ", "phpcs --report=json"])
 
     def test_apply_without_confirm_exits_two_and_runs_nothing(self) -> None:
         with TempProject("generic-composer-minimal") as root:
@@ -646,6 +678,31 @@ class ModernizeLoopTest(unittest.TestCase):
                 loop_status(result), {"rector": "pass", "rector-recheck": "pass"}
             )
 
+    def test_rector_recheck_runs_after_the_formatter(self) -> None:
+        with TempProject("fully-modern") as root:
+            for tool in ("rector", "php-cs-fixer", "phpstan"):
+                fake_tool(root, tool, exit_code=0)
+            result = run_py(
+                "modernize_loop.py",
+                "--root",
+                root,
+                "--mode",
+                "apply",
+                "--confirm",
+                "--tools",
+                "rector,php-cs-fixer,phpstan",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                [" ".join(line.split()[:3]) for line in calls(root)],
+                [
+                    "rector process",
+                    "php-cs-fixer fix --config=.php-cs-fixer.dist.php",
+                    "rector process --dry-run",
+                    "phpstan analyse --no-progress",
+                ],
+            )
+
     def test_scope_and_rule_are_passed_to_rector(self) -> None:
         with TempProject("generic-composer-minimal") as root:
             fake_tool(root, "rector", exit_code=0)
@@ -671,6 +728,24 @@ class ModernizeLoopTest(unittest.TestCase):
             result = run_py("modernize_loop.py", "--root", root, "--path", "nope")
             self.assertEqual(result.returncode, 2)
             self.assertIn("does not exist", result.stderr)
+
+    def test_path_outside_the_root_is_refused(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            fake_tool(root, "rector", exit_code=0)
+            for outside in ("..", "../..", str(root.parent), "src/../../"):
+                with self.subTest(path=outside):
+                    result = run_py(
+                        "modernize_loop.py",
+                        "--root",
+                        root,
+                        "--tools",
+                        "rector",
+                        "--path",
+                        outside,
+                    )
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("outside --root", result.stderr)
+            self.assertEqual(calls(root), [])
 
     def test_phpunit_runs_with_the_project_config(self) -> None:
         with TempProject("generic-composer-phpcs") as root:

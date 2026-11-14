@@ -12,7 +12,8 @@ Runs the project's own tools in a fixed order, in either dry-run mode
 
 1. rector          — refactoring (``--only`` and paths narrow the scope)
 2. php-cs-fixer    — formatter, when the project uses PHP-CS-Fixer
-   phpcs           — formatter, when the project uses PHPCS (phpcbf in apply)
+   phpcs           — formatter, when the project uses PHPCS (phpcbf in apply,
+                     then phpcs; the verdict comes from phpcs's JSON totals)
 3. lint            — syntax, with parallel-lint when installed, else ``php -l``
 4. phpstan         — static analysis
 5. phpunit         — the project's test suite, when it has a PHPUnit config
@@ -20,8 +21,8 @@ Runs the project's own tools in a fixed order, in either dry-run mode
 
 Refactoring runs before formatting, so the formatter tidies what Rector
 wrote; the checks run last, on the final code. In apply mode Rector runs a
-second dry-run of the same scope afterwards (``rector-recheck``): a finished
-step proposes no further change.
+second dry-run of the same scope after the formatter (``rector-recheck``): a
+finished step proposes no further change.
 
 Output is a structured JSON transcript the agent reasons about. Statuses:
 pass, changes (a dry-run proposes edits), fail (the tool reports findings or
@@ -79,6 +80,7 @@ ALL_TOOLS: tuple[str, ...] = (
 # Statuses of a required tool that make the run exit 1. "changes" counts: a
 # dry-run that proposes edits has work left for the agent.
 FAILING_STATUSES = frozenset({"changes", "fail", "timeout", "error"})
+FORMATTERS = frozenset({"php-cs-fixer", "phpcs"})
 
 
 @dataclass
@@ -276,33 +278,94 @@ def run_php_cs_fixer(ctx: Context, *, dry_run: bool) -> ToolResult:
 
 
 def run_phpcs(ctx: Context, *, dry_run: bool) -> ToolResult:
+    """PHPCS in dry-run, PHPCBF followed by a PHPCS check in apply.
+
+    The verdict comes from the totals of ``phpcs --report=json``, not from
+    exit codes: those differ between the major versions. Measured with
+    3.13.6 and 4.0.4 — phpcs exits 2 for any finding in 3.x, while 4.x uses
+    bit flags (1 = fixable, 2 = needs a human); phpcbf exits 1 after a
+    successful fix in 3.x and 2 in 4.x when unfixable findings remain.
+    """
     if ctx.coding_standard not in {"phpcs", "both"}:
         return _skipped("phpcs", "no PHPCS config in the project")
-    name = "phpcs" if dry_run else "phpcbf"
-    binary = find_binary(ctx.root, name, ctx.composer)
-    if binary is None:
-        return _missing("phpcs", name)
-    cmd = [str(binary)]
+    phpcs = find_binary(ctx.root, "phpcs", ctx.composer)
+    if phpcs is None:
+        return _missing("phpcs", "phpcs")
+    args: list[str] = []
     # PHPCS finds a config only in the working directory; one under Build/
     # has to be named.
     if ctx.phpcs_config and "/" in ctx.phpcs_config:
-        cmd.append(f"--standard={ctx.phpcs_config}")
+        args.append(f"--standard={ctx.phpcs_config}")
+    args += ctx.paths
+
+    commands: list[str] = []
+    duration = 0.0
+    if not dry_run:
+        phpcbf = find_binary(ctx.root, "phpcbf", ctx.composer)
+        if phpcbf is None:
+            return _missing("phpcs", "phpcbf")
+        cmd = [str(phpcbf), *args]
+        commands.append(" ".join(cmd))
+        rc, took, err = _run(cmd, ctx.root, None)
+        duration += took
+        if err:
+            status = "timeout" if err == "timeout" else "error"
+            return ToolResult("phpcs", status, rc, commands[0], duration, err)
+
+    cmd = [str(phpcs), "--report=json", *args]
+    commands.append(" ".join(cmd))
+    artifact = _ensure_artifact_dir(ctx.root) / "phpcs.json"
+    command = " && ".join(commands)
+    start = time.monotonic()
+    try:
+        completed = subprocess.run(
+            cmd,
+            cwd=str(ctx.root),
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=SUBPROCESS_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired:
+        return ToolResult(
+            "phpcs", "timeout", None, command, duration, "exceeded timeout"
+        )
+    except OSError as exc:
+        return ToolResult("phpcs", "error", None, command, duration, f"error: {exc}")
+    duration += time.monotonic() - start
+    rc = completed.returncode
+    try:
+        report = json.loads(completed.stdout or "")
+        totals = report["totals"]
+        found = int(totals.get("errors", 0)) + int(totals.get("warnings", 0))
+        fixable = int(totals.get("fixable", 0))
+    except (ValueError, KeyError, TypeError):
+        return ToolResult(
+            "phpcs",
+            "error",
+            rc,
+            command,
+            duration,
+            "phpcs: no JSON report (config or run error)",
+        )
+    try:
+        artifact.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    except OSError:
+        artifact = None  # type: ignore[assignment]  # the verdict does not need the file
+    rel = str(artifact.relative_to(ctx.root)) if artifact else None
+    if found == 0:
+        summary = "phpcs: clean" if dry_run else "phpcbf applied; phpcs: clean"
+        return ToolResult("phpcs", "pass", rc, command, duration, summary, rel)
+    if dry_run and fixable == found:
+        summary = f"phpcs: {found} finding(s), all fixable by phpcbf"
+        return ToolResult("phpcs", "changes", rc, command, duration, summary, rel)
     if dry_run:
-        cmd.append("--report=json")
-    cmd += ctx.paths
-
-    # phpcs (4.x): 0 = clean, 1 = only auto-fixable findings, 2 or more =
-    # findings that need a human. phpcbf: 0 = nothing left to fix.
-    def classify(rc: int) -> tuple[str, str]:
-        if rc == 0:
-            return "pass", "phpcs: clean" if dry_run else "phpcbf: nothing left to fix"
-        if dry_run and rc == 1:
-            return "changes", "phpcs: auto-fixable findings; phpcbf fixes them"
-        if dry_run:
-            return "fail", f"phpcs: findings that phpcbf cannot fix (exit {rc})"
-        return "fail", f"phpcbf: findings remain (exit {rc}); run phpcs for them"
-
-    return _execute(ctx, "phpcs", cmd, "phpcs.json" if dry_run else None, classify)
+        summary = f"phpcs: {found} finding(s), {found - fixable} need a human"
+        return ToolResult("phpcs", "fail", rc, command, duration, summary, rel)
+    summary = (
+        f"phpcbf applied; phpcs still reports {found} finding(s) that need a human"
+    )
+    return ToolResult("phpcs", "fail", rc, command, duration, summary, rel)
 
 
 def _lint_targets(ctx: Context) -> list[str]:
@@ -366,6 +429,8 @@ def run_lint(ctx: Context) -> ToolResult:
     try:
         artifact.write_text("\n".join(failures) + ("\n" if failures else ""), "utf-8")
     except OSError:
+        # The report file is a convenience; the failures are in the summary
+        # and the status, which do not depend on it.
         pass
     version = subprocess.run(
         [php, "-r", "echo PHP_VERSION;"], capture_output=True, text=True, check=False
@@ -550,12 +615,17 @@ def execute(
     dry_run = mode != "apply"
     selected = [t for t in ALL_TOOLS if t in tools]
     results: list[ToolResult] = []
+    # In apply mode Rector's dry-run is repeated once the formatter has run,
+    # so that the recheck sees the final code of the step.
+    recheck_pending = False
     for tool in selected:
+        if recheck_pending and tool not in FORMATTERS:
+            results.append(run_rector(ctx, dry_run=True, tool="rector-recheck"))
+            recheck_pending = False
         if tool == "rector":
             first = run_rector(ctx, dry_run=dry_run)
             results.append(first)
-            if not dry_run and first.status == "pass":
-                results.append(run_rector(ctx, dry_run=True, tool="rector-recheck"))
+            recheck_pending = not dry_run and first.status == "pass"
         elif tool == "php-cs-fixer":
             results.append(run_php_cs_fixer(ctx, dry_run=dry_run))
         elif tool == "phpcs":
@@ -575,6 +645,8 @@ def execute(
                 )
             else:
                 results.append(run_infection_diff(ctx, git_diff_base=git_diff_base))
+    if recheck_pending:
+        results.append(run_rector(ctx, dry_run=True, tool="rector-recheck"))
     return Transcript(
         schema_version=SCHEMA_VERSION,
         mode=mode,
@@ -650,17 +722,24 @@ def main(argv: list[str] | None = None) -> int:
     if args.mode == "apply" and not args.confirm:
         sys.stderr.write("error: --mode=apply requires --confirm to mutate files\n")
         return 2
+    paths: list[str] = []
     for rel in args.paths:
-        if not (root / rel).exists():
+        target = (root / rel).resolve()
+        # Apply mode rewrites these paths: they must stay inside the project.
+        if not target.is_relative_to(root):
+            sys.stderr.write(f"error: --path {rel!r} is outside --root\n")
+            return 2
+        if not target.exists():
             sys.stderr.write(f"error: --path {rel!r} does not exist under --root\n")
             return 2
+        paths.append(str(target.relative_to(root)) if target != root else ".")
 
     transcript = execute(
         root,
         mode=args.mode,
         tools=args.tools if isinstance(args.tools, list) else list(args.tools),
         git_diff_base=args.git_diff_base,
-        paths=args.paths,
+        paths=paths,
         rector_rules=args.rector_rules,
     )
 

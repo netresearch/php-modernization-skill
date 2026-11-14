@@ -66,6 +66,7 @@
     }
   ],
   "archetype": "typo3-extension",
+  "checkpoint": null,
   "checks": [
     {
       "category": "phpstan",
@@ -261,7 +262,7 @@
       "PM-53"
     ]
   },
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "skill": "php-modernization",
   "skill_version": "<NORMALIZED>",
   "summary": {
