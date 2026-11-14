@@ -135,8 +135,8 @@ one rule over one module, one class family to `readonly`. For each step:
 1. Run the relevant existing tests first and note failures that already exist.
 2. Preview the change (`--dry-run`) and read the diff against the questions in
    `SKILL.md` — Rector's diff is a proposal. In a probe with Rector 2.8.4,
-   `ChangeSwitchToMatchRector` turned a loose `switch` on an untyped value into
-   a strict `match`, and `ReadOnlyClassRector` made a class holding a mutable
+   `ChangeSwitchToMatchRector` turned a loose `switch` on a parameter with no
+   type and no docblock into a strict `match`, and `ReadOnlyClassRector` made a class holding a mutable
    `\DateTime` a `readonly class`.
 3. Apply, run the project's formatter, then lint, static analysis and the
    tests that cover the area.
