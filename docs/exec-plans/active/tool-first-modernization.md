@@ -65,7 +65,9 @@ Measured in the repository at `1bfccd5`:
   handled!" — it throws `UnhandledMatchError` for the other four.
 - The PM-20, PM-21 and PM-32 prompts tell the reviewer to look in `Classes/`
   only.
-- `evals/run-ab-test.sh` records output size and duration only. The shared
+- `evals/run-ab-test.sh` records output size and duration only. Both arms pass
+  `--disable-slash-commands`; with that flag the init event lists 0 skills in
+  either arm (Claude Code 2.1.325), so neither arm has the skill to use. The shared
   runner in skill-repo-skill runs with `--tools ""` and supplies the
   `SKILL.md` text only, so neither can show that an agent produces correct
   PHP.
