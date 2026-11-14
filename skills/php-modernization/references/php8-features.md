@@ -127,8 +127,12 @@ $label = match($status) {
 //    does not. Rector 2.8.4 converted such a switch on a parameter with no
 //    type and no docblock; with `@param int|string` it left it alone. A
 //    missing type is no guarantee the values are all one type.
-//    Keep the behaviour (normalise the subject first, or list both values)
-//    or state the change and pin it with a test.
+//    To keep the behaviour, keep the comparison:
+//    `match (true) { $code == 200 => 'OK', ... }`. A cast or a list of
+//    values is not the same: `(int) '200abc'` is 200 where the switch
+//    gave the default, and `' 200' == 200` holds where `200, '200' =>`
+//    misses it (both measured with PHP 8.5). Otherwise state the change
+//    and pin it with a test.
 // 2. Fall-through: a case without break runs the next case too. match has
 //    no fall-through; a switch that relies on it stays a switch.
 // 3. Side effects: a case that does more than produce one value (logging,
