@@ -90,13 +90,23 @@ def sh(cmd: list[str], cwd: Path, **kw) -> subprocess.CompletedProcess[str]:
     )
 
 
+# Repository parts that are not the plugin. evals/ holds the solutions and
+# acceptance tests; an agent that can read the plugin copy must not find them.
+NOT_PLUGIN = ("evals", "tests", "fixtures")
+
+
 def plugin_root(arm: str, out: Path) -> tuple[Path, str]:
-    """Materialise the plugin for a ``with:*`` arm; return (path, commit)."""
+    """Materialise the plugin for a ``with:*`` arm; return (path, commit).
+
+    Only the plugin: evals/, tests/ and fixtures/ are left out.
+    """
     ref = arm.split(":", 1)[1]
     if ref == "WORKTREE":
         target = out / "_plugins" / "WORKTREE"
         files = sh(["git", "ls-files", "-z"], REPO).stdout.split("\0")
         for rel in filter(None, files):
+            if rel.split("/", 1)[0] in NOT_PLUGIN:
+                continue
             src = REPO / rel
             if src.is_file():
                 dst = target / rel
@@ -120,6 +130,8 @@ def plugin_root(arm: str, out: Path) -> tuple[Path, str]:
         subprocess.run(
             ["tar", "-x", "-C", str(target)], input=archive.stdout, check=True
         )
+        for part in NOT_PLUGIN:
+            shutil.rmtree(target / part, ignore_errors=True)
     return target, commit
 
 
@@ -196,7 +208,11 @@ def tool_usage(transcript: Path) -> dict:
         except json.JSONDecodeError:
             continue
         if event.get("type") == "result":
+            denied = event.get("permission_denials") or []
             result = {
+                # Calls the allowlist refused. A high count means the run
+                # measured the allowlist as much as the agent.
+                "permission_denials": len(denied),
                 "num_turns": event.get("num_turns"),
                 "total_cost_usd": event.get("total_cost_usd"),
                 "is_error": event.get("is_error"),
@@ -228,6 +244,69 @@ def tool_usage(transcript: Path) -> dict:
     }
 
 
+# What the agent may run, the same in every arm. With --print, a tool that
+# is not listed is denied, not asked for. The list covers the project's own
+# tools and reading the tree; it does not name the skill's advice, so it
+# does not steer the without arm. It is not a sandbox: php and the vendor
+# binaries execute code from the tree. Run evals on a machine or account
+# without secrets you could not afford to expose, or in a container.
+BASE_TOOLS: tuple[str, ...] = (
+    "Read",
+    "Edit",
+    "Write",
+    "Glob",
+    "Grep",
+    "Bash(vendor/bin/:*)",
+    "Bash(php:*)",
+    "Bash(composer:*)",
+    "Bash(git status:*)",
+    "Bash(git diff:*)",
+    "Bash(git log:*)",
+    "Bash(git show:*)",
+    "Bash(cd:*)",
+    "Bash(set:*)",
+    "Bash(ls:*)",
+    "Bash(cat:*)",
+    "Bash(head:*)",
+    "Bash(tail:*)",
+    "Bash(wc:*)",
+    "Bash(find:*)",
+    "Bash(grep:*)",
+    "Bash(which:*)",
+    "Bash(mkdir:*)",
+    "Bash(echo:*)",
+    "Bash(printf:*)",
+)
+# Environment the agent inherits: enough for claude to start and log in,
+# no tokens (VAULT_TOKEN, GITHUB_TOKEN, …) from the host.
+ENV_KEEP: tuple[str, ...] = (
+    "HOME",
+    "PATH",
+    "LANG",
+    "LC_ALL",
+    "TERM",
+    "USER",
+    "SHELL",
+    "TMPDIR",
+)
+
+
+def allowed_tools(plugin: Path | None) -> list[str]:
+    tools = list(BASE_TOOLS)
+    if plugin is not None:
+        # The skill's own scripts, from the plugin under test only.
+        scripts = plugin / "skills" / SKILL / "scripts"
+        tools += [f"Bash(uv run {scripts}/:*)", f"Bash(python3 {scripts}/:*)", "Skill"]
+    return tools
+
+
+def agent_env(isolation: str) -> dict[str, str]:
+    env = {k: v for k, v in os.environ.items() if k in ENV_KEEP}
+    if isolation == "bare" and "ANTHROPIC_API_KEY" in os.environ:
+        env["ANTHROPIC_API_KEY"] = os.environ["ANTHROPIC_API_KEY"]
+    return env
+
+
 def run_one(
     *,
     case: dict,
@@ -238,8 +317,11 @@ def run_one(
     plugin: Path | None,
     commit: str,
 ) -> dict:
-    run_dir = out / case["id"] / f"{arm.replace(':', '_').replace('/', '_')}-{n}"
-    tree = run_dir / "tree"
+    label = f"{arm.replace(':', '_').replace('/', '_')}-{n}"
+    run_dir = out / case["id"] / label
+    # The agent's tree lives outside this repository: inside it, the agent
+    # could read evals/cases/*/solutions and the acceptance tests.
+    tree = args.work_root / case["id"] / label
     run_dir.mkdir(parents=True)
     prepare_tree(case["id"], tree)
     cmd = [
@@ -253,8 +335,8 @@ def run_one(
         args.model,
         "--max-turns",
         str(args.max_turns),
-        "--permission-mode",
-        "bypassPermissions",
+        "--allowedTools",
+        ",".join(allowed_tools(plugin)),
     ]
     if args.isolation == "bare":
         cmd.append("--bare")
@@ -270,6 +352,7 @@ def run_one(
                 cmd,
                 check=False,
                 cwd=str(tree),
+                env=agent_env(args.isolation),
                 stdout=fh,
                 stderr=subprocess.PIPE,
                 text=True,
@@ -326,7 +409,8 @@ def run_one(
         json.dumps(record, indent=2) + "\n", encoding="utf-8"
     )
     # The tree's vendor/ is a 100+ MB copy; the patch and the checks keep the result.
-    shutil.rmtree(tree / "vendor", ignore_errors=True)
+    # patch.diff and checks.json keep the result; the tree goes.
+    shutil.rmtree(tree, ignore_errors=True)
     return record
 
 
@@ -362,6 +446,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--claude", default="claude", help="claude CLI binary")
     parser.add_argument("--out", type=Path, default=None)
     parser.add_argument(
+        "--work-root",
+        type=Path,
+        default=None,
+        help="where agent trees and plugin copies live; must be outside this repository "
+        "(default: ~/.cache/php-modernization-evals/<timestamp>)",
+    )
+    parser.add_argument(
         "--isolation",
         choices=("project", "bare", "none"),
         default="project",
@@ -392,7 +483,17 @@ def main(argv: list[str] | None = None) -> int:
         UTC
     ).strftime("%Y%m%dT%H%M%SZ")
     out.mkdir(parents=True, exist_ok=False)
-    plugins = {arm: plugin_root(arm, out) for arm in arms if arm != "without"}
+    args.work_root = (
+        args.work_root or Path.home() / ".cache" / "php-modernization-evals" / out.name
+    ).resolve()
+    if args.work_root.is_relative_to(REPO):
+        parser.error(
+            "--work-root must be outside the repository: agents could read the solutions"
+        )
+    args.work_root.mkdir(parents=True, exist_ok=True)
+    plugins = {
+        arm: plugin_root(arm, args.work_root) for arm in arms if arm != "without"
+    }
 
     records: list[dict] = []
     for case_id in selected:
