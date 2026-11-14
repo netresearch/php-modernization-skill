@@ -25,7 +25,7 @@ allowed-tools:
 
 ## Agent contract
 
-1. **Discover**: `uv run ${CLAUDE_SKILL_DIR}/scripts/introspect.py` (cheap), or `verify_php_project.py --summary` (full, with `agent_actions[]`). Then read the project's own commands — `composer.json` scripts, `Makefile`, DDEV/Docker wrappers, CI config. They fix the runtime, the config and the paths; use them over a bare `vendor/bin/*` call.
+1. **Discover**: `uv run ${CLAUDE_SKILL_DIR}/scripts/introspect.py` (cheap), or `verify_php_project.py --summary` (full, with `agent_actions[]`). Then read the project's own commands — `composer.json` scripts, `Makefile`, DDEV/Docker wrappers, CI config. They fix the runtime, the config and the paths; use them over a bare `vendor/bin/*` call. Exception: when you must add a flag (`--dry-run`, `--only`, a path), run the command the script wraps with the flag written out, in the same runtime — Composer aliases can drop `--`-forwarded flags.
 2. **Drill**: `... --check PM-XX` per finding. Full output when triaging >3.
 3. **Use the project's tools, and run them.** Naming a tool is not using it. A check you did not run is reported as not run.
 
@@ -80,7 +80,7 @@ allowed-tools:
 ## Hard guardrails
 
 - Never apply `readonly` to Doctrine entities or mapped-superclasses (embeddables: see `references/doctrine-modernization-edges.md`).
-- Never apply Rector (or `modernize_loop.py --mode apply --confirm`) before a `--dry-run` of the same scope and a review of its diff. Rector diffs can change behaviour (loose `switch` → strict `match`, `readonly` over mutable members). Invoke `vendor/bin/rector` directly — composer script aliases can drop `--`-forwarded flags depending on configuration.
+- Never apply Rector (or `modernize_loop.py --mode apply --confirm`) before a `--dry-run` of the same scope and a review of its diff. Rector diffs can change behaviour (loose `switch` → strict `match`, `readonly` over mutable members). Pass `--dry-run` on the Rector command itself (the one the project's script runs, in its runtime), never through a Composer alias with `--`: depending on the configuration the alias drops it.
 - Never raise PHPStan level without regenerating + committing the baseline. Shrink, never delete.
 - Never apply blanket `final` to mock targets or extension points without confirmation.
 - Never edit `@generated` files or files under `var/cache/`, `vendor/`, `node_modules/`, `.Build/`.
