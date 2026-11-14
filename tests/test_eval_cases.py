@@ -22,6 +22,7 @@ import json
 import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -161,6 +162,48 @@ class RunValidityTest(unittest.TestCase):
             runner.validity("with:HEAD", self.init([], [other]), self.plugin)[0]
         )
         self.assertFalse(runner.validity("with:HEAD", None, self.plugin)[0])
+
+
+class HostGitTest(unittest.TestCase):
+    """The host records the patch without reading the agent's .git."""
+
+    def test_planted_clean_filter_does_not_run_on_the_host(self) -> None:
+        runner = load_runner()
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp) / "tree"
+            tree.mkdir()
+            (tree / "a.php").write_text("<?php\n", encoding="utf-8")
+            git = runner.host_git(tree)
+            ident = ["-c", "user.name=t", "-c", "user.email=t@invalid"]
+            for cmd in (["init", "-q"], ["add", "-A"], [*ident, "commit", "-qm", "b"]):
+                subprocess.run([*git, *cmd], cwd=tmp, check=True)
+            # What an agent can do inside its tree: its own repository with a
+            # clean filter that git runs on add. No -c option of host_git
+            # switches a filter off; only the separate git dir keeps it out.
+            marker = Path(tmp) / "ran"
+            trap = tree / "trap.sh"
+            trap.write_text(f"#!/bin/sh\ntouch {marker}\ncat\n", encoding="utf-8")
+            trap.chmod(0o755)
+            subprocess.run(["git", "init", "-q"], cwd=tree, check=True)
+            subprocess.run(
+                ["git", "config", "filter.x.clean", str(trap)], cwd=tree, check=True
+            )
+            (tree / ".gitattributes").write_text("*.php filter=x\n", encoding="utf-8")
+            (tree / "a.php").write_text("<?php\necho 1;\n", encoding="utf-8")
+
+            subprocess.run([*git, "add", "-A"], cwd=tmp, check=True)
+            diff = subprocess.run(
+                [*git, "diff", "--cached", "--no-ext-diff"],
+                cwd=tmp,
+                capture_output=True,
+                text=True,
+                check=True,
+            ).stdout
+            self.assertIn("+echo 1;", diff)
+            self.assertFalse(marker.exists(), "the host ran the agent's filter")
+            # Control: plain git in the tree reads that config and runs it.
+            subprocess.run(["git", "add", "-A"], cwd=tree, check=True)
+            self.assertTrue(marker.exists(), "the trap did not fire: no control")
 
 
 if __name__ == "__main__":

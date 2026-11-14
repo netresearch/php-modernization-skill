@@ -34,9 +34,14 @@ Sandbox (``--sandbox``):
   ``evals/agent.Dockerfile`` with ``--permission-mode bypassPermissions``.
   The container sees its own tree, the plugin under test (read-only), the
   host's claude binary (read-only) and the Claude Code login file
-  (read-only); no other host file and no host environment variable. The
-  agent can read that login file: run evals with an account whose token
-  you can rotate.
+  (read-only); no other host file and no host environment variable. It runs
+  without capabilities and on an internal network whose only way out is a
+  proxy that lets through api.anthropic.com alone. The agent can read the
+  login file and reach that API with it: run evals with an account whose
+  token you can rotate. The checker, which executes the agent's PHP code,
+  runs in a container without network as well, and the host records the
+  patch through a git dir outside the tree, so nothing the agent writes
+  runs on the host.
 - ``host`` — the agent runs on the host with an allowlist
   (``--allowedTools``) and a filtered environment. The allowlist is not a
   sandbox, and it refuses some ordinary commands, so tool use is not
@@ -97,9 +102,13 @@ PROMPT_SUFFIX = (
 TOOL_PATTERNS = {
     "rector": re.compile(r"\brector\b"),
     "phpstan": re.compile(r"\bphpstan\b"),
-    "phpunit": re.compile(r"\bphpunit\b"),
+    # The case projects alias the tools as Composer scripts: composer test,
+    # composer lint, composer phpstan, composer rector.
+    "phpunit": re.compile(r"\bphpunit\b|\bcomposer\s+(run(-script)?\s+)?test\b"),
     "phpcs": re.compile(r"\bphpc(s|bf)\b"),
-    "php-lint": re.compile(r"\bphp\s+-l\b|parallel-lint"),
+    "php-lint": re.compile(
+        r"\bphp\s+-l\b|parallel-lint|\bcomposer\s+(run(-script)?\s+)?lint\b"
+    ),
     "skill-scripts": re.compile(
         r"introspect\.py|verify_php_project\.py|modernize_loop\.py"
     ),
@@ -157,6 +166,25 @@ def plugin_root(arm: str, out: Path) -> tuple[Path, str]:
     return target, commit
 
 
+def host_git(tree: Path) -> list[str]:
+    """git for the host's view of a tree: its git dir lies outside the tree.
+
+    The agent can write anything inside the tree, including its own .git;
+    a git command on the host that read that .git/config could run code the
+    agent put there (core.fsmonitor, hooks, a diff driver). This git dir is
+    out of the agent's reach, and hooks and fsmonitor stay off regardless.
+    """
+    return [
+        "git",
+        f"--git-dir={tree.parent / (tree.name + '.git')}",
+        f"--work-tree={tree}",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "-c",
+        "core.fsmonitor=false",
+    ]
+
+
 def prepare_tree(case_id: str, tree: Path) -> None:
     shutil.copytree(CASES / case_id / "project", tree)
     # The agent gets its own vendor/: it may run composer dump-autoload or
@@ -168,23 +196,26 @@ def prepare_tree(case_id: str, tree: Path) -> None:
     (tree / ".gitignore").write_text(
         "vendor/\n.build/\n.phpunit.cache/\n", encoding="utf-8"
     )
-    for cmd in (
-        ["git", "init", "-q", "-b", "main"],
-        ["git", "add", "-A"],
-        [
-            "git",
-            "-c",
-            "user.name=eval",
-            "-c",
-            "user.email=eval@invalid",
-            "commit",
-            "-qm",
-            "baseline",
-        ],
-    ):
-        done = sh(cmd, tree)
-        if done.returncode != 0:
-            raise SystemExit(f"error: {' '.join(cmd)} in {tree}: {done.stderr}")
+    # Two repositories with the same baseline: the agent's own (tree/.git),
+    # for git status and git diff, and the host's, which records the patch.
+    for git in (["git"], host_git(tree)):
+        for cmd in (
+            [*git, "init", "-q", "-b", "main"],
+            [*git, "add", "-A"],
+            [
+                *git,
+                "-c",
+                "user.name=eval",
+                "-c",
+                "user.email=eval@invalid",
+                "commit",
+                "-qm",
+                "baseline",
+            ],
+        ):
+            done = sh(cmd, tree)
+            if done.returncode != 0:
+                raise SystemExit(f"error: {' '.join(cmd)} in {tree}: {done.stderr}")
 
 
 def init_event(transcript: Path) -> dict | None:
@@ -329,13 +360,13 @@ def agent_env(isolation: str) -> dict[str, str]:
     return env
 
 
-def docker_prefix(
-    args: argparse.Namespace, tree: Path, plugin: Path | None, name: str
-) -> list[str]:
-    """``docker run`` up to the image; the claude command follows."""
+PROXY_PORT = 8888
+
+
+def box_base(name: str) -> list[str]:
+    """``docker run`` options every eval container gets."""
     uid, gid = os.getuid(), os.getgid()
-    claude_bin = Path(shutil.which(args.claude) or args.claude).resolve()
-    cmd = [
+    return [
         "docker",
         "run",
         "--rm",
@@ -343,10 +374,78 @@ def docker_prefix(
         name,
         "--user",
         f"{uid}:{gid}",
+        "--cap-drop",
+        "ALL",
+        "--security-opt",
+        "no-new-privileges",
+        "--pids-limit",
+        "1024",
         "--tmpfs",
         f"{BOX_HOME}:uid={uid},gid={gid}",
         "-e",
         f"HOME={BOX_HOME}",
+    ]
+
+
+def start_egress(args: argparse.Namespace, run_id: str) -> None:
+    """An internal network for the agents and a proxy as its only way out.
+
+    The network has no route to the outside or to the host. The proxy
+    (tinyproxy, configured in agent.Dockerfile) sits on it and on the
+    default bridge and lets CONNECT through to api.anthropic.com:443 only.
+    """
+    args.network = f"pm-eval-{run_id}"
+    args.proxy = f"pm-eval-proxy-{run_id}"
+    for cmd in (
+        ["docker", "network", "create", "--internal", args.network],
+        [
+            "docker",
+            "run",
+            "-d",
+            "--rm",
+            "--name",
+            args.proxy,
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            args.image,
+            "tinyproxy",
+            "-d",
+            "-c",
+            "/etc/tinyproxy/eval.conf",
+        ],
+        ["docker", "network", "connect", args.network, args.proxy],
+    ):
+        done = sh(cmd, REPO)
+        if done.returncode != 0:
+            stop_egress(args)
+            raise SystemExit(f"error: {' '.join(cmd)}: {done.stderr.strip()}")
+
+
+def stop_egress(args: argparse.Namespace) -> None:
+    if getattr(args, "proxy", None):
+        sh(["docker", "rm", "-f", args.proxy], REPO)
+    if getattr(args, "network", None):
+        sh(["docker", "network", "rm", args.network], REPO)
+
+
+def docker_prefix(
+    args: argparse.Namespace, tree: Path, plugin: Path | None, name: str
+) -> list[str]:
+    """``docker run`` for an agent up to the image; the claude command follows."""
+    claude_bin = Path(shutil.which(args.claude) or args.claude).resolve()
+    proxy = f"http://{args.proxy}:{PROXY_PORT}"
+    cmd = [
+        *box_base(name),
+        "--network",
+        args.network,
+        "-e",
+        f"HTTPS_PROXY={proxy}",
+        "-e",
+        f"HTTP_PROXY={proxy}",
+        "-e",
+        "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1",
         "-v",
         f"{claude_bin}:/usr/local/bin/claude:ro",
         "-v",
@@ -361,6 +460,39 @@ def docker_prefix(
     if plugin is not None:
         cmd += ["-v", f"{plugin}:{BOX_PLUGIN}:ro"]
     return [*cmd, args.image, "claude"]
+
+
+def score(case_id: str, tree: Path, args: argparse.Namespace) -> str:
+    """Run the checker on a result tree; return its stdout.
+
+    The checker runs the agent's PHP code (PHPUnit executes src/). In docker
+    mode that happens in a container with no network and read-only mounts,
+    never on the host.
+    """
+    if args.sandbox != "docker":
+        cmd = [sys.executable, str(CHECKER), case_id, "--tree", str(tree)]
+        return sh(cmd, REPO, timeout=900).stdout
+    name = f"pm-eval-check-{uuid.uuid4().hex[:12]}"
+    cmd = [
+        *box_base(name),
+        "--network",
+        "none",
+        "-v",
+        f"{CASES}:/cases:ro",
+        "-v",
+        f"{tree}:/tree:ro",
+        args.image,
+        "python3",
+        "/cases/check_case.py",
+        case_id,
+        "--tree",
+        "/tree",
+    ]
+    try:
+        return sh(cmd, REPO, timeout=900).stdout
+    except subprocess.TimeoutExpired:
+        sh(["docker", "rm", "-f", name], REPO)
+        return ""
 
 
 def run_one(
@@ -431,19 +563,19 @@ def run_one(
                 sh(["docker", "rm", "-f", name], REPO)
     duration = time.monotonic() - start
 
-    sh(["git", "add", "-A"], tree)
+    git = host_git(tree)
+    sh([*git, "add", "-A"], tree.parent)
     (run_dir / "patch.diff").write_text(
-        sh(["git", "diff", "--cached"], tree).stdout, encoding="utf-8"
+        sh(
+            [*git, "diff", "--cached", "--no-ext-diff", "--no-textconv"], tree.parent
+        ).stdout,
+        encoding="utf-8",
     )
-    checked = sh(
-        [sys.executable, str(CHECKER), case["id"], "--tree", str(tree)],
-        REPO,
-        timeout=900,
-    )
+    checked = score(case["id"], tree, args)
     try:
-        checks = json.loads(checked.stdout)
+        checks = json.loads(checked)
     except json.JSONDecodeError:
-        checks = {"passed": False, "error": checked.stderr[-2000:]}
+        checks = {"passed": False, "error": "the checker printed no JSON"}
     (run_dir / "checks.json").write_text(
         json.dumps(checks, indent=2) + "\n", encoding="utf-8"
     )
@@ -479,6 +611,7 @@ def run_one(
     # The tree's vendor/ is a 100+ MB copy; patch.diff and checks.json keep
     # the result, so the tree goes.
     shutil.rmtree(tree, ignore_errors=True)
+    shutil.rmtree(tree.parent / (tree.name + ".git"), ignore_errors=True)
     return record
 
 
@@ -611,8 +744,14 @@ def main(argv: list[str] | None = None) -> int:
         for c in selected
     ]
     jobs = [(c, arm, n) for c in cases for arm in arms for n in range(1, args.runs + 1)]
-    with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-        records = list(pool.map(one, jobs))
+    if args.sandbox == "docker":
+        start_egress(args, out.name.lower())
+    try:
+        with ThreadPoolExecutor(max_workers=args.jobs) as pool:
+            records = list(pool.map(one, jobs))
+    finally:
+        if args.sandbox == "docker":
+            stop_egress(args)
 
     summary = {
         "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
