@@ -6,8 +6,11 @@ namespace Cases\ReviewHttpStatusTypes;
 
 final class StatusText
 {
-    /** Callers pass the code as parsed from a status line: a string. */
-    public function for(int|string $code): string
+    /**
+     * mixed, as the untyped parameter before: callers pass the code as
+     * parsed from a status line, and null or a bool still give a text.
+     */
+    public function for(mixed $code): string
     {
         // Loose comparison as before: '404' matches 404.
         return match (true) {
