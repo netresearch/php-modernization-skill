@@ -74,11 +74,17 @@ mechanical:
   # a brace target whose alternatives all miss makes a `contains` check SKIP,
   # so widening PM-04 alone would leave those silently unevaluated on exactly
   # the projects this fix is for.
+  #
+  # A PHPCS config satisfies PM-04 as well: a project that enforces its coding
+  # standard with PHPCS has no reason to add PHP-CS-Fixer. PM-05/PM-06/PM-24/
+  # PM-30 keep the PHP-CS-Fixer list, so they skip on such a project — they
+  # read PHP-CS-Fixer rules. Same candidates as PHPCS_CONFIG_CANDIDATES in
+  # scripts/_common.py.
   - id: PM-04
     type: file_exists
-    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php,.phpcs.xml,phpcs.xml,.phpcs.xml.dist,phpcs.xml.dist,Build/phpcs.xml,Build/phpcs.xml.dist,Build/.phpcs.xml,Build/.phpcs.xml.dist}"
     severity: error
-    desc: "PHP-CS-Fixer configuration must exist (root or Build/, .php-cs-fixer.php or .php-cs-fixer.dist.php)"
+    desc: "Coding-standard configuration must exist: PHP-CS-Fixer (.php-cs-fixer.php or .php-cs-fixer.dist.php, root or Build/) or PHPCS (phpcs.xml[.dist] or .phpcs.xml[.dist], root or Build/)"
 
   # The shared config of netresearch/typo3-ci-workflows (config/php-cs-fixer/
   # rules.php) sets '@PER-CS3x0'. A project that requires it carries no
@@ -213,11 +219,26 @@ mechanical:
     severity: warning
     desc: "PHPStan should be available (directly or transitively via a CI package)"
 
+  # A project with a PHPCS config and no PHP-CS-Fixer config needs PHPCS, not
+  # PHP-CS-Fixer — the same rule as check_pm17_phpcs in verify_php_project.py.
   - id: PM-17
-    type: command
-    pattern: "find .Build/bin/php-cs-fixer vendor/bin/php-cs-fixer composer.json composer.lock -maxdepth 0 2>/dev/null | xargs -r grep -l php-cs-fixer 2>/dev/null | grep -q ."
+    type: script
+    command: |
+      FIXER=0
+      for c in .php-cs-fixer.php .php-cs-fixer.dist.php Build/.php-cs-fixer.php Build/.php-cs-fixer.dist.php; do
+        [ -f "$c" ] && FIXER=1
+      done
+      PHPCS=0
+      for c in .phpcs.xml phpcs.xml .phpcs.xml.dist phpcs.xml.dist Build/phpcs.xml Build/phpcs.xml.dist Build/.phpcs.xml Build/.phpcs.xml.dist; do
+        [ -f "$c" ] && PHPCS=1
+      done
+      if [ "$FIXER" = 0 ] && [ "$PHPCS" = 1 ]; then
+        [ -f vendor/bin/phpcs ] || [ -f .Build/bin/phpcs ] || grep -qs squizlabs/php_codesniffer composer.json composer.lock
+      else
+        find .Build/bin/php-cs-fixer vendor/bin/php-cs-fixer composer.json composer.lock -maxdepth 0 2>/dev/null | xargs -r grep -l php-cs-fixer 2>/dev/null | grep -q .
+      fi
     severity: warning
-    desc: "PHP-CS-Fixer should be available (directly or transitively via a CI package)"
+    desc: "The coding-standard tool should be available (directly or transitively via a CI package): PHP-CS-Fixer, or PHPCS where the project configures PHPCS and not PHP-CS-Fixer"
 
   # Rector can be a direct require-dev OR pulled transitively via the
   # netresearch/typo3-ci-workflows meta-package. Same pattern as TT-64

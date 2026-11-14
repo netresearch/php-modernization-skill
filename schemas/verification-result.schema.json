@@ -51,10 +51,55 @@
       "required": ["status", "errors", "warnings", "info"],
       "additionalProperties": false,
       "properties": {
-        "status": { "type": "string", "enum": ["pass", "warn", "fail"] },
+        "status": {
+          "type": "string",
+          "enum": ["pass", "warn", "fail", "not_evaluated"],
+          "description": "not_evaluated only with --check for a checkpoint this verifier does not evaluate (exit 3)."
+        },
         "errors": { "type": "integer", "minimum": 0 },
         "warnings": { "type": "integer", "minimum": 0 },
-        "info": { "type": "integer", "minimum": 0 }
+        "info": { "type": "integer", "minimum": 0 },
+        "tool_runs_failed": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "tool_runs[] entries whose status is not pass. Does not change status or the exit code."
+        }
+      }
+    },
+    "review_coverage": {
+      "description": "Which checkpoints this report evaluates. Null when checkpoints.yaml is not next to SKILL.md.",
+      "oneOf": [
+        { "type": "null" },
+        {
+          "type": "object",
+          "required": ["verifier_checks", "mechanical_not_in_verifier", "llm_reviews_not_reviewed"],
+          "additionalProperties": false,
+          "properties": {
+            "verifier_checks": { "type": "array", "items": { "type": "string" } },
+            "mechanical_not_in_verifier": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Mechanical checkpoints run by the checkpoint runner (/assess), not by this verifier."
+            },
+            "llm_reviews_not_reviewed": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Checkpoints that need an agent's review. No script evaluates them; a passing report does not cover them."
+            }
+          }
+        }
+      ]
+    },
+    "checkpoint": {
+      "type": "object",
+      "description": "Present only with --check for a checkpoint this verifier does not evaluate.",
+      "required": ["id", "kind", "status", "reason"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "type": "string", "enum": ["llm_review", "mechanical"] },
+        "status": { "type": "string", "enum": ["not_reviewed", "not_run"] },
+        "reason": { "type": "string" }
       }
     },
     "environment": {

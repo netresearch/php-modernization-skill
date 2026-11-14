@@ -76,7 +76,7 @@
 - `uv run skills/php-modernization/scripts/introspect.py --root .` — emit the project profile (cheap, no subprocesses).
 - `uv run skills/php-modernization/scripts/verify_php_project.py --root . --format json --summary` — full mechanical verification with `agent_actions[]`.
 - `uv run skills/php-modernization/scripts/verify_php_project.py --root . --format sarif` — SARIF output for GitHub code scanning.
-- `uv run skills/php-modernization/scripts/modernize_loop.py --mode dry-run` — orchestrated fix preview (no mutations).
+- `uv run skills/php-modernization/scripts/modernize_loop.py --mode dry-run` — orchestrated fix preview: Rector, formatter, lint, PHPStan, PHPUnit (no tracked file changes).
 - `uv run scripts/test_fixtures.py` — regression suite for the verifier itself.
 - `uv run --python 3.11 python tests/test_scripts.py` — behaviour tests for the introspector, verifier, orchestrator and Bash wrapper.
 - `bash scripts/verify-harness.sh` — agent-harness consistency check (this file, docs, refs).
