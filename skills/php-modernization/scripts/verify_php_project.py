@@ -861,9 +861,9 @@ def check_pm17_phpcs(root: Path) -> Check | None:
         return None
     if first_existing(root, PHPCS_CONFIG_CANDIDATES) is None:
         return None
-    available = find_binary(root, "phpcs") is not None or composer_dep_mentions(
-        root, "squizlabs/php_codesniffer"
-    )
+    available = find_binary(
+        root, "phpcs", read_composer_json(root)
+    ) is not None or composer_dep_mentions(root, "squizlabs/php_codesniffer")
     return Check(
         id="PM-17",
         category="dependencies",

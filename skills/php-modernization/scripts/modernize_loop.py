@@ -245,6 +245,22 @@ def _execute(
 # ---------------------------------------------------------------------------
 
 
+def _rector_version(binary: Path) -> tuple[int, int, int] | None:
+    """The version ``rector --version`` prints; None for a dev build or an error."""
+    try:
+        out = subprocess.run(
+            [str(binary), "--version"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=30,
+        ).stdout
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    match = re.search(r"\b(\d+)\.(\d+)\.(\d+)\b", out)
+    return (int(match[1]), int(match[2]), int(match[3])) if match else None
+
+
 def run_rector(ctx: Context, *, dry_run: bool, tool: str = "rector") -> ToolResult:
     if ctx.rector_config is None:
         # Rector without a config prints 'No "rector.php" config found',
@@ -253,6 +269,22 @@ def run_rector(ctx: Context, *, dry_run: bool, tool: str = "rector") -> ToolResu
     binary = find_binary(ctx.root, "rector", ctx.composer)
     if binary is None:
         return _missing(tool, "rector")
+    if len(ctx.rector_rules) > 1:
+        version = _rector_version(binary)
+        if version is not None and version < (2, 6, 7):
+            # Before 2.6.7, --only takes one value and a repeated --only keeps
+            # the last one: the other rules would be skipped without a word.
+            return ToolResult(
+                tool=tool,
+                status="fail",
+                exit_code=None,
+                command="(not run)",
+                duration_seconds=0.0,
+                summary=(
+                    f"rector {'.'.join(map(str, version))} runs one --only rule; "
+                    "repeated --rector-only needs Rector 2.6.7 or later"
+                ),
+            )
     cmd = [str(binary), "process", *ctx.paths]
     # Rector reads rector.php from the working directory only.
     if ctx.rector_config and ctx.rector_config != "rector.php":
@@ -335,8 +367,11 @@ def run_php_cs_fixer(ctx: Context, *, dry_run: bool) -> ToolResult:
             return result
         # The project passes its paths on the command line; without a
         # --path the loop uses the source and test directories.
+        # A package that maps its root ("") is fixed as "."; that covers
+        # the test directory as well.
         dirs = source_dirs(ctx.root, ctx.composer)
-        paths = [d for d in dirs["src"] + dirs["tests"] if d != "."] or ["."]
+        found = dirs["src"] + [d for d in dirs["tests"] if d not in dirs["src"]]
+        paths = ["."] if "." in found or not found else found
         return _execute(ctx, "php-cs-fixer", [*base, *paths, *tail], artifact, classify)
     # Without intersection the paths replace the config's Finder, and files
     # the project excludes get fixed.
@@ -526,20 +561,28 @@ def _lint_targets(ctx: Context) -> list[str]:
     return ["."] if "." in targets else targets
 
 
-# parallel-lint options that take a value.
-_LINT_VALUE_OPTIONS = {"--exclude", "-e", "-p", "-j", "--php", "--jobs"}
+# parallel-lint options that take a value (1.4.0, Settings::parseArguments).
+_LINT_VALUE_OPTIONS = {
+    "--exclude",
+    "-e",
+    "-p",
+    "-j",
+    "--git",
+    "--syntax-error-callback",
+}
+_COMMAND_SEPARATORS = {"&&", "||", ";", "|"}
 
 
-def _lint_script_targets(root: Path, composer: dict | None) -> list[str]:
-    """The paths the project's own parallel-lint script lints, globs expanded.
+def _lint_script_calls(composer: dict | None) -> list[list[str]]:
+    """The arguments of each parallel-lint call in the Composer scripts.
 
-    A TYPO3 extension lints ``*.php Classes Configuration Tests``; the
-    autoload directories alone leave out ext_emconf.php and the TCA.
+    Each list ends where that shell command ends, so the arguments of the
+    next command (``&& tar --exclude=src …``) are never read as lint options.
     """
     scripts = (composer or {}).get("scripts")
     if not isinstance(scripts, dict):
         return []
-    targets: list[str] = []
+    calls: list[list[str]] = []
     for value in scripts.values():
         for command in value if isinstance(value, list) else [value]:
             if not isinstance(command, str):
@@ -548,43 +591,65 @@ def _lint_script_targets(root: Path, composer: dict | None) -> list[str]:
                 tokens = shlex.split(command)
             except ValueError:
                 continue
-            starts = [i for i, t in enumerate(tokens) if t.endswith("parallel-lint")]
-            if not starts:
-                continue
-            skip = False
-            for token in tokens[starts[0] + 1 :]:
-                if skip:
-                    skip = False
+            for start, name in enumerate(tokens):
+                if not name.endswith("parallel-lint"):
                     continue
-                if token in {"&&", "||", ";", "|"}:
-                    break  # the next command's arguments are not lint targets
-                ends_command = token.endswith(";")
-                token = token.rstrip(";")
-                if token in _LINT_VALUE_OPTIONS:
-                    skip = True
-                    continue
-                if not token or token.startswith("-"):
-                    if ends_command:
+                args: list[str] = []
+                for token in tokens[start + 1 :]:
+                    if token in _COMMAND_SEPARATORS:
                         break
-                    continue
-                matches = (
-                    sorted(
-                        str(p.relative_to(root))
-                        for p in root.glob(token)
-                        # The shell running the script skips dotfiles.
-                        if not any(
-                            part.startswith(".") for part in p.relative_to(root).parts
-                        )
-                        or token.startswith(".")
+                    if token.endswith(";"):
+                        if token.rstrip(";"):
+                            args.append(token.rstrip(";"))
+                        break
+                    args.append(token)
+                calls.append(args)
+    return calls
+
+
+def _lint_php(composer: dict | None) -> str | None:
+    """The PHP binary the project's parallel-lint script selects with -p."""
+    for args in _lint_script_calls(composer):
+        for i, token in enumerate(args[:-1]):
+            if token == "-p":
+                return args[i + 1]
+    return None
+
+
+def _lint_script_targets(root: Path, composer: dict | None) -> list[str]:
+    """The paths the project's own parallel-lint script lints, globs expanded.
+
+    A TYPO3 extension lints ``*.php Classes Configuration Tests``; the
+    autoload directories alone leave out ext_emconf.php and the TCA.
+    """
+    targets: list[str] = []
+    for args in _lint_script_calls(composer):
+        skip = False
+        for token in args:
+            if skip:
+                skip = False
+                continue
+            if token in _LINT_VALUE_OPTIONS:
+                skip = True
+                continue
+            if token.startswith("-"):
+                continue
+            matches = (
+                sorted(
+                    str(p.relative_to(root))
+                    for p in root.glob(token)
+                    # The shell running the script skips dotfiles.
+                    if not any(
+                        part.startswith(".") for part in p.relative_to(root).parts
                     )
-                    if any(c in token for c in "*?[")
-                    else [token.rstrip("/")]
+                    or token.startswith(".")
                 )
-                for rel in matches:
-                    if (root / rel).exists() and rel not in targets:
-                        targets.append(rel)
-                if ends_command:
-                    break
+                if any(c in token for c in "*?[")
+                else [token.rstrip("/")]
+            )
+            for rel in matches:
+                if (root / rel).exists() and rel not in targets:
+                    targets.append(rel)
     return targets
 
 
@@ -594,31 +659,18 @@ def _lint_excludes(composer: dict | None) -> list[str]:
     Fixture files that are invalid PHP on purpose are excluded there; the
     loop excludes the same paths.
     """
-    scripts = (composer or {}).get("scripts")
-    if not isinstance(scripts, dict):
-        return []
     excludes: list[str] = []
-    for value in scripts.values():
-        commands = value if isinstance(value, list) else [value]
-        for command in commands:
-            if not isinstance(command, str):
+    for args in _lint_script_calls(composer):
+        for i, token in enumerate(args):
+            if token == "--exclude" and i + 1 < len(args):
+                path = args[i + 1]
+            elif token.startswith("--exclude="):
+                path = token.split("=", 1)[1]
+            else:
                 continue
-            try:
-                tokens = shlex.split(command)
-            except ValueError:
-                continue
-            if not any(t.endswith("parallel-lint") for t in tokens):
-                continue
-            for i, token in enumerate(tokens):
-                if token == "--exclude" and i + 1 < len(tokens):
-                    path = tokens[i + 1]
-                elif token.startswith("--exclude="):
-                    path = token.split("=", 1)[1]
-                else:
-                    continue
-                path = path.rstrip("/")
-                if path and path not in excludes:
-                    excludes.append(path)
+            path = path.rstrip("/")
+            if path and path not in excludes:
+                excludes.append(path)
     return excludes
 
 
@@ -637,9 +689,14 @@ def run_lint(ctx: Context) -> ToolResult:
             name = name.rstrip("/")
             if (ctx.root / name).is_dir() and name not in excludes:
                 excludes.append(name)
+    # The PHP the project lints with; without -p, parallel-lint uses the PHP
+    # it runs under, which can be newer than the project's floor.
+    lint_php = _lint_php(ctx.composer)
     parallel = find_binary(ctx.root, "parallel-lint", ctx.composer)
     if parallel is not None:
         cmd = [str(parallel), "--no-progress"]
+        if lint_php:
+            cmd += ["-p", lint_php]
         for path in excludes:
             cmd += ["--exclude", path]
         cmd += targets
@@ -654,13 +711,15 @@ def run_lint(ctx: Context) -> ToolResult:
                 else ("fail", f"parallel-lint: syntax errors (exit {rc})")
             ),
         )
-    php = shutil.which("php")
+    php = shutil.which(lint_php) if lint_php else shutil.which("php")
     if php is None:
-        return _missing("lint", "php")
+        return _missing("lint", lint_php or "php")
     files: list[Path] = []
     for target in targets:
         p = ctx.root / target
-        if p.is_file() and p.suffix == ".php":
+        if p.is_file():
+            # A file named on the command line or in the script is linted
+            # whatever its suffix (.phtml, ext_emconf.php, a bin script).
             files.append(p)
         elif p.is_dir():
             files.extend(sorted(p.rglob("*.php")))
@@ -775,10 +834,47 @@ def _infection_sets_min_msi(root: Path) -> bool:
         "infection.json.dist",
     ):
         try:
-            return "minMsi" in (root / name).read_text(encoding="utf-8")
+            text = (root / name).read_text(encoding="utf-8")
         except OSError:
             continue
+        # A commented-out "// minMsi: 80" sets nothing.
+        return bool(_MIN_MSI_KEY_RE.search(_strip_json5_comments(text)))
     return False
+
+
+_MIN_MSI_KEY_RE = re.compile(r"""(?:^|[{,])\s*["']?minMsi["']?\s*:""")
+
+
+def _strip_json5_comments(text: str) -> str:
+    """The text without // and /* */ comments; string contents are kept."""
+    out: list[str] = []
+    quote: str | None = None
+    i = 0
+    while i < len(text):
+        char = text[i]
+        if quote:
+            out.append(char)
+            if char == "\\" and i + 1 < len(text):
+                out.append(text[i + 1])
+                i += 2
+                continue
+            if char == quote:
+                quote = None
+        elif char in "\"'":
+            quote = char
+            out.append(char)
+        elif text.startswith("//", i):
+            end = text.find("\n", i)
+            i = len(text) if end < 0 else end
+            continue
+        elif text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            i = len(text) if end < 0 else end + 2
+            continue
+        else:
+            out.append(char)
+        i += 1
+    return "".join(out)
 
 
 def run_infection_diff(ctx: Context, *, git_diff_base: str) -> ToolResult:

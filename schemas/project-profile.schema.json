@@ -13,13 +13,19 @@
     "php_version_constraint",
     "php_runtime",
     "tooling",
-    "config_files",
-    "coding_standard",
-    "source_dirs",
-    "project_commands",
     "autoload_psr4",
     "baselines"
   ],
+  "if": {
+    "required": ["schema_version"],
+    "properties": { "schema_version": { "const": "1.0.0" } }
+  },
+  "else": {
+    "required": ["config_files", "coding_standard", "source_dirs", "project_commands"],
+    "properties": {
+      "tooling": { "required": ["phpcs", "fractor", "phpunit", "php_linter"] }
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "schema_version": {
@@ -67,10 +73,6 @@
         "phpat",
         "infection",
         "psalm",
-        "phpcs",
-        "fractor",
-        "phpunit",
-        "php_linter",
         "composer_audit_supported"
       ],
       "additionalProperties": false,

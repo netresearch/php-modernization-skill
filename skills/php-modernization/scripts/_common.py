@@ -313,8 +313,15 @@ def source_dirs(root: Path, composer: dict[str, Any] | None) -> dict[str, list[s
         out: list[str] = []
         for p in paths:
             rel = p.strip().rstrip("/") or "."
-            if rel not in out and (root / rel).is_dir():
-                out.append(rel)
+            # Composer expands "*" in classmap paths ("packages/*/src/").
+            candidates = (
+                sorted(str(m.relative_to(root)) for m in root.glob(rel))
+                if "*" in rel
+                else [rel]
+            )
+            for cand in candidates:
+                if cand not in out and (root / cand).is_dir():
+                    out.append(cand)
         return out
 
     composer = composer or {}
@@ -367,9 +374,15 @@ def ci_files(root: Path) -> list[str]:
     found = [rel for rel in CI_FILE_CANDIDATES if (root / rel).is_file()]
     workflows = root / ".github" / "workflows"
     if workflows.is_dir():
+        try:
+            entries = sorted(workflows.iterdir())
+        except OSError:
+            # An unreadable directory leaves the files already found; the
+            # profile is still written.
+            entries = []
         found.extend(
             str(p.relative_to(root))
-            for p in sorted(workflows.iterdir())
+            for p in entries
             if p.suffix in {".yml", ".yaml"} and p.is_file()
         )
     return found

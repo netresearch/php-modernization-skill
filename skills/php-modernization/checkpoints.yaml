@@ -35,7 +35,8 @@ mechanical:
   # 9. The effective config is now picked first, in the same precedence order
   # scripts/verify_php_project.py uses (PHPSTAN_CONFIG_CANDIDATES), and its own
   # `level:` decides — NEON semantics: the including file overrides what it
-  # includes. Only when the effective config declares no level at all does the
+  # includes. Without its own `level:`, the last file it includes that declares
+  # one decides. Only when neither declares a level does the
   # scan fall back to the remaining candidates, so the split layout (root
   # phpstan.neon that just includes Build/phpstan.neon) keeps passing. An
   # `includes:` pointing outside the candidate list (a vendored CI config) is
@@ -52,10 +53,15 @@ mechanical:
       done
       if [ -z "$CFG" ]; then exit 1; fi
       if grep -qE '^[[:space:]]*level:' "$CFG"; then
-        grep -qE "$LVL" "$CFG"
-      else
-        grep -hE "$LVL" phpstan.neon phpstan.neon.dist phpstan.dist.neon Build/phpstan.neon Build/phpstan/phpstan.neon 2>/dev/null | grep -q .
+        grep -qE "$LVL" "$CFG"; exit $?
       fi
+      # The files CFG includes, relative to CFG; the last one with a level wins.
+      DIR=$(dirname "$CFG"); LAST=""
+      for i in $(awk '/^includes:/{f=1;next} f&&/^[^[:space:]-]/{f=0} f&&/^[[:space:]]*-/{sub(/^[[:space:]]*-[[:space:]]*/,"");gsub(/["\047]/,"");print $1}' "$CFG"); do
+        if [ -f "$DIR/$i" ] && grep -qE '^[[:space:]]*level:' "$DIR/$i"; then LAST="$DIR/$i"; fi
+      done
+      if [ -n "$LAST" ]; then grep -qE "$LVL" "$LAST"; exit $?; fi
+      grep -hE "$LVL" phpstan.neon phpstan.neon.dist phpstan.dist.neon Build/phpstan.neon Build/phpstan/phpstan.neon 2>/dev/null | grep -q .
     severity: error
     desc: "PHPStan level must be 9 or higher (or max)"
 

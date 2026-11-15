@@ -171,6 +171,35 @@ class IntrospectTest(unittest.TestCase):
                 {"src": ["lib", "packages/a/src"], "tests": ["spec"]},
             )
 
+    def test_classmap_wildcards_are_expanded(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import _common
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "packages" / "a" / "src").mkdir(parents=True)
+            (root / "packages" / "b").mkdir(parents=True)
+            dirs = _common.source_dirs(
+                root, {"autoload": {"classmap": ["packages/*/src/"]}}
+            )
+            self.assertEqual(dirs["src"], ["packages/a/src"])
+
+    @unittest.skipIf(os.geteuid() == 0, "root reads a directory without permission")
+    def test_unreadable_workflow_directory_keeps_the_profile(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import _common
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workflows = root / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            (root / ".gitlab-ci.yml").write_text("{}\n", encoding="utf-8")
+            workflows.chmod(0)
+            try:
+                self.assertEqual(_common.ci_files(root), [".gitlab-ci.yml"])
+            finally:
+                workflows.chmod(0o755)
+
     def test_makefile_targets_and_includes(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             Path(tmp, "composer.json").write_text("{}", encoding="utf-8")
@@ -485,6 +514,20 @@ class VerifierTest(unittest.TestCase):
                 run_py("verify_php_project.py", "--root", root, "--no-cache").stdout
             )
             self.assertEqual(report["summary"]["tool_runs_failed"], 1)
+
+    def test_verifier_finds_phpcs_in_the_composer_bin_dir(self) -> None:
+        with TempProject("generic-composer-phpcs") as root:
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer.get("require-dev", {}).pop("squizlabs/php_codesniffer")
+            composer["config"] = {"bin-dir": "tools"}
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            base = ("verify_php_project.py", "--root", root, "--no-tools", "--no-cache")
+            without = json.loads(run_py(*base, "--check", "PM-17").stdout)
+            self.assertEqual(without["checks"][0]["status"], "fail")
+            fake_tool(root, "phpcs", exit_code=0)
+            (root / "vendor" / "bin").rename(root / "tools")
+            found = json.loads(run_py(*base, "--check", "PM-17").stdout)
+            self.assertEqual(found["checks"][0]["status"], "pass")
 
     def test_phpstan_dist_neon_is_a_phpstan_config(self) -> None:
         with TempProject("generic-composer-minimal") as root:
@@ -1161,6 +1204,9 @@ class ModernizeLoopTest(unittest.TestCase):
             # Infection loads infection.json5 first; a minMsi elsewhere is
             # not the threshold it runs with.
             ({"infection.json5": "{}", "infection.json.dist": '{"minMsi": 60}'}, True),
+            # A commented-out minMsi sets nothing; Infection runs without one.
+            ({"infection.json5": "{\n  // minMsi: 95\n}"}, True),
+            ({"infection.json5": "{ /* minMsi: 1 */ minMsi: 70 }"}, False),
         )
         for files, expected in cases:
             with (
@@ -1205,6 +1251,87 @@ class ModernizeLoopTest(unittest.TestCase):
             (root / "composer.json").write_text(json.dumps(composer), "utf-8")
             result = run_py("modernize_loop.py", "--root", root, "--tools", "lint")
             self.assertEqual(loop_status(result), {"lint": "fail"}, result.stdout)
+
+    def test_lint_script_options_end_at_the_command(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import modernize_loop
+
+        script = "parallel-lint src && tar --exclude=src -p x -cf dist.tar ."
+        composer = {"scripts": {"lint": script}}
+        self.assertEqual(modernize_loop._lint_excludes(composer), [])
+        self.assertIsNone(modernize_loop._lint_php(composer))
+        composer = {"scripts": {"lint": "parallel-lint -p php8.1 --exclude x src"}}
+        self.assertEqual(modernize_loop._lint_excludes(composer), ["x"])
+        self.assertEqual(modernize_loop._lint_php(composer), "php8.1")
+
+    def test_lint_passes_the_project_php_to_parallel_lint(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer["scripts"] = {"lint": "parallel-lint -p php8.1 src"}
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            fake_tool(root, "parallel-lint", exit_code=0)
+            run_py("modernize_loop.py", "--root", root, "--tools", "lint")
+            args = (root / "vendor" / "bin" / "parallel-lint.args").read_text()
+            self.assertIn("-p\nphp8.1\n", args)
+
+    @unittest.skipUnless(shutil.which("php"), "needs a php binary")
+    def test_lint_checks_an_explicit_template_file(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            (root / "templates").mkdir()
+            (root / "templates" / "bad.phtml").write_text("<?php\nfunction (\n")
+            result = run_py(
+                "modernize_loop.py",
+                "--root",
+                root,
+                "--tools",
+                "lint",
+                "--path",
+                "templates/bad.phtml",
+            )
+            self.assertEqual(loop_status(result), {"lint": "fail"}, result.stdout)
+
+    def test_php_cs_fixer_fallback_keeps_a_root_mapped_package(self) -> None:
+        # Without a Finder the loop passes the source dirs; a package that
+        # maps its root ("") is fixed as ".", not as its tests alone.
+        with TempProject("fully-modern") as root:
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer["autoload"] = {"psr-4": {"Vendor\\Pkg\\": ""}}
+            composer["autoload-dev"] = {"psr-4": {"Vendor\\Pkg\\Tests\\": "tests/"}}
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            (root / "tests").mkdir(exist_ok=True)
+            fixer = fake_tool(root, "php-cs-fixer", exit_code=0)
+            # After the arguments are logged, so a failed call leaves them too.
+            fixer.write_text(
+                fixer.read_text().replace(
+                    '/calls.log"\n',
+                    '/calls.log"\n'
+                    'case " $* " in *" . "*) ;; *)\n'
+                    '  echo "You must call one of in() or append()" >&2; exit 1;; esac\n',
+                ),
+                encoding="utf-8",
+            )
+            run_py("modernize_loop.py", "--root", root, "--tools", "php-cs-fixer")
+            args = (root / "vendor" / "bin" / "php-cs-fixer.args").read_text().split()
+            self.assertIn(".", args)
+            self.assertNotIn("tests", args)
+
+    def test_several_rector_rules_need_rector_2_6_7(self) -> None:
+        rules = ("--rector-only", "A\\One", "--rector-only", "B\\Two")
+        with TempProject("fully-modern") as root:
+            fake_tool(root, "rector", exit_code=0, stdout="Rector 2.6.6")
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "rector", *rules
+            )
+            self.assertEqual(loop_status(result), {"rector": "fail"})
+            self.assertEqual(calls(root), ["rector --version"])
+            fake_tool(root, "rector", exit_code=0, stdout="Rector 2.6.7")
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "rector", *rules
+            )
+            self.assertEqual(loop_status(result), {"rector": "pass"}, result.stdout)
+            args = (root / "vendor" / "bin" / "rector.args").read_text().split()
+            self.assertIn("--only=A\\One", args)
+            self.assertIn("--only=B\\Two", args)
 
     def test_unknown_tool_is_a_usage_error(self) -> None:
         result = run_py("modernize_loop.py", "--tools", "phpstan,bogus")
