@@ -203,7 +203,7 @@ class Order
 
 ## The `readonly` Trap
 
-`final readonly class` on a Doctrine entity will fail at hydration. See `references/immutability-boundaries.md` for the full explanation. The short version: Doctrine bypasses the constructor and writes properties via reflection, which `readonly` blocks after first assignment.
+`final readonly class` on a Doctrine entity fails once Doctrine writes a property a second time (refresh, re-hydration) or builds a proxy, which cannot extend a `readonly` class. See `references/immutability-boundaries.md` for the full explanation. The first reflection write into a fresh instance works.
 
 Embeddables (above) and DTOs/VOs *outside* the entity graph are the right places for `readonly`. Entities themselves stay mutable.
 

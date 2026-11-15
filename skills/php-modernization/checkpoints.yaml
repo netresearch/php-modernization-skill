@@ -361,7 +361,7 @@ mechanical:
   # === IMMUTABILITY BOUNDARIES (guardrail) ===
   - id: PM-39
     type: command
-    pattern: "! grep -rlE --exclude-dir=.Build --exclude-dir=vendor --exclude-dir=node_modules '^((final|abstract)\\s+)?readonly\\s+((final|abstract)\\s+)?class' src/ Classes/ packages/ 2>/dev/null | xargs -r grep -lE '#\\[(\\\\?[A-Za-z_]+\\\\)*(Entity|MappedSuperclass)\\b' 2>/dev/null | grep -q ."
+    pattern: "! grep -rlE --exclude-dir=.Build --exclude-dir=vendor --exclude-dir=node_modules '^((final|abstract)\\s+)?readonly\\s+((final|abstract)\\s+)?class' src/ Classes/ packages/ 2>/dev/null | xargs -r grep -lE '#\\[([^]]*,[[:space:]]*)?(\\\\?[A-Za-z_][A-Za-z0-9_]*\\\\)*(Entity|MappedSuperclass)\\b' 2>/dev/null | grep -q ."
     severity: error
     desc: "readonly must not be applied to Doctrine entities or mapped-superclasses (Doctrine hydrates them via reflection-bypassing the constructor). Embeddables are a nuanced case — see references/doctrine-modernization-edges.md"
 
@@ -623,17 +623,19 @@ llm_reviews:
 
       Check, do not flag by category:
       4. Restored from a session, a cache or a queue (unserialize(),
-         __unserialize, Serializable): plain unserialize() restores readonly
-         properties, so readonly fails only where the restore code assigns
-         a property after construction.
+         __unserialize, Serializable).
       5. A deserializer's target (Symfony Serializer, JMS, Symfony
-         ObjectMapper): readonly works when it builds the object through the
-         constructor and fails when it writes properties afterwards. Name
-         the path the project's configuration takes.
+         ObjectMapper).
       6. #[ORM\Embeddable]: can be `final readonly` on ORM 3.x; see
          references/doctrine-modernization-edges.md.
-      Report one of these only with the code that assigns after
-      construction.
+      For 4 and 5, the first write into a fresh object works: plain
+      unserialize(), an __unserialize() that sets each property once, and a
+      reflection write to an uninitialized property (measured on PHP 8.1
+      and 8.5). readonly fails on a second write to a property that is
+      already set (a __wakeup() that reassigns, re-hydration, clone and
+      write) and on a write from outside the class (PropertyAccess, a
+      public setter). Report one of these only with the code that writes a
+      second time or from outside.
 
       Then review `readonly class` declarations and `readonly` properties
       that are described or used as value objects and hold a mutable object
@@ -647,7 +649,7 @@ llm_reviews:
       lists before applying it.
       readonly is correct for DTOs, value objects, events, and command/query objects.
       Report specific files violating this boundary.
-    desc: "readonly is incorrect on entities, form-bound models, and deserialization targets; a readonly value object holds no mutable member"
+    desc: "readonly is incorrect on entities, form-bound models and classes written a second time or from outside; serialized and deserialized objects are checked, not flagged; a readonly value object holds no mutable member"
 
   # === MUTATION-SCORE GUARDRAIL ===
   - id: PM-41
