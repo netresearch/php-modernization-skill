@@ -634,10 +634,13 @@ llm_reviews:
       unserialize(), an __unserialize() that sets each property once, and a
       reflection write to an uninitialized property (measured on PHP 8.1
       and 8.5). readonly fails on a second write to a property that is
-      already set (a __wakeup() that reassigns, re-hydration, clone and
-      write) and on a write from outside the class (PropertyAccess, a
-      public setter). Report one of these only with the code that writes a
-      second time or from outside.
+      already set (a __wakeup() that reassigns, re-hydration, a write to a
+      copy after `clone` has returned) and on a write from outside the
+      class (PropertyAccess, a public setter). From PHP 8.3, the copy's
+      __clone() may set a readonly property once; on 8.1 and 8.2 that write
+      fails too (measured on 8.2 and 8.5), so check the project's PHP
+      floor. Report one of these only with the code that writes a second
+      time or from outside.
 
       Then review `readonly class` declarations and `readonly` properties
       that are described or used as value objects and hold a mutable object

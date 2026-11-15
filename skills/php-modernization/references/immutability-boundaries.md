@@ -15,8 +15,8 @@ PHP supports two forms:
 Both forms enforce single-assignment at runtime. The constraints cannot be lifted by:
 
 - Reflection (`ReflectionProperty::setValue` throws on a readonly property after initialization).
-- Cloning (clones inherit the initialized state; you must implement `__clone` with a wither pattern to "change" values).
-- `unserialize()` (PHP 8.3 added `__unserialize` support that respects readonly via reflection on uninitialized clones, but the constraint is still single-assignment).
+- Cloning (a clone inherits the initialized state; a write to the copy after `clone` has returned fails. From PHP 8.3, the copy's `__clone()` may set each readonly property once; on PHP 8.1 and 8.2 that write fails as well).
+- `unserialize()` (plain `unserialize()` and an `__unserialize()` that sets each property once work, because they write into a fresh object; a second write, such as a `__wakeup()` that reassigns a property, fails).
 - Inheritance (a child class cannot redeclare a readonly property to drop the modifier).
 
 References:
