@@ -469,19 +469,12 @@ def find_in_files(root: Path, files: Iterable[str], needle: str) -> Path | None:
 
 
 def has_phpstan_binary(root: Path) -> Path | None:
-    for rel in ("vendor/bin/phpstan", ".Build/bin/phpstan"):
-        p = root / rel
-        if p.is_file():
-            return p
-    return None
+    # The Composer bin-dir and vendor-dir count, as in the orchestrator.
+    return find_binary(root, "phpstan", read_composer_json(root))
 
 
 def has_php_cs_fixer_binary(root: Path) -> Path | None:
-    for rel in ("vendor/bin/php-cs-fixer", ".Build/bin/php-cs-fixer"):
-        p = root / rel
-        if p.is_file():
-            return p
-    return None
+    return find_binary(root, "php-cs-fixer", read_composer_json(root))
 
 
 def has_rector_binary(root: Path) -> Path | None:

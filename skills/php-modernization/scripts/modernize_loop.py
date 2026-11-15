@@ -267,7 +267,12 @@ def run_rector(ctx: Context, *, dry_run: bool, tool: str = "rector") -> ToolResu
         if rc == 0:
             return (
                 "pass",
-                "rector: no change" if dry_run else "rector applied transforms",
+                ("rector: no change" if dry_run else "rector applied transforms")
+                + (
+                    "; a --path the config skips or excludes is not checked"
+                    if ctx.paths
+                    else ""
+                ),
             )
         if dry_run and rc == 2:
             return (
@@ -277,6 +282,19 @@ def run_rector(ctx: Context, *, dry_run: bool, tool: str = "rector") -> ToolResu
         return "fail", f"rector: error (exit {rc})"
 
     return _execute(ctx, tool, cmd, f"{tool}.json" if dry_run else None, classify)
+
+
+def _fixer_needs_paths(ctx: Context, artifact: str, result: ToolResult) -> bool:
+    """Whether php-cs-fixer stopped because the config has no Finder paths."""
+    try:
+        stderr = (ctx.root / ARTIFACT_DIR / f"{artifact}.stderr").read_text("utf-8")
+    except OSError:
+        stderr = ""
+    text = stderr + result.summary
+    return result.status == "fail" and (
+        "You must call one of in() or append()" in text
+        or "not-fully defined Finder" in text
+    )
 
 
 def run_php_cs_fixer(ctx: Context, *, dry_run: bool) -> ToolResult:
@@ -312,7 +330,14 @@ def run_php_cs_fixer(ctx: Context, *, dry_run: bool) -> ToolResult:
         return "fail", f"php-cs-fixer: error (exit {rc})"
 
     if not ctx.paths:
-        return _execute(ctx, "php-cs-fixer", base + tail, artifact, classify)
+        result = _execute(ctx, "php-cs-fixer", base + tail, artifact, classify)
+        if not _fixer_needs_paths(ctx, artifact, result):
+            return result
+        # The project passes its paths on the command line; without a
+        # --path the loop uses the source and test directories.
+        dirs = source_dirs(ctx.root, ctx.composer)
+        paths = [d for d in dirs["src"] + dirs["tests"] if d != "."] or ["."]
+        return _execute(ctx, "php-cs-fixer", [*base, *paths, *tail], artifact, classify)
     # Without intersection the paths replace the config's Finder, and files
     # the project excludes get fixed.
     result = _execute(
@@ -323,13 +348,8 @@ def run_php_cs_fixer(ctx: Context, *, dry_run: bool) -> ToolResult:
         classify,
     )
     # The message is not stderr's last line (php-cs-fixer prints its usage
-    # after it), so read the whole stderr report.
-    stderr_file = ctx.root / ARTIFACT_DIR / f"{artifact}.stderr"
-    try:
-        stderr = stderr_file.read_text(encoding="utf-8")
-    except OSError:
-        stderr = ""
-    if "not-fully defined Finder" not in stderr + result.summary:
+    # after it): _fixer_needs_paths reads the whole stderr report.
+    if not _fixer_needs_paths(ctx, artifact, result):
         return result
     # A config without a Finder takes its paths from the command line, and
     # php-cs-fixer refuses intersection for it: nothing to exclude, so the
@@ -473,6 +493,8 @@ def run_phpcs(ctx: Context, *, dry_run: bool) -> ToolResult:
     rel = str(artifact.relative_to(ctx.root)) if artifact else None
     if found == 0:
         summary = "phpcs: clean" if dry_run else "phpcbf applied; phpcs: clean"
+        if ctx.paths:
+            summary += "; a --path the config skips or excludes is not checked"
         return ToolResult("phpcs", "pass", rc, command, duration, summary, rel)
     if dry_run and fixable == found:
         summary = f"phpcs: {found} finding(s), all fixable by phpcbf"
@@ -542,7 +564,15 @@ def _lint_script_targets(root: Path, composer: dict | None) -> list[str]:
                         break
                     continue
                 matches = (
-                    sorted(str(p.relative_to(root)) for p in root.glob(token))
+                    sorted(
+                        str(p.relative_to(root))
+                        for p in root.glob(token)
+                        # The shell running the script skips dotfiles.
+                        if not any(
+                            part.startswith(".") for part in p.relative_to(root).parts
+                        )
+                        or token.startswith(".")
+                    )
                     if any(c in token for c in "*?[")
                     else [token.rstrip("/")]
                 )

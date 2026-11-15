@@ -474,6 +474,18 @@ class VerifierTest(unittest.TestCase):
             one = json.loads(run_py(*base, "--check", "PM-01").stdout)
             self.assertEqual(one["summary"]["tool_runs_failed"], 1)
 
+    def test_verifier_finds_phpstan_in_the_composer_bin_dir(self) -> None:
+        with TempProject("fully-modern") as root:
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer["config"] = {"bin-dir": "bin"}
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            fake_tool(root, "phpstan", exit_code=1)
+            (root / "vendor" / "bin").rename(root / "bin")
+            report = json.loads(
+                run_py("verify_php_project.py", "--root", root, "--no-cache").stdout
+            )
+            self.assertEqual(report["summary"]["tool_runs_failed"], 1)
+
     def test_phpstan_dist_neon_is_a_phpstan_config(self) -> None:
         with TempProject("generic-composer-minimal") as root:
             (root / "phpstan.dist.neon").write_text(
@@ -1076,6 +1088,18 @@ class ModernizeLoopTest(unittest.TestCase):
             summary = json.loads(result.stdout)["results"][0]["summary"]
             self.assertIn("not checked", summary)
 
+    def test_lint_script_glob_skips_dotfiles_like_the_shell(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import modernize_loop
+
+        with TempProject("generic-composer-minimal") as root:
+            for name in ("ext_emconf.php", ".php-cs-fixer.dist.php"):
+                (root / name).write_text("<?php\n", encoding="utf-8")
+            targets = modernize_loop._lint_script_targets(
+                root, {"scripts": {"lint": "parallel-lint *.php src"}}
+            )
+            self.assertEqual(targets, ["ext_emconf.php", "src"])
+
     def test_lint_script_targets_end_at_the_command(self) -> None:
         sys.path.insert(0, str(SCRIPTS))
         import modernize_loop
@@ -1091,6 +1115,43 @@ class ModernizeLoopTest(unittest.TestCase):
                         root, {"scripts": {"lint": script}}
                     )
                     self.assertEqual(targets, expected)
+
+    def test_php_cs_fixer_config_without_a_finder_and_no_path(self) -> None:
+        # Without a Finder the project passes its paths on the command line.
+        with TempProject("fully-modern") as root:
+            fixer = fake_tool(root, "php-cs-fixer", exit_code=8)
+            fixer.write_text(
+                fixer.read_text().replace(
+                    "#!/bin/sh\n",
+                    "#!/bin/sh\n"
+                    'case " $* " in *" src "*) ;; *)\n'
+                    '  echo "You must call one of in() or append()" >&2; exit 1;; esac\n',
+                ),
+                encoding="utf-8",
+            )
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "php-cs-fixer"
+            )
+            self.assertEqual(loop_status(result), {"php-cs-fixer": "changes"})
+            self.assertIn(
+                "src",
+                (root / "vendor" / "bin" / "php-cs-fixer.args").read_text().split(),
+            )
+
+    def test_rector_pass_for_a_path_names_its_scope(self) -> None:
+        with TempProject("fully-modern") as root:
+            fake_tool(root, "rector", exit_code=0)
+            result = run_py(
+                "modernize_loop.py",
+                "--root",
+                root,
+                "--tools",
+                "rector",
+                "--path",
+                "src",
+            )
+            summary = json.loads(result.stdout)["results"][0]["summary"]
+            self.assertIn("not checked", summary)
 
     def test_infection_keeps_the_project_min_msi(self) -> None:
         cases = (
