@@ -138,7 +138,14 @@ def verdict(review: str) -> str | None:
 
 
 def squash(text: str) -> str:
-    return re.sub(r"[\s*_`]+", " ", text).strip().lower()
+    """Text without Markdown markup, for comparing a quote with the review.
+
+    Markup is removed, not replaced by a space: the judge may quote
+    ``(`void`)`` as ``(void)``, and a link by its text.
+    """
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    text = re.sub(r"[*_`]", "", text)
+    return re.sub(r"\s+", " ", text).strip().lower()
 
 
 # Judge outcomes that say nothing about the review.

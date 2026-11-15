@@ -14,7 +14,8 @@ final class OrderStatusTest extends TestCase
     public function testTheStatusIsABackedEnumWithTheStoredValues(): void
     {
         self::assertTrue(enum_exists(OrderStatus::class));
-        self::assertSame(
+        // The order of the cases is not part of the task.
+        self::assertEqualsCanonicalizing(
             ['pending', 'paid', 'shipped'],
             array_map(static fn (OrderStatus $s): string => $s->value, OrderStatus::cases()),
         );

@@ -29,8 +29,28 @@ final class HttpTypesTest extends TestCase
 
     public function testTheSwitchIsGone(): void
     {
-        $source = (string) file_get_contents((new \ReflectionClass(StatusText::class))->getFileName());
-        self::assertStringNotContainsString('switch', $source);
+        // Tokens, not text: a comment that mentions the switch is fine.
+        $file = (string) (new \ReflectionClass(StatusText::class))->getFileName();
+        $tokens = array_map(
+            static fn (\PhpToken $token): int => $token->id,
+            \PhpToken::tokenize((string) file_get_contents($file)),
+        );
+        self::assertNotContains(T_SWITCH, $tokens);
+        self::assertContains(T_MATCH, $tokens);
+    }
+
+    public function testOtherInputsCompareAsTheSwitchDid(): void
+    {
+        // The start state's switch compared with ==; a cast or a strict
+        // match changes these.
+        $text = new StatusText();
+        self::assertSame('Unknown', $text->for('200abc'));
+        self::assertSame('OK', $text->for(' 200'));
+        self::assertSame('Unknown', $text->for(null));
+        self::assertSame(
+            '404x Unknown',
+            (new ResponseSummary())->describe(new Response('HTTP/1.1 404x Not Found')),
+        );
     }
 
     public function testRequestStillWorks(): void

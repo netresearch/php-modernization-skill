@@ -312,6 +312,13 @@ class ReviewScoringTest(unittest.TestCase):
             argv = (tmp / "args").read_text().splitlines()
             self.assertEqual(argv[argv.index("--tools") + 1], "")
 
+    def test_a_quote_without_markup_is_found(self) -> None:
+        r = load_reviewer()
+        review = "It throws on the stored (`void`), via `from()`, see [data/invoices.json](data/invoices.json)."
+        for quote in ("(void)", "via from(),", "see data/invoices.json"):
+            with self.subTest(quote=quote):
+                self.assertIn(r.squash(quote), r.squash(review))
+
     def test_a_failed_judge_makes_the_run_invalid(self) -> None:
         r = load_reviewer()
         agent = {"valid": True, "invalid_reason": ""}
