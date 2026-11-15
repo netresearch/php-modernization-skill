@@ -58,6 +58,8 @@ from _common import (
     text_contains,
 )
 
+# The config file a PHPStan action creates or edits.
+PHPSTAN_NEON = "phpstan.neon"
 SARIF_VERSION = "2.1.0"
 SARIF_SCHEMA_URI = "https://docs.oasis-open.org/sarif/sarif/v2.1.0/cos02/schemas/sarif-schema-2.1.0.json"
 
@@ -967,21 +969,21 @@ def check_pm53(root: Path, config: Path | None, level: str | None) -> Check:
 _ACTION_BY_CHECKPOINT: dict[str, dict[str, Any]] = {
     "PM-01": {
         "action": "edit_file",
-        "target": "phpstan.neon",
+        "target": PHPSTAN_NEON,
         "operation": "create_phpstan_config",
         "rationale": "PHPStan must be configured (phpstan.neon or phpstan.neon.dist)",
         "confirm_required": False,
     },
     "PM-02": {
         "action": "edit_file",
-        "target": "phpstan.neon",
+        "target": PHPSTAN_NEON,
         "operation": "raise_level_to_max",
         "rationale": "PHPStan level must be 9 or higher (or max) for strict typing",
         "confirm_required": False,
     },
     "PM-03": {
         "action": "edit_file",
-        "target": "phpstan.neon",
+        "target": PHPSTAN_NEON,
         "operation": "set_treat_phpdoc_types_as_certain_false",
         "rationale": "treatPhpDocTypesAsCertain: false ensures PHPStan does not trust PHPDoc over runtime",
         "confirm_required": False,
@@ -1058,7 +1060,7 @@ _ACTION_BY_CHECKPOINT: dict[str, dict[str, Any]] = {
     },
     "PM-53": {
         "action": "edit_file",
-        "target": "phpstan.neon",
+        "target": PHPSTAN_NEON,
         "operation": "set_level_max",
         "rationale": "Level 10/max provides full strict typing",
         "confirm_required": False,
@@ -1436,7 +1438,7 @@ def checkpoint_catalog(path: Path | None = None) -> dict[str, list[str]] | None:
     return sections
 
 
-CHECKPOINT_ID_RE = re.compile(r"^  - id:\s*(PM-\d+)\s*$")
+CHECKPOINT_ID_RE = re.compile(r"^ {2}- id:\s*(PM-\d+)\s*$")
 
 
 def review_coverage(verifier_ids: Iterable[str]) -> dict[str, Any] | None:
