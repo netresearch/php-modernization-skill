@@ -3,7 +3,7 @@
 
 # Immutability Boundaries: When `readonly` Is Wrong
 
-The `php-modernization` skill recommends `final readonly class` for data-shaped classes. That recommendation is correct for DTOs, value objects, and events. It is wrong for entities, form-bound models, and most deserialization targets. This document draws the line.
+The `php-modernization` skill recommends `final readonly class` for data-shaped classes. That recommendation is correct for DTOs, value objects, and events. It is wrong for entities, form-bound models and classes whose properties are written a second time or from outside the class; for deserialization targets it depends on how the deserializer writes. This document draws the line.
 
 ## What `readonly` Actually Does
 
@@ -15,8 +15,8 @@ PHP supports two forms:
 Both forms enforce single-assignment at runtime. The constraints cannot be lifted by:
 
 - Reflection (`ReflectionProperty::setValue` throws on a readonly property after initialization).
-- Cloning (clones inherit the initialized state; you must implement `__clone` with a wither pattern to "change" values).
-- `unserialize()` (PHP 8.3 added `__unserialize` support that respects readonly via reflection on uninitialized clones, but the constraint is still single-assignment).
+- Cloning (a clone inherits the initialized state; a write to the copy after `clone` has returned fails. From PHP 8.3, the copy's `__clone()` may set each readonly property once; on PHP 8.1 and 8.2 that write fails as well).
+- `unserialize()` (plain `unserialize()` and an `__unserialize()` that sets each property once work, because they write into a fresh object; a second write, such as a `__wakeup()` that reassigns a property, fails).
 - Inheritance (a child class cannot redeclare a readonly property to drop the modifier).
 
 References:
@@ -74,6 +74,31 @@ final readonly class OrderShipped
 
 These all share a property: the object is constructed once, fully populated by the constructor, and never modified.
 
+### `readonly` is shallow
+
+`readonly` stops reassignment of the property. It does not stop changes to the object the property holds. A `readonly` property of type `\DateTime`, `ArrayObject`, a collection or an entity is still mutable through that object:
+
+```php
+final readonly class Period
+{
+    public function __construct(public \DateTime $start) {}
+}
+
+$start = new \DateTime('2026-01-01');
+$period = new Period($start);
+$start->modify('+1 year');        // $period->start changed too
+$period->start->modify('+1 day'); // allowed: no reassignment
+```
+
+Rector's `ReadOnlyClassRector` makes such a class `readonly` without a warning (measured with Rector 2.8.4). Before calling a class immutable, check every property type:
+
+- Scalars, enums and `\DateTimeImmutable`: immutable.
+- Another `readonly` class: immutable only when its own properties pass this check. `readonly` says nothing about the members one level down.
+- Mutable objects: replace them with an immutable type (`\DateTimeImmutable`), or copy on the way in and on the way out, and pin the behaviour with a test that changes the passed object and the returned object. `clone` is shallow: an object that holds another mutable object needs a `__clone()` that copies it too, or the copy still shares it; the test then changes the nested object as well.
+- Arrays of objects: the array is copied, the objects in it are shared.
+
+A class with a mutable member can still be `readonly` when nothing relies on it being a value object; it is then not a value object, and the docblock does not call it one.
+
 ## Where `readonly` Is Incorrect — and Why
 
 ### Doctrine entities
@@ -83,7 +108,7 @@ Doctrine ORM hydrates entities by:
 1. Creating the instance **without calling the constructor** (via `ReflectionClass::newInstanceWithoutConstructor()` or, in newer versions, instantiator libraries).
 2. Assigning each mapped property via reflection.
 
-Step 2 fails on a `readonly` property after the proxy has been initialized — and even on first hydration, Doctrine relies on being able to write properties at any point during the unit-of-work lifecycle (re-loading, refresh, lazy proxy initialization).
+The first write of step 2 works: reflection may initialize an uninitialized `readonly` property (measured on PHP 8.1 and 8.5). What fails is every later write: Doctrine writes the properties again when it refreshes or re-hydrates an entity, and a generated proxy class cannot extend a `readonly` class (PHP refuses "Non-readonly class … cannot extend readonly class"; measured with plain PHP classes, not with Doctrine's generator).
 
 ```php
 #[ORM\Entity]
@@ -97,7 +122,7 @@ final readonly class User // BROKEN
     ) {}
 }
 
-// On EntityManager::find(User::class, 1):
+// On EntityManager::refresh($user), or when a proxy for User is built:
 // Error: Cannot modify readonly property User::$id
 ```
 
@@ -129,14 +154,14 @@ You can work around this with `'mapped' => false` plus manual hydration into a D
 ### Deserialization targets
 
 - **Symfony Serializer**: by default uses constructor + property writes. Readonly works *only* if every property is set via the constructor and the serializer is configured to use constructor arguments (`AbstractNormalizer::OBJECT_CREATION_FROM_CONSTRUCTOR` / explicit constructor argument resolution). For partial payloads, this becomes brittle.
-- **JMS Serializer**: bypasses the constructor by default, then assigns via reflection. Incompatible with `readonly` unless reconfigured per class.
+- **JMS Serializer**: bypasses the constructor by default, then assigns via reflection. The first write into the fresh object works with `readonly`; a property it writes twice fails. Not run end to end here.
 - **Generic ObjectMapper / hand-rolled hydrators**: same pattern; check whether they use constructor-only mode.
 
 Treat readonly DTOs as deserialization targets *only* when you control the deserializer and have proven it goes through the constructor.
 
 ### `__unserialize` and session-restored objects
 
-`unserialize()` reconstructs objects by allocating without calling the constructor and then writing properties. PHP 8.3+ tolerates readonly inside `__unserialize`, but only because the engine treats the object as freshly allocated. If you rely on the default `serialize`/`unserialize` magic on a readonly class without `__unserialize`, behavior depends on PHP version — verify before assuming it works.
+`unserialize()` reconstructs objects by allocating without calling the constructor and then writing properties. Measured on PHP 8.1 and 8.5: plain `unserialize()` restores `readonly` properties, and so does an `__unserialize()` that sets each property once. A `__wakeup()` that assigns a property again fails with "Cannot modify readonly property".
 
 ### Test doubles and mocks
 

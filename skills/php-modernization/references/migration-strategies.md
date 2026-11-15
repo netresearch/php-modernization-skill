@@ -111,18 +111,41 @@ return RectorConfig::configure()
 ### Running Rector
 
 ```bash
-# Dry run (preview changes)
+# Dry run (preview changes); exit 0 = no change, 2 = changes proposed,
+# 1 = error (config, unknown rule, parse error): not "no change"
 vendor/bin/rector process --dry-run
 
-# Apply changes
-vendor/bin/rector process
+# One rule on one area; --only needs Rector 2.0 or later (1.2.10 has no
+# such option) and the rule registered in the config or in a set the
+# config loads. On Rector 1.x, write a temporary config that registers only
+# that rule (withRules([...])) and pass it with --config.
+vendor/bin/rector process src/Payment \
+  --only='Rector\Php80\Rector\Switch_\ChangeSwitchToMatchRector' --dry-run
 
-# Process specific path
-vendor/bin/rector process src/Entity/
+# Apply the same scope after the diff was reviewed
+vendor/bin/rector process src/Payment \
+  --only='Rector\Php80\Rector\Switch_\ChangeSwitchToMatchRector'
 
-# Generate baseline for gradual adoption
-vendor/bin/rector process --clear-cache
+# Drop the cache after a vendor or config change
+vendor/bin/rector process --dry-run --clear-cache
 ```
+
+### One bounded change at a time
+
+A modernization step is one concern in one area: one value set to an enum,
+one rule over one module, one class family to `readonly`. For each step:
+
+1. Run the relevant existing tests first and note failures that already exist.
+2. Preview the change (`--dry-run`) and read the diff against the questions in
+   `SKILL.md` — Rector's diff is a proposal. In a probe with Rector 2.8.4,
+   `ChangeSwitchToMatchRector` turned a loose `switch` on a parameter with no
+   type and no docblock into a strict `match`, and `ReadOnlyClassRector` made a class holding a mutable
+   `\DateTime` a `readonly class`.
+3. Apply, run the project's formatter, then lint, static analysis and the
+   tests that cover the area.
+4. Run the same Rector dry-run again: for a finished step it proposes no
+   further change in that scope.
+5. Commit, then start the next step.
 
 ## Dependency Upgrades
 
@@ -409,6 +432,12 @@ $color = match($status) {
     default => 'gray',
 };
 ```
+
+The two can differ when `$status` is not always a string: `switch` compares
+with `==`, `match` with `===`. For example `true == 'active'` holds, so the
+switch gives `'green'` for `true` and the match gives `'gray'`. A string
+subject differs too when the arms are numeric strings (`"1e3" == "1000"`).
+Check the comparison, fall-through and `default` before converting — see "Match Expression" in `php8-features.md`.
 
 ### Property Initialization
 

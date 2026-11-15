@@ -21,7 +21,7 @@ Skills are portable packages of procedural knowledge that work across any AI age
 ## Features
 
 - **Agent contract**: a Python verifier (`verify_php_project.py`), orchestrator (`modernize_loop.py`), and cheap profiler (`introspect.py`). stable structured output (JSON with `schema_version 1.1.0`, SARIF 2.1.0, or JUnit XML), archetype detection, and machine-readable `agent_actions[]` recommendations downstream agents can act on without re-reading the prose references.
-- **Hard guardrails**: five binding refusal cases stated in `SKILL.md` (no `readonly` on Doctrine entities, no Rector without `--dry-run`, baseline shrink-not-delete, no blanket `final` on mock targets, no editing generated files).
+- **Hard guardrails**: five binding refusal cases stated in `SKILL.md` (no `readonly` on Doctrine entities, no Rector apply without a reviewed dry-run, baseline shrink-not-delete, no blanket `final` on mock targets, no editing generated files).
 - **PHP 8.x feature coverage**: 8.0–8.3 baseline, dedicated 8.4 reference (released 2024-11: property hooks, asymmetric visibility, lazy objects, `array_find` / `array_any` / `array_all`), and dedicated 8.5 reference (released 2025-11: pipe `|>`, `array_first` / `array_last`, `#[\NoDiscard]`).
 - **Static-analysis stack**: PHPStan (level 9+, level 10 recommended), PHPat (architecture testing), Rector (automated refactoring), PHP-CS-Fixer (`@PER-CS`), Infection (mutation testing in PR-diff mode), `composer audit`.
 - **Type-safety patterns**: DTOs and Value Objects over arrays, generic collection typing via PHPDoc, strict typing everywhere, immutability boundaries (`readonly` vs. property hooks vs. classic mutation).
@@ -32,12 +32,14 @@ Skills are portable packages of procedural knowledge that work across any AI age
 
 ## Agent Contract
 
-The skill follows a four-step loop. Cheap commands first; expensive analysis only when needed.
+The skill follows a six-step loop. Cheap commands first; expensive analysis only when needed.
 
-1. **Discover** — read [`SKILL.md`](skills/php-modernization/SKILL.md), then profile the project.
+1. **Discover** — read [`SKILL.md`](skills/php-modernization/SKILL.md), then profile the project and read its own commands.
 2. **Drill** — narrow to one finding at a time when more than three things fail.
-3. **Apply** — preview every fix in `--mode dry-run` before mutating files.
-4. **References** — load `references/<topic>.md` only when the long-form rationale is needed.
+3. **Use the project's tools** — run Rector, PHPStan, the coding-standard tool, lint and the tests the project has; report a check that did not run as not run.
+4. **Decide what the tools cannot** — behaviour that must stay, enum or open value set, `match` comparisons, `readonly` over mutable members.
+5. **Apply in bounded steps** — preview one scope in `--mode dry-run`, review the diff, apply, then run the checks again.
+6. **References** — load `references/<topic>.md` only when the long-form rationale is needed.
 
 ### One-line invocations
 
@@ -66,7 +68,7 @@ uv run skills/php-modernization/scripts/modernize_loop.py --mode dry-run
 The five guardrails below are binding. The agent must refuse rather than violate them.
 
 - Never apply `readonly` to Doctrine entities or mapped-superclasses (embeddables are a nuanced case, ORM 3.x dependent — see [`references/doctrine-modernization-edges.md`](skills/php-modernization/references/doctrine-modernization-edges.md)).
-- Never run Rector without `--dry-run` first.
+- Never apply Rector before a `--dry-run` of the same scope and a review of its diff.
 - Never raise the PHPStan level without regenerating + committing the baseline in the same change. Shrink, never delete.
 - Never apply blanket `final` to mock targets or extension points without confirmation.
 - Never edit `@generated` files or files under `var/cache/`, `vendor/`, `node_modules/`, `.Build/`.
