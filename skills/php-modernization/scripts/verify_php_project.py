@@ -1514,8 +1514,16 @@ def filter_to_checkpoint(
         summary = build_summary(Check(**c) for c in checks)
         filtered["summary"] = asdict(summary)
         return filtered
-    coverage = report_dict.get("review_coverage") or {}
-    if checkpoint_id in coverage.get("llm_reviews_not_reviewed", []):
+    coverage = report_dict.get("review_coverage")
+    if coverage is None:
+        # checkpoints.yaml could not be read: whether the id exists is
+        # unknown, which is not the same as "unknown checkpoint".
+        reason = (
+            "checkpoints.yaml could not be read; this verifier does not "
+            "evaluate the checkpoint, and whether it exists is unknown"
+        )
+        kind, status = "unknown", "not_run"
+    elif checkpoint_id in coverage.get("llm_reviews_not_reviewed", []):
         reason = (
             "llm_review checkpoint: needs an agent's review of the code; "
             "no script evaluates it. Read its prompt in checkpoints.yaml."

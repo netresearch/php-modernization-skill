@@ -43,6 +43,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -50,6 +51,7 @@ import time
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
+from xml.etree import ElementTree  # the project's own config; trusted as code
 
 # Sibling-import the shared module (see introspect.py).
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -277,6 +279,10 @@ def run_php_cs_fixer(ctx: Context, *, dry_run: bool) -> ToolResult:
             "php-cs-fixer",
             f"the project uses PHPCS ({ctx.phpcs_config}); see the phpcs result",
         )
+    if ctx.coding_standard == "none":
+        # Without a config php-cs-fixer applies its built-in rules, which the
+        # project never chose.
+        return _skipped("php-cs-fixer", "no PHP-CS-Fixer config in the project")
     binary = find_binary(ctx.root, "php-cs-fixer", ctx.composer)
     if binary is None:
         return _missing("php-cs-fixer", "php-cs-fixer")
@@ -297,6 +303,28 @@ def run_php_cs_fixer(ctx: Context, *, dry_run: bool) -> ToolResult:
 
     return _execute(
         ctx, "php-cs-fixer", cmd, "php-cs-fixer.json" if dry_run else None, classify
+    )
+
+
+def _phpcs_exit_settings(ctx: Context) -> tuple[bool, bool]:
+    """``ignore_warnings_on_exit`` and ``ignore_errors_on_exit`` from the config.
+
+    The project's own phpcs passes when these are set, so the verdict counts
+    what phpcs's exit code would count.
+    """
+    if not ctx.phpcs_config:
+        return False, False
+    try:
+        tree = ElementTree.parse(ctx.root / ctx.phpcs_config)
+    except (OSError, ElementTree.ParseError):
+        return False, False
+    settings = {
+        el.get("name"): (el.get("value") or "").strip()
+        for el in tree.getroot().iter("config")
+    }
+    return (
+        settings.get("ignore_warnings_on_exit") in {"1", "true"},
+        settings.get("ignore_errors_on_exit") in {"1", "true"},
     )
 
 
@@ -360,8 +388,11 @@ def run_phpcs(ctx: Context, *, dry_run: bool) -> ToolResult:
     try:
         report = json.loads(completed.stdout or "")
         totals = report["totals"]
-        found = int(totals.get("errors", 0)) + int(totals.get("warnings", 0))
-        fixable = int(totals.get("fixable", 0))
+        ignore_warnings, ignore_errors = _phpcs_exit_settings(ctx)
+        found = (0 if ignore_errors else int(totals.get("errors", 0))) + (
+            0 if ignore_warnings else int(totals.get("warnings", 0))
+        )
+        fixable = min(int(totals.get("fixable", 0)), found)
     except (ValueError, KeyError, TypeError):
         return ToolResult(
             "phpcs",
@@ -392,10 +423,47 @@ def run_phpcs(ctx: Context, *, dry_run: bool) -> ToolResult:
 
 
 def _lint_targets(ctx: Context) -> list[str]:
-    if ctx.paths:
-        return list(ctx.paths)
+    # "." is the whole project, vendor/ included: lint the project's own
+    # source and test directories instead.
+    paths = [p for p in ctx.paths if p != "."]
+    if paths:
+        return paths
     dirs = source_dirs(ctx.root, ctx.composer)
     return [d for d in dirs["src"] + dirs["tests"] if d != "."]
+
+
+def _lint_excludes(composer: dict | None) -> list[str]:
+    """``--exclude`` paths of the project's own parallel-lint script.
+
+    Fixture files that are invalid PHP on purpose are excluded there; the
+    loop excludes the same paths.
+    """
+    scripts = (composer or {}).get("scripts")
+    if not isinstance(scripts, dict):
+        return []
+    excludes: list[str] = []
+    for value in scripts.values():
+        commands = value if isinstance(value, list) else [value]
+        for command in commands:
+            if not isinstance(command, str):
+                continue
+            try:
+                tokens = shlex.split(command)
+            except ValueError:
+                continue
+            if not any(t.endswith("parallel-lint") for t in tokens):
+                continue
+            for i, token in enumerate(tokens):
+                if token == "--exclude" and i + 1 < len(tokens):
+                    path = tokens[i + 1]
+                elif token.startswith("--exclude="):
+                    path = token.split("=", 1)[1]
+                else:
+                    continue
+                path = path.rstrip("/")
+                if path and path not in excludes:
+                    excludes.append(path)
+    return excludes
 
 
 def run_lint(ctx: Context) -> ToolResult:
@@ -404,9 +472,13 @@ def run_lint(ctx: Context) -> ToolResult:
         return _skipped(
             "lint", "no source directories found (composer autoload, src/, Classes/)"
         )
+    excludes = _lint_excludes(ctx.composer)
     parallel = find_binary(ctx.root, "parallel-lint", ctx.composer)
     if parallel is not None:
-        cmd = [str(parallel), "--no-progress", *targets]
+        cmd = [str(parallel), "--no-progress"]
+        for path in excludes:
+            cmd += ["--exclude", path]
+        cmd += targets
         return _execute(
             ctx,
             "lint",
@@ -428,6 +500,8 @@ def run_lint(ctx: Context) -> ToolResult:
             files.append(p)
         elif p.is_dir():
             files.extend(sorted(p.rglob("*.php")))
+    excluded = [ctx.root / e for e in excludes]
+    files = [f for f in files if not any(f.is_relative_to(e) for e in excluded)]
     start = time.monotonic()
     failures: list[str] = []
     for f in files:
@@ -455,9 +529,16 @@ def run_lint(ctx: Context) -> ToolResult:
         # The report file is a convenience; the failures are in the summary
         # and the status, which do not depend on it.
         pass
-    version = subprocess.run(
-        [php, "-r", "echo PHP_VERSION;"], capture_output=True, text=True, check=False
-    ).stdout.strip()
+    try:
+        version = subprocess.run(
+            [php, "-r", "echo PHP_VERSION;"],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
+        ).stdout.strip()
+    except (subprocess.TimeoutExpired, OSError):
+        version = "unknown"
     return ToolResult(
         tool="lint",
         status="fail" if failures else "pass",

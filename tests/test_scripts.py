@@ -419,6 +419,15 @@ class VerifierTest(unittest.TestCase):
         self.assertEqual(unknown.returncode, 2)
         self.assertIn("unknown checkpoint", unknown.stderr)
 
+        # Without a readable checkpoints.yaml the id cannot be called
+        # unknown: the answer is not_evaluated, exit 3.
+        # The skill copy carries no checkpoints.yaml.
+        with SkillCopy() as skill:
+            self.assertFalse((skill / "checkpoints.yaml").exists())
+            blind = verify_with(skill, "--check", "PM-21")
+            self.assertEqual(blind.returncode, 3, blind.stderr)
+            self.assertEqual(json.loads(blind.stdout)["checkpoint"]["kind"], "unknown")
+
         # JUnit says the checkpoint was not evaluated instead of an empty suite.
         junit = run_py(*base, "PM-21", "--format", "junit")
         self.assertEqual(junit.returncode, 3)
@@ -490,9 +499,12 @@ class VerifierTest(unittest.TestCase):
             self.assertNotEqual(json.loads(result.stdout)["skill_version"], "1.17.0")
 
 
-def phpcs_totals(errors: int, fixable: int) -> str:
+def phpcs_totals(errors: int, fixable: int, warnings: int = 0) -> str:
     return json.dumps(
-        {"totals": {"errors": errors, "warnings": 0, "fixable": fixable}, "files": {}}
+        {
+            "totals": {"errors": errors, "warnings": warnings, "fixable": fixable},
+            "files": {},
+        }
     )
 
 
@@ -522,7 +534,7 @@ class ModernizeLoopTest(unittest.TestCase):
                 loop_status(result),
                 {
                     "rector": "missing",
-                    "php-cs-fixer": "missing",
+                    "php-cs-fixer": "skipped",
                     "phpcs": "skipped",
                     "phpstan": "missing",
                     "phpunit": "skipped",
@@ -530,10 +542,11 @@ class ModernizeLoopTest(unittest.TestCase):
                 },
             )
             actions = {a["tool"] for a in transcript["next_actions"]}
-            self.assertEqual(actions, {"php-cs-fixer", "rector", "phpstan"})
+            self.assertEqual(actions, {"rector", "phpstan"})
 
     def test_dry_run_passes_dry_run_flags_and_reports_proposed_changes(self) -> None:
         with TempProject("generic-composer-minimal") as root:
+            (root / ".php-cs-fixer.dist.php").write_text("<?php\n", "utf-8")
             fake_tool(root, "rector", exit_code=0)
             fake_tool(root, "php-cs-fixer", exit_code=8)
             result = run_py(
@@ -606,6 +619,45 @@ class ModernizeLoopTest(unittest.TestCase):
             # No advice to install a second coding-standard tool.
             tools = {a["tool"] for a in transcript["next_actions"]}
             self.assertNotIn("php-cs-fixer", tools)
+
+    def test_php_cs_fixer_without_a_config_does_not_run(self) -> None:
+        # Without a config php-cs-fixer would apply its built-in rules.
+        with TempProject("generic-composer-minimal") as root:
+            fake_tool(root, "php-cs-fixer", exit_code=8)
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "php-cs-fixer"
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(loop_status(result), {"php-cs-fixer": "skipped"})
+            self.assertEqual(calls(root), [])
+
+    def test_phpcs_verdict_respects_the_ignore_on_exit_settings(self) -> None:
+        # The project's own phpcs exits 0 for warnings with
+        # ignore_warnings_on_exit; the loop must not fail where it passes.
+        settings = (
+            ("ignore_warnings_on_exit", phpcs_totals(0, 0, warnings=3), "pass"),
+            ("ignore_errors_on_exit", phpcs_totals(2, 0), "pass"),
+            ("ignore_warnings_on_exit", phpcs_totals(2, 0, warnings=3), "fail"),
+            (None, phpcs_totals(0, 0, warnings=3), "fail"),
+        )
+        for name, stdout, expected in settings:
+            with (
+                self.subTest(setting=name, expected=expected),
+                TempProject("generic-composer-phpcs") as root,
+            ):
+                if name:
+                    config = root / "phpcs.xml.dist"
+                    text = config.read_text(encoding="utf-8")
+                    config.write_text(
+                        text.replace(
+                            "</ruleset>",
+                            f'  <config name="{name}" value="1"/>\n</ruleset>',
+                        ),
+                        encoding="utf-8",
+                    )
+                fake_tool(root, "phpcs", exit_code=0, stdout=stdout)
+                result = run_py("modernize_loop.py", "--root", root, "--tools", "phpcs")
+                self.assertEqual(loop_status(result), {"phpcs": expected})
 
     def test_phpcs_verdict_follows_the_json_totals_not_the_exit_code(self) -> None:
         # PHPCS 3.x exits 2 for every finding, 4.x uses bit flags: the totals
@@ -802,6 +854,27 @@ class ModernizeLoopTest(unittest.TestCase):
             self.assertEqual(loop_status(broken), {"lint": "fail"})
             report = (root / ".build" / "php-modernization" / "lint.txt").read_text()
             self.assertIn("Broken.php", report)
+
+    @unittest.skipUnless(shutil.which("php"), "needs a php binary")
+    def test_lint_skips_vendor_and_the_project_excludes(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            for rel in ("vendor/pkg/Old.php", "tests/Fixtures/Invalid.php"):
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text("<?php\nfunction (\n", "utf-8")
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer.setdefault("scripts", {})["lint"] = (
+                "parallel-lint --exclude tests/Fixtures src tests"
+            )
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "lint", "--path", "."
+            )
+            self.assertEqual(loop_status(result), {"lint": "pass"}, result.stdout)
+            # Control: without the project's exclude the fixture is linted.
+            del composer["scripts"]["lint"]
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            result = run_py("modernize_loop.py", "--root", root, "--tools", "lint")
+            self.assertEqual(loop_status(result), {"lint": "fail"})
 
     def test_unknown_tool_is_a_usage_error(self) -> None:
         result = run_py("modernize_loop.py", "--tools", "phpstan,bogus")
