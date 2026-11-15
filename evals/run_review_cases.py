@@ -141,6 +141,17 @@ def squash(text: str) -> str:
     return re.sub(r"[\s*_`]+", " ", text).strip().lower()
 
 
+# Judge outcomes that say nothing about the review.
+JUDGE_FAILURES = {"judge timeout", "the judge gave no JSON"}
+
+
+def after_judge(agent: dict, graded: dict) -> dict:
+    """The agent record, invalid when the judge, not the agent, failed."""
+    if graded.get("error") in JUDGE_FAILURES and agent.get("valid"):
+        return {**agent, "valid": False, "invalid_reason": graded["error"]}
+    return agent
+
+
 def judge(review: str, finding: str, args, run_dir: Path) -> dict:
     """Ask the judge whether the review names the finding."""
     text = JUDGE.format(finding=finding, review=review)
@@ -160,6 +171,10 @@ def judge(review: str, finding: str, args, run_dir: Path) -> dict:
             "json",
             "--max-turns",
             "1",
+            # No tools: the review is untrusted text, and a tool call would
+            # end the one turn without an answer.
+            "--tools",
+            "",
             "--setting-sources",
             "project",
         ]
@@ -181,8 +196,11 @@ def judge(review: str, finding: str, args, run_dir: Path) -> dict:
     (run_dir / "judge.json").write_text(done.stdout, encoding="utf-8")
     try:
         answer = json.loads(done.stdout).get("result", "")
-        data = json.loads(re.search(r"\{.*\}", answer, re.DOTALL).group(0))
-    except (json.JSONDecodeError, AttributeError, TypeError):
+        # The first JSON object; text or a second object after it is ignored.
+        data, _ = json.JSONDecoder().raw_decode(answer[answer.index("{") :])
+        if not isinstance(data, dict):
+            raise TypeError(data)
+    except (json.JSONDecodeError, AttributeError, TypeError, ValueError):
         return {"found": False, "error": "the judge gave no JSON"}
     found = data.get("found") is True
     quote = str(data.get("quote") or "")
@@ -223,8 +241,10 @@ def run_review(
     spec = json.loads((ra.CASES / case["id"] / "review.json").read_text("utf-8"))
     graded: dict = {}
     if variant == "bad":
-        if said == "request changes":
+        # A run that cannot count is not judged: it would only cost a call.
+        if said == "request changes" and agent["valid"] and agent["completed"]:
             graded = judge(review, spec["bad"]["finding"], args, run_dir)
+        agent = after_judge(agent, graded)
         passed = said == "request changes" and graded.get("found") is True
     else:
         passed = said == "approve"
@@ -315,6 +335,9 @@ def main(argv: list[str] | None = None) -> int:
         "isolation": args.isolation,
         "sandbox": args.sandbox,
         "arms": {arm: plugins.get(arm, (None, ""))[1] for arm in arms},
+        "table": ra.summarise(
+            [{**r, "case": f"{r['case']} ({r.get('variant')})"} for r in records]
+        ),
         "runs": records,
     }
     (out / "summary.json").write_text(

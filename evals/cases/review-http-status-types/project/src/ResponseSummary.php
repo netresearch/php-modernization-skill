@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cases\ReviewHttpStatusTypes;
+namespace Acme\HttpStatus;
 
 final class ResponseSummary
 {

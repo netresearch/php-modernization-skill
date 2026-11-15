@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cases\Php81FloorMoney;
+namespace Acme\Money;
 
 final class Money
 {

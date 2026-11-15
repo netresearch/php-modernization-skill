@@ -1,6 +1,6 @@
 {
-    "name": "eval-case/review-readonly-reschedule",
-    "description": "readonly value objects, one holding a date another class modifies",
+    "name": "acme/scheduling",
+    "description": "Appointment scheduling",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -14,12 +14,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Cases\\ReviewReadonlyReschedule\\": "src/"
+            "Acme\\Scheduling\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Cases\\ReviewReadonlyReschedule\\Tests\\": "tests/"
+            "Acme\\Scheduling\\Tests\\": "tests/"
         }
     },
     "scripts": {

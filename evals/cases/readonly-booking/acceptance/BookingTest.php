@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Cases\ReadonlyBooking\Tests\Acceptance;
+namespace Acme\Bookings\Tests\Acceptance;
 
-use Cases\ReadonlyBooking\Booking;
+use Acme\Bookings\Booking;
 use PHPUnit\Framework\TestCase;
 
 final class BookingTest extends TestCase

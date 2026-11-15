@@ -2,17 +2,17 @@
 
 declare(strict_types=1);
 
-namespace Cases\ReviewInvoiceEnumData\Tests\Acceptance;
+namespace Acme\Invoices\Tests\Acceptance;
 
-use Cases\ReviewInvoiceEnumData\InvoiceLabel;
-use Cases\ReviewInvoiceEnumData\InvoiceRepository;
+use Acme\Invoices\InvoiceLabel;
+use Acme\Invoices\InvoiceRepository;
 use PHPUnit\Framework\TestCase;
 
 final class InvoiceTest extends TestCase
 {
     public function testTheEnumHasTheStoredValues(): void
     {
-        $enum = 'Cases\\ReviewInvoiceEnumData\\InvoiceStatus';
+        $enum = 'Acme\\Invoices\\InvoiceStatus';
         self::assertTrue(enum_exists($enum));
         self::assertSame(['open', 'paid'], array_map(static fn ($c) => $c->value, $enum::cases()));
     }

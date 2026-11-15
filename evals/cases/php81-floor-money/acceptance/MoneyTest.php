@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Cases\Php81FloorMoney\Tests\Acceptance;
+namespace Acme\Money\Tests\Acceptance;
 
-use Cases\Php81FloorMoney\Money;
+use Acme\Money\Money;
 use PHPUnit\Framework\TestCase;
 
 final class MoneyTest extends TestCase

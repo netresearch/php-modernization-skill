@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Cases\SwitchLooseHttp\Tests\Acceptance;
+namespace Acme\HttpLabels\Tests\Acceptance;
 
-use Cases\SwitchLooseHttp\HeaderParser;
-use Cases\SwitchLooseHttp\StatusText;
+use Acme\HttpLabels\HeaderParser;
+use Acme\HttpLabels\StatusText;
 use PHPUnit\Framework\TestCase;
 
 final class StatusTextTest extends TestCase

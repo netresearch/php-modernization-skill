@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cases\MatchUnhandledPayment;
+namespace Acme\Payments;
 
 final class FeeCalculator
 {

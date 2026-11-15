@@ -2,7 +2,7 @@
   "id": "php81-floor-money",
   "title": "readonly class on a package that supports PHP 8.1",
   "kind": "convert",
-  "namespace": "Cases\\Php81FloorMoney\\",
+  "namespace": "Acme\\Money\\",
   "php_floor": "8.1",
   "task": "Make Money in src/ immutable with readonly.",
   "start_expect": "fail",

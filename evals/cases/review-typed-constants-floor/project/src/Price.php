@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cases\ReviewTypedConstantsFloor;
+namespace Acme\Pricing;
 
 final class Price
 {

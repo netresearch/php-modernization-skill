@@ -1,6 +1,6 @@
 {
-    "name": "eval-case/switch-loose-http",
-    "description": "switch with loose comparison that callers rely on",
+    "name": "acme/http-labels",
+    "description": "HTTP response labels",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -14,12 +14,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Cases\\SwitchLooseHttp\\": "src/"
+            "Acme\\HttpLabels\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Cases\\SwitchLooseHttp\\Tests\\": "tests/"
+            "Acme\\HttpLabels\\Tests\\": "tests/"
         }
     },
     "scripts": {

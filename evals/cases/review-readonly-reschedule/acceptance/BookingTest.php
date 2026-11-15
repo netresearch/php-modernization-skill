@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Cases\ReviewReadonlyReschedule\Tests\Acceptance;
+namespace Acme\Scheduling\Tests\Acceptance;
 
-use Cases\ReviewReadonlyReschedule\Booking;
-use Cases\ReviewReadonlyReschedule\Guest;
-use Cases\ReviewReadonlyReschedule\Rescheduler;
-use Cases\ReviewReadonlyReschedule\Room;
+use Acme\Scheduling\Booking;
+use Acme\Scheduling\Guest;
+use Acme\Scheduling\Rescheduler;
+use Acme\Scheduling\Room;
 use PHPUnit\Framework\TestCase;
 
 final class BookingTest extends TestCase

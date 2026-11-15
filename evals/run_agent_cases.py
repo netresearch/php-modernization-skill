@@ -142,6 +142,8 @@ def plugin_root(arm: str, out: Path) -> tuple[Path, str]:
     ref = arm.split(":", 1)[1]
     if ref == "WORKTREE":
         target = out / "_plugins" / "WORKTREE"
+        # A copy from an earlier invocation may hold files deleted since.
+        shutil.rmtree(target, ignore_errors=True)
         # Untracked files that are not ignored belong to the working tree
         # the "+dirty" label claims to measure.
         files = sh(
@@ -199,6 +201,9 @@ def host_git(tree: Path) -> list[str]:
 
 
 def prepare_tree(case_id: str, tree: Path, *, host_repo: bool = True) -> None:
+    # A reused --work-root may still hold the tree of an earlier run.
+    shutil.rmtree(tree, ignore_errors=True)
+    shutil.rmtree(tree.parent / (tree.name + ".git"), ignore_errors=True)
     shutil.copytree(CASES / case_id / "project", tree)
     # The agent gets its own vendor/: it may run composer dump-autoload or
     # install a package without touching the shared copy the checker uses.
@@ -856,7 +861,7 @@ def run_jobs(
             }
 
     if args.sandbox == "docker":
-        start_egress(args, out.name.lower())
+        start_egress(args, f"{out.name.lower()}-{uuid.uuid4().hex[:6]}")
     try:
         with ThreadPoolExecutor(max_workers=args.jobs) as pool:
             return list(pool.map(safe, jobs))

@@ -2,12 +2,12 @@
 
 declare(strict_types=1);
 
-namespace Cases\ReviewHttpStatusTypes\Tests\Acceptance;
+namespace Acme\HttpStatus\Tests\Acceptance;
 
-use Cases\ReviewHttpStatusTypes\Request;
-use Cases\ReviewHttpStatusTypes\Response;
-use Cases\ReviewHttpStatusTypes\ResponseSummary;
-use Cases\ReviewHttpStatusTypes\StatusText;
+use Acme\HttpStatus\Request;
+use Acme\HttpStatus\Response;
+use Acme\HttpStatus\ResponseSummary;
+use Acme\HttpStatus\StatusText;
 use PHPUnit\Framework\TestCase;
 
 final class HttpTypesTest extends TestCase

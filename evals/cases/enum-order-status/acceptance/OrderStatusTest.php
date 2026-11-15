@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Cases\EnumOrderStatus\Tests\Acceptance;
+namespace Acme\ShopOrders\Tests\Acceptance;
 
-use Cases\EnumOrderStatus\Order;
-use Cases\EnumOrderStatus\OrderLabel;
-use Cases\EnumOrderStatus\OrderStatus;
+use Acme\ShopOrders\Order;
+use Acme\ShopOrders\OrderLabel;
+use Acme\ShopOrders\OrderStatus;
 use PHPUnit\Framework\TestCase;
 
 final class OrderStatusTest extends TestCase

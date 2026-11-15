@@ -1,6 +1,6 @@
 {
-    "name": "eval-case/open-ticket-status",
-    "description": "A status set that installations extend through configuration",
+    "name": "acme/helpdesk",
+    "description": "Helpdesk tickets",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -14,12 +14,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Cases\\OpenTicketStatus\\": "src/"
+            "Acme\\Helpdesk\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Cases\\OpenTicketStatus\\Tests\\": "tests/"
+            "Acme\\Helpdesk\\Tests\\": "tests/"
         }
     },
     "scripts": {

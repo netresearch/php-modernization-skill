@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Cases\MatchUnhandledPayment\Tests\Acceptance;
+namespace Acme\Payments\Tests\Acceptance;
 
-use Cases\MatchUnhandledPayment\FeeCalculator;
-use Cases\MatchUnhandledPayment\PaymentMethod;
+use Acme\Payments\FeeCalculator;
+use Acme\Payments\PaymentMethod;
 use PHPUnit\Framework\TestCase;
 
 final class FeeCalculatorTest extends TestCase

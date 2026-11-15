@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cases\ReviewInvoiceEnumData;
+namespace Acme\Invoices;
 
 enum InvoiceStatus: string
 {

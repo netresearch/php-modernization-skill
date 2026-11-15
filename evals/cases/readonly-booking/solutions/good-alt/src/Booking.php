@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cases\ReadonlyBooking;
+namespace Acme\Bookings;
 
 final class Booking
 {

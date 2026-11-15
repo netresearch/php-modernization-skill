@@ -1,6 +1,6 @@
 {
-    "name": "eval-case/readonly-booking",
-    "description": "readonly over a mutable \\DateTime member",
+    "name": "acme/bookings",
+    "description": "Room bookings",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -14,12 +14,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Cases\\ReadonlyBooking\\": "src/"
+            "Acme\\Bookings\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Cases\\ReadonlyBooking\\Tests\\": "tests/"
+            "Acme\\Bookings\\Tests\\": "tests/"
         }
     },
     "scripts": {

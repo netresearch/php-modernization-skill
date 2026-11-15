@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Cases\ReviewTypedConstantsFloor\Tests\Acceptance;
+namespace Acme\Pricing\Tests\Acceptance;
 
-use Cases\ReviewTypedConstantsFloor\Cart;
-use Cases\ReviewTypedConstantsFloor\Discount;
-use Cases\ReviewTypedConstantsFloor\Price;
+use Acme\Pricing\Cart;
+use Acme\Pricing\Discount;
+use Acme\Pricing\Price;
 use PHPUnit\Framework\TestCase;
 
 final class PricingTest extends TestCase

@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Cases\FallthroughPermissions\Tests\Acceptance;
+namespace Acme\Permissions\Tests\Acceptance;
 
-use Cases\FallthroughPermissions\Permissions;
+use Acme\Permissions\Permissions;
 use PHPUnit\Framework\TestCase;
 
 final class PermissionsTest extends TestCase

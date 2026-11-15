@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cases\FallthroughPermissions;
+namespace Acme\Permissions;
 
 final class Permissions
 {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cases\OpenTicketStatus;
+namespace Acme\Helpdesk;
 
 final readonly class TicketWorkflow
 {

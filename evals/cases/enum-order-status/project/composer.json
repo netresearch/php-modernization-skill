@@ -1,6 +1,6 @@
 {
-    "name": "eval-case/enum-order-status",
-    "description": "Scattered order status strings that form one closed set",
+    "name": "acme/shop-orders",
+    "description": "Order handling for the shop",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -14,12 +14,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Cases\\EnumOrderStatus\\": "src/"
+            "Acme\\ShopOrders\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Cases\\EnumOrderStatus\\Tests\\": "tests/"
+            "Acme\\ShopOrders\\Tests\\": "tests/"
         }
     },
     "scripts": {

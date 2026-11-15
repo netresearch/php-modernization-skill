@@ -246,7 +246,33 @@ def check_phpunit(work: Path) -> CheckResult:
 RUNNERS = {"lint": check_lint, "phpstan": check_phpstan, "phpunit": check_phpunit}
 
 
+IGNORED_DIRS = {"vendor", ".git", ".build", "var"}
+
+
+def symlinks_in(tree: Path) -> list[str]:
+    """Symlinks in the part of ``tree`` the checker copies.
+
+    copytree follows them, so a link could bring in a solution or the
+    acceptance tests from outside the tree.
+    """
+    found: list[str] = []
+    for path in tree.rglob("*"):
+        rel = path.relative_to(tree)
+        if rel.parts and rel.parts[0] in IGNORED_DIRS:
+            continue
+        if path.is_symlink():
+            found.append(str(rel))
+    return sorted(found)
+
+
 def check_tree(case: dict, tree: Path) -> list[CheckResult]:
+    links = symlinks_in(tree)
+    if links:
+        return [
+            CheckResult(
+                "tree", "fail", None, f"symlinks are not scored: {', '.join(links[:5])}"
+            )
+        ]
     with tempfile.TemporaryDirectory(prefix=f"case-{case['id']}-") as tmp:
         work = Path(tmp)
         prepare(case, tree, work)

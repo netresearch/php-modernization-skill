@@ -2,7 +2,7 @@
   "id": "switch-loose-http",
   "title": "switch with loose comparison that callers rely on",
   "kind": "convert",
-  "namespace": "Cases\\SwitchLooseHttp\\",
+  "namespace": "Acme\\HttpLabels\\",
   "php_floor": "8.2",
   "task": "Replace the switch statement in src/StatusText.php with a match expression.",
   "start_expect": "fail",

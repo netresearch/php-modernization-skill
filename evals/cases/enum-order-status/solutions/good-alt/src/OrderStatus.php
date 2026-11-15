@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cases\EnumOrderStatus;
+namespace Acme\ShopOrders;
 
 enum OrderStatus: string
 {

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cases\UnknownStoredShipment;
+namespace Acme\Shipping;
 
 final class Shipment
 {

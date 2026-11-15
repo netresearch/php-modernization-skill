@@ -1,6 +1,6 @@
 {
-    "name": "eval-case/php81-floor-money",
-    "description": "readonly class on a package that supports PHP 8.1",
+    "name": "acme/money",
+    "description": "Money value objects",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -14,12 +14,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Cases\\Php81FloorMoney\\": "src/"
+            "Acme\\Money\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Cases\\Php81FloorMoney\\Tests\\": "tests/"
+            "Acme\\Money\\Tests\\": "tests/"
         }
     },
     "scripts": {

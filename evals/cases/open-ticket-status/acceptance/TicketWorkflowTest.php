@@ -2,9 +2,9 @@
 
 declare(strict_types=1);
 
-namespace Cases\OpenTicketStatus\Tests\Acceptance;
+namespace Acme\Helpdesk\Tests\Acceptance;
 
-use Cases\OpenTicketStatus\TicketWorkflow;
+use Acme\Helpdesk\TicketWorkflow;
 use PHPUnit\Framework\TestCase;
 
 final class TicketWorkflowTest extends TestCase

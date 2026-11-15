@@ -95,7 +95,7 @@ class EvalCaseTest(unittest.TestCase):
             fake = tree / "tests" / "Acceptance"
             fake.mkdir(parents=True)
             (fake / "BookingTest.php").write_text(
-                "<?php\nnamespace Cases\\ReadonlyBooking\\Tests\\Acceptance;\n"
+                "<?php\nnamespace Acme\\Bookings\\Tests\\Acceptance;\n"
                 "final class BookingTest extends \\PHPUnit\\Framework\\TestCase\n"
                 "{ public function testNothing(): void { self::assertTrue(true); } }\n",
                 encoding="utf-8",
@@ -103,6 +103,21 @@ class EvalCaseTest(unittest.TestCase):
             done = run(sys.executable, CHECKER, "readonly-booking", "--tree", tree)
             self.assertEqual(done.returncode, 1, done.stdout)
             self.assertFalse(json.loads(done.stdout)["passed"])
+
+    def test_a_symlink_to_a_solution_is_not_scored(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            tree = Path(tmp)
+            shutil.copytree(
+                CASES / "readonly-booking" / "project", tree, dirs_exist_ok=True
+            )
+            shutil.rmtree(tree / "src")
+            good = CASES / "readonly-booking" / "solutions" / "good" / "src"
+            (tree / "src").symlink_to(good, target_is_directory=True)
+            done = run(sys.executable, CHECKER, "readonly-booking", "--tree", tree)
+            self.assertEqual(done.returncode, 1, done.stdout)
+            report = json.loads(done.stdout)
+            self.assertFalse(report["passed"])
+            self.assertIn("symlink", json.dumps(report))
 
 
 def load_runner():
@@ -246,6 +261,11 @@ class WorktreePluginTest(unittest.TestCase):
                 self.assertTrue((target / probe.relative_to(REPO_ROOT)).is_file())
                 self.assertTrue(commit.endswith("+dirty"))
                 self.assertFalse((target / "evals").exists())
+                # A file left from an earlier copy is gone on the next one.
+                stale = target / "stale.md"
+                stale.write_text("old\n", encoding="utf-8")
+                runner.plugin_root("with:WORKTREE", Path(tmp))
+                self.assertFalse(stale.exists())
         finally:
             probe.unlink(missing_ok=True)
 
@@ -259,6 +279,47 @@ def load_reviewer():
 
 class ReviewScoringTest(unittest.TestCase):
     """What the review evals read from the agent's tree."""
+
+    def fake_judge(self, tmp: Path, result: str) -> Path:
+        fake = tmp / "claude"
+        (tmp / "answer.json").write_text(json.dumps({"result": result}), "utf-8")
+        fake.write_text(
+            f'#!/bin/sh\nprintf "%s\\n" "$@" > "{tmp}/args"\ncat "{tmp}/answer.json"\n',
+            encoding="utf-8",
+        )
+        fake.chmod(0o755)
+        return fake
+
+    def test_judge_reads_the_first_object_and_runs_without_tools(self) -> None:
+        import argparse
+
+        r = load_reviewer()
+        with tempfile.TemporaryDirectory() as tmp_name:
+            tmp = Path(tmp_name)
+            args = argparse.Namespace(
+                sandbox="host",
+                claude=str(
+                    self.fake_judge(
+                        tmp, 'Here: {"found": true, "quote": "names it"} and {"x": 1}'
+                    )
+                ),
+                judge_model="m",
+                work_root=tmp,
+                isolation="project",
+            )
+            graded = r.judge("The review names it here.", "defect", args, tmp)
+            self.assertEqual(graded, {"found": True, "quote": "names it"})
+            argv = (tmp / "args").read_text().splitlines()
+            self.assertEqual(argv[argv.index("--tools") + 1], "")
+
+    def test_a_failed_judge_makes_the_run_invalid(self) -> None:
+        r = load_reviewer()
+        agent = {"valid": True, "invalid_reason": ""}
+        failed = r.after_judge(agent, {"found": False, "error": "judge timeout"})
+        self.assertFalse(failed["valid"])
+        # A judge that answered "not found" is a result, not a failure.
+        kept = r.after_judge(agent, {"found": False, "quote": ""})
+        self.assertTrue(kept["valid"])
 
     def test_verdict_line(self) -> None:
         r = load_reviewer()

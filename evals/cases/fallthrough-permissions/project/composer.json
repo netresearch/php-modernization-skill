@@ -1,6 +1,6 @@
 {
-    "name": "eval-case/fallthrough-permissions",
-    "description": "switch whose fall-through is the behaviour",
+    "name": "acme/permissions",
+    "description": "Role permissions",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -14,12 +14,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Cases\\FallthroughPermissions\\": "src/"
+            "Acme\\Permissions\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Cases\\FallthroughPermissions\\Tests\\": "tests/"
+            "Acme\\Permissions\\Tests\\": "tests/"
         }
     },
     "scripts": {

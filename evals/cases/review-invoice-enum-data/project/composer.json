@@ -1,6 +1,6 @@
 {
-    "name": "eval-case/review-invoice-enum-data",
-    "description": "an enum read with from() where stored data holds another value",
+    "name": "acme/invoices",
+    "description": "Invoice handling",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -14,12 +14,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Cases\\ReviewInvoiceEnumData\\": "src/"
+            "Acme\\Invoices\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Cases\\ReviewInvoiceEnumData\\Tests\\": "tests/"
+            "Acme\\Invoices\\Tests\\": "tests/"
         }
     },
     "scripts": {

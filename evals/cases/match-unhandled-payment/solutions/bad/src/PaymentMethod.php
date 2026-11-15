@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cases\MatchUnhandledPayment;
+namespace Acme\Payments;
 
 enum PaymentMethod: string
 {

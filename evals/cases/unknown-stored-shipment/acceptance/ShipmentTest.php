@@ -2,10 +2,10 @@
 
 declare(strict_types=1);
 
-namespace Cases\UnknownStoredShipment\Tests\Acceptance;
+namespace Acme\Shipping\Tests\Acceptance;
 
-use Cases\UnknownStoredShipment\Shipment;
-use Cases\UnknownStoredShipment\ShipmentStatus;
+use Acme\Shipping\Shipment;
+use Acme\Shipping\ShipmentStatus;
 use PHPUnit\Framework\TestCase;
 
 final class ShipmentTest extends TestCase

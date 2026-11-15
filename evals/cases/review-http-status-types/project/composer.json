@@ -1,6 +1,6 @@
 {
-    "name": "eval-case/review-http-status-types",
-    "description": "a parameter type that breaks a caller outside the diff",
+    "name": "acme/http-status",
+    "description": "HTTP status helpers",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -14,12 +14,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Cases\\ReviewHttpStatusTypes\\": "src/"
+            "Acme\\HttpStatus\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Cases\\ReviewHttpStatusTypes\\Tests\\": "tests/"
+            "Acme\\HttpStatus\\Tests\\": "tests/"
         }
     },
     "scripts": {

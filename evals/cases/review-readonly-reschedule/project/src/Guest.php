@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cases\ReviewReadonlyReschedule;
+namespace Acme\Scheduling;
 
 final class Guest
 {

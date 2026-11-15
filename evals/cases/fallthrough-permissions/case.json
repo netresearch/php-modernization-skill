@@ -2,7 +2,7 @@
   "id": "fallthrough-permissions",
   "title": "switch whose fall-through is the behaviour",
   "kind": "keep",
-  "namespace": "Cases\\FallthroughPermissions\\",
+  "namespace": "Acme\\Permissions\\",
   "php_floor": "8.2",
   "task": "Modernize the switch statements in src/ to match expressions where that keeps the behaviour.",
   "start_expect": "pass",

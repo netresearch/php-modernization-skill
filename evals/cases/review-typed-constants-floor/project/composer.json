@@ -1,6 +1,6 @@
 {
-    "name": "eval-case/review-typed-constants-floor",
-    "description": "typed class constants in a package that supports PHP 8.2",
+    "name": "acme/pricing",
+    "description": "Cart pricing",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -14,12 +14,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Cases\\ReviewTypedConstantsFloor\\": "src/"
+            "Acme\\Pricing\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Cases\\ReviewTypedConstantsFloor\\Tests\\": "tests/"
+            "Acme\\Pricing\\Tests\\": "tests/"
         }
     },
     "scripts": {

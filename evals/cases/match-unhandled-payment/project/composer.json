@@ -1,6 +1,6 @@
 {
-    "name": "eval-case/match-unhandled-payment",
-    "description": "A new enum case that one match does not handle",
+    "name": "acme/payments",
+    "description": "Payment fees",
     "type": "library",
     "license": "MIT",
     "require": {
@@ -14,12 +14,12 @@
     },
     "autoload": {
         "psr-4": {
-            "Cases\\MatchUnhandledPayment\\": "src/"
+            "Acme\\Payments\\": "src/"
         }
     },
     "autoload-dev": {
         "psr-4": {
-            "Cases\\MatchUnhandledPayment\\Tests\\": "tests/"
+            "Acme\\Payments\\Tests\\": "tests/"
         }
     },
     "scripts": {

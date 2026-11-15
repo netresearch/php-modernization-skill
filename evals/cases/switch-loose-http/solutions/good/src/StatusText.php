@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace Cases\SwitchLooseHttp;
+namespace Acme\HttpLabels;
 
 final class StatusText
 {
