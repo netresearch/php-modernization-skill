@@ -1,0 +1,8 @@
+{
+  "bad": {
+    "finding": "The match drops the intended fall-through of the switch: an admin no longer gets 'edit' and 'view', and an editor no longer gets 'view', so the role inheritance is lost."
+  },
+  "good": {
+    "verdict": "approve"
+  }
+}

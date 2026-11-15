@@ -1,0 +1,8 @@
+{
+  "bad": {
+    "finding": "The pull request adds native types to class constants (public const string CURRENCY, public const int MAX_PERCENT), which need PHP 8.3, while composer.json and the task set PHP 8.2 as the floor, so the classes do not parse on PHP 8.2 (PHPStan reports classConstant.nativeTypeNotSupported)."
+  },
+  "good": {
+    "verdict": "approve"
+  }
+}

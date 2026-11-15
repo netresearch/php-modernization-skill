@@ -1,0 +1,8 @@
+{
+  "bad": {
+    "finding": "ShipmentStatus::from() throws for legacy stored status values that are not enum cases, so old rows no longer load; it should use tryFrom() and map unknown values to the 'Unknown' label."
+  },
+  "good": {
+    "verdict": "approve"
+  }
+}

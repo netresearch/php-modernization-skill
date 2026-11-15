@@ -59,7 +59,10 @@
 │   ├── ARCHITECTURE.md                       # Architecture overview
 │   ├── SECURITY-ASSURANCE.md                 # Security assurance case
 │   └── php-rules.md                          # PHP coding rules (scoped to **/*.php)
-├── evals/evals.json                          # Skill evaluation suite
+├── evals/evals.json                          # Skill evaluation suite (text answers)
+├── evals/cases/                              # Executable modernization cases + checker
+├── evals/run_agent_cases.py                  # Agent evals on the cases, scored by the checker
+├── evals/run_review_cases.py                 # Review evals: bad and good pull requests per case, judged
 ├── .claude-plugin/plugin.json                # Plugin manifest
 ├── composer.json                             # Composer package manifest
 ├── sonar-project.properties                  # SonarCloud config (excludes fixtures)
@@ -80,6 +83,9 @@
 - `uv run scripts/test_fixtures.py` — regression suite for the verifier itself.
 - `uv run --python 3.11 python tests/test_scripts.py` — behaviour tests for the introspector, verifier, orchestrator and Bash wrapper.
 - `bash scripts/verify-harness.sh` — agent-harness consistency check (this file, docs, refs).
+- `composer install --working-dir=evals/cases && uv run evals/cases/check_case.py --self-test` — prove the eval-case checks (also `python3 tests/test_eval_cases.py`).
+- `docker build -t php-modernization-evals -f evals/agent.Dockerfile evals`, then `uv run evals/run_agent_cases.py --arms without,with:origin/main,with:WORKTREE --runs 3` — agent evals on the cases, each agent in a container, isolated from the user's plugins, skills and CLAUDE.md (`--setting-sources project`). Costs model tokens; run it for changes to the modernization rules, not on every commit.
+- `uv run evals/run_review_cases.py --arms without,invoke:origin/main,invoke:WORKTREE --runs 3 --jobs 3` — review evals: does the skill find the defect in the bad pull request and approve the good one.
 
 ## Hard Guardrails
 

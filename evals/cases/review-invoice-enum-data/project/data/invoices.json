@@ -1,0 +1,17 @@
+[
+    {
+        "id": "A-1001",
+        "status": "open",
+        "total": 12000
+    },
+    {
+        "id": "A-1002",
+        "status": "paid",
+        "total": 4500
+    },
+    {
+        "id": "A-0907",
+        "status": "void",
+        "total": 0
+    }
+]

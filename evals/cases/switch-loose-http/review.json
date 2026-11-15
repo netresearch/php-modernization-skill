@@ -1,0 +1,8 @@
+{
+  "bad": {
+    "finding": "match compares strictly (===) where the switch compared loosely (==): codes that arrive as strings, such as '200' parsed from headers, now fall through to 'Unknown'."
+  },
+  "good": {
+    "verdict": "approve"
+  }
+}

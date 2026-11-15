@@ -1,0 +1,8 @@
+{
+  "bad": {
+    "finding": "readonly is shallow: the \\DateTime object stays mutable, so changing the DateTime passed in or returned changes the booking; it needs DateTimeImmutable or a clone."
+  },
+  "good": {
+    "verdict": "approve"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "bad": {
+    "finding": "The new PaymentMethod::Klarna case is not handled by the match in FeeCalculator, so a Klarna payment throws UnhandledMatchError (PHPStan reports match.unhandled)."
+  },
+  "good": {
+    "verdict": "approve"
+  }
+}

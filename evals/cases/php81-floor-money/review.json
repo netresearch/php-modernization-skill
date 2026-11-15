@@ -1,0 +1,8 @@
+{
+  "bad": {
+    "finding": "A readonly class needs PHP 8.2, but the package supports PHP 8.1 (composer.json), so the class is a parse error on PHP 8.1."
+  },
+  "good": {
+    "verdict": "approve"
+  }
+}

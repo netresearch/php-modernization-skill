@@ -1,0 +1,8 @@
+{
+  "bad": {
+    "finding": "Booking becomes readonly but still holds a mutable \\DateTime: readonly only stops reassigning the property, so Rescheduler::postpone(), which calls modify() on $booking->start(), still moves the original booking's date (and a caller can change the date it passed in); Booking needs DateTimeImmutable, and Rescheduler must use the returned date."
+  },
+  "good": {
+    "verdict": "approve"
+  }
+}
