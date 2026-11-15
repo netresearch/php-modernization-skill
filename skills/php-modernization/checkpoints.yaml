@@ -617,8 +617,10 @@ llm_reviews:
       1. Mapped as a Doctrine entity or mapped superclass (#[ORM\Entity],
          #[ORM\MappedSuperclass], under any alias or fully qualified)
       2. A form-bound model (the data class of a Symfony AbstractType)
-      3. Assigned after construction (setter, framework property injection,
-         a wither that writes through reflection)
+      3. Written a second time or from outside the class (a setter, a
+         PropertyAccess write, a wither that changes a copy through
+         reflection). An injection into a property that is still
+         uninitialized works with readonly and is no reason to remove it.
       For these, readonly is INCORRECT: remove it.
 
       Check, do not flag by category:

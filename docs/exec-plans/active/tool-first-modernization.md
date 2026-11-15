@@ -86,9 +86,11 @@ Measured in the repository at `1bfccd5`:
   `--check` id exits 2.
 - **"Dry-run changes nothing" is scoped.** The orchestrator writes its reports
   to `.build/php-modernization/`, and the tools write caches. The criterion is:
-  no tracked file and no lock file changes, checked with
-  `git status --porcelain` and, because an ignored `composer.lock` does not
-  show there, with a hash of each lock file before and after the run.
+  no tracked file and no lock file changes, checked on a clean working tree
+  with `git status --porcelain` (an already modified file could change again
+  without changing its status line) and, because an ignored `composer.lock`
+  does not show there, with a hash of each lock file before and after the
+  run.
 - **Eval case projects live in `evals/cases/`**, not in `fixtures/`, because
   `scripts/test_fixtures.py` treats every `fixtures/*` directory as a verifier
   golden snapshot.
