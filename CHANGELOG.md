@@ -11,6 +11,8 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.24.3] - 2026-11-15
+
 ### Fixed
 
 - The verifier reports as `skill_version` the `metadata.version` it reads from the `SKILL.md` next to its `scripts/` directory, instead of a hard-coded constant that each release had to raise by hand. Only a `version` directly under `metadata:` in the first frontmatter block counts; when `SKILL.md` is missing or unreadable, or has no `metadata.version`, the report carries `"unknown"` and the verifier runs and exits as before (#182)
@@ -244,7 +246,8 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 (historical — pre-CHANGELOG)
 
-[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.2...HEAD
+[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.3...HEAD
+[1.24.3]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.2...v1.24.3
 [1.24.2]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.1...v1.24.2
 [1.24.1]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.0...v1.24.1
 [1.24.0]: https://github.com/netresearch/php-modernization-skill/compare/v1.23.6...v1.24.0
