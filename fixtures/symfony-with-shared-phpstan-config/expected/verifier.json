@@ -105,6 +105,7 @@
         ".php-cs-fixer.dist.php",
         "Build/.php-cs-fixer.php",
         "Build/.php-cs-fixer.dist.php",
+        "Build/php-cs-fixer/config.php",
         ".phpcs.xml",
         "phpcs.xml",
         ".phpcs.xml.dist",
@@ -132,7 +133,8 @@
       "evidence": [
         "rector.php",
         "Build/rector.php",
-        "Build/rector/rector.php"
+        "Build/rector/rector.php",
+        "Build/rector/config.php"
       ],
       "id": "PM-09",
       "message": "Rector configuration is missing",

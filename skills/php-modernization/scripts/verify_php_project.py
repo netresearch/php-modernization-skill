@@ -1234,6 +1234,9 @@ CACHE_INVALIDATION_FILES: tuple[str, ...] = (
     *PHPSTAN_CONFIG_CANDIDATES,
     *RECTOR_CONFIG_CANDIDATES,
     *PHP_CS_FIXER_CANDIDATES,
+    *PHPCS_CONFIG_CANDIDATES,
+    *PHPUNIT_CONFIG_CANDIDATES,
+    *FRACTOR_CONFIG_CANDIDATES,
 )
 
 
@@ -1515,8 +1518,11 @@ def filter_to_checkpoint(
         for a in report_dict.get("agent_actions", [])
         if a.get("checkpoint") == checkpoint_id
     ]
+    # Tool runs are not narrowed to the checkpoint, so neither is their count.
+    runs_failed = int((report_dict.get("summary") or {}).get("tool_runs_failed", 0))
     if checks:
         summary = build_summary(Check(**c) for c in checks)
+        summary.tool_runs_failed = runs_failed
         filtered["summary"] = asdict(summary)
         return filtered
     coverage = report_dict.get("review_coverage")
@@ -1543,7 +1549,13 @@ def filter_to_checkpoint(
     else:
         raise KeyError(checkpoint_id)
     filtered["summary"] = asdict(
-        Summary(status="not_evaluated", errors=0, warnings=0, info=0)
+        Summary(
+            status="not_evaluated",
+            errors=0,
+            warnings=0,
+            info=0,
+            tool_runs_failed=runs_failed,
+        )
     )
     filtered["checkpoint"] = {
         "id": checkpoint_id,

@@ -246,6 +246,10 @@ def _execute(
 
 
 def run_rector(ctx: Context, *, dry_run: bool, tool: str = "rector") -> ToolResult:
+    if ctx.rector_config is None:
+        # Rector without a config prints 'No "rector.php" config found',
+        # analyses nothing and exits 0: that is no pass.
+        return _skipped(tool, "no Rector config in the project")
     binary = find_binary(ctx.root, "rector", ctx.composer)
     if binary is None:
         return _missing(tool, "rector")
@@ -291,7 +295,10 @@ def run_php_cs_fixer(ctx: Context, *, dry_run: bool) -> ToolResult:
     cmd = [str(binary), "fix"]
     if ctx.php_cs_fixer_config:
         cmd.append(f"--config={ctx.php_cs_fixer_config}")
-    cmd += ctx.paths
+    if ctx.paths:
+        # Without intersection the paths replace the config's Finder, and
+        # files the project excludes get fixed.
+        cmd += ["--path-mode=intersection", *ctx.paths]
     if dry_run:
         cmd += ["--dry-run", "--diff", "--format=json"]
 
@@ -460,11 +467,60 @@ def run_phpcs(ctx: Context, *, dry_run: bool) -> ToolResult:
 def _lint_targets(ctx: Context) -> list[str]:
     if ctx.paths:
         return list(ctx.paths)
+    scripted = _lint_script_targets(ctx.root, ctx.composer)
+    if scripted:
+        return scripted
     dirs = source_dirs(ctx.root, ctx.composer)
     targets = dirs["src"] + [d for d in dirs["tests"] if d not in dirs["src"]]
     # A package that maps its root ("psr-4": {"Vendor\\": ""}) is linted
     # as "."; run_lint keeps vendor/ out of that.
     return ["."] if "." in targets else targets
+
+
+# parallel-lint options that take a value.
+_LINT_VALUE_OPTIONS = {"--exclude", "-e", "-p", "-j", "--php", "--jobs"}
+
+
+def _lint_script_targets(root: Path, composer: dict | None) -> list[str]:
+    """The paths the project's own parallel-lint script lints, globs expanded.
+
+    A TYPO3 extension lints ``*.php Classes Configuration Tests``; the
+    autoload directories alone leave out ext_emconf.php and the TCA.
+    """
+    scripts = (composer or {}).get("scripts")
+    if not isinstance(scripts, dict):
+        return []
+    targets: list[str] = []
+    for value in scripts.values():
+        for command in value if isinstance(value, list) else [value]:
+            if not isinstance(command, str):
+                continue
+            try:
+                tokens = shlex.split(command)
+            except ValueError:
+                continue
+            starts = [i for i, t in enumerate(tokens) if t.endswith("parallel-lint")]
+            if not starts:
+                continue
+            skip = False
+            for token in tokens[starts[0] + 1 :]:
+                if skip:
+                    skip = False
+                    continue
+                if token in _LINT_VALUE_OPTIONS:
+                    skip = True
+                    continue
+                if token.startswith("-") or token in {"&&", "||", ";", "|"}:
+                    continue
+                matches = (
+                    sorted(str(p.relative_to(root)) for p in root.glob(token))
+                    if any(c in token for c in "*?[")
+                    else [token.rstrip("/")]
+                )
+                for rel in matches:
+                    if (root / rel).exists() and rel not in targets:
+                        targets.append(rel)
+    return targets
 
 
 def _lint_excludes(composer: dict | None) -> list[str]:
@@ -641,6 +697,17 @@ def run_phpunit(ctx: Context) -> ToolResult:
     )
 
 
+def _infection_sets_min_msi(root: Path) -> bool:
+    """Whether the project's Infection config sets its own minMsi."""
+    for name in ("infection.json5", "infection.json", "infection.json.dist"):
+        try:
+            if "minMsi" in (root / name).read_text(encoding="utf-8"):
+                return True
+        except OSError:
+            continue
+    return False
+
+
 def run_infection_diff(ctx: Context, *, git_diff_base: str) -> ToolResult:
     binary = find_binary(ctx.root, "infection", ctx.composer)
     if binary is None:
@@ -651,7 +718,7 @@ def run_infection_diff(ctx: Context, *, git_diff_base: str) -> ToolResult:
         f"--git-diff-base={git_diff_base}",
         "--git-diff-lines",
         f"--threads={threads}",
-        "--min-msi=80",
+        *([] if _infection_sets_min_msi(ctx.root) else ["--min-msi=80"]),
         "--logger-github",
         "--formatter=summary",
     ]

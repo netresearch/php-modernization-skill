@@ -73,6 +73,7 @@
       "evidence": [
         "phpstan.neon",
         "phpstan.neon.dist",
+        "phpstan.dist.neon",
         "Build/phpstan.neon",
         "Build/phpstan/phpstan.neon"
       ],
@@ -122,7 +123,8 @@
       "evidence": [
         "rector.php",
         "Build/rector.php",
-        "Build/rector/rector.php"
+        "Build/rector/rector.php",
+        "Build/rector/config.php"
       ],
       "id": "PM-09",
       "message": "Rector configuration is missing",

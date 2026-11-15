@@ -183,11 +183,15 @@ PHP_CS_FIXER_CANDIDATES: tuple[str, ...] = (
     ".php-cs-fixer.dist.php",
     "Build/.php-cs-fixer.php",
     "Build/.php-cs-fixer.dist.php",
+    # TYPO3 best-practice extension layout (TYPO3BestPractices/tea).
+    "Build/php-cs-fixer/config.php",
 )
 # Same order as PM-01 in checkpoints.yaml and PHPStan's own precedence.
 PHPSTAN_CONFIG_CANDIDATES: tuple[str, ...] = (
     "phpstan.neon",
     "phpstan.neon.dist",
+    # Created by the Symfony Flex recipe for phpstan/phpstan.
+    "phpstan.dist.neon",
     "Build/phpstan.neon",
     "Build/phpstan/phpstan.neon",
 )
@@ -195,6 +199,7 @@ RECTOR_CONFIG_CANDIDATES: tuple[str, ...] = (
     "rector.php",
     "Build/rector.php",
     "Build/rector/rector.php",
+    "Build/rector/config.php",
 )
 # Root first, then Build/. PHPCS itself looks for .phpcs.xml, phpcs.xml,
 # .phpcs.xml.dist and phpcs.xml.dist in the working directory.
@@ -256,6 +261,9 @@ def bin_dirs(root: Path, composer: dict[str, Any] | None) -> list[Path]:
     config = (composer or {}).get("config")
     if isinstance(config, dict) and isinstance(config.get("bin-dir"), str):
         dirs.append(root / config["bin-dir"])
+    elif isinstance(config, dict) and isinstance(config.get("vendor-dir"), str):
+        # Composer's default bin-dir is {$vendor-dir}/bin.
+        dirs.append(root / config["vendor-dir"] / "bin")
     for rel in ("vendor/bin", ".Build/bin"):
         candidate = root / rel
         if candidate not in dirs:
