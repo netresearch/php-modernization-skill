@@ -92,7 +92,8 @@ $period->start->modify('+1 day'); // allowed: no reassignment
 
 Rector's `ReadOnlyClassRector` makes such a class `readonly` without a warning (measured with Rector 2.8.4). Before calling a class immutable, check every property type:
 
-- Scalars, enums, `\DateTimeImmutable` and other `readonly` value objects: immutable.
+- Scalars, enums and `\DateTimeImmutable`: immutable.
+- Another `readonly` class: immutable only when its own properties pass this check. `readonly` says nothing about the members one level down.
 - Mutable objects: replace them with an immutable type (`\DateTimeImmutable`), or copy on the way in and on the way out (`clone`), and pin the behaviour with a test that changes the passed object and the returned object.
 - Arrays of objects: the array is copied, the objects in it are shared.
 

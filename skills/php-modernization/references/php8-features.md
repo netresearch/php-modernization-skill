@@ -120,13 +120,18 @@ $label = match($status) {
 };
 
 // Before converting a switch, check four things. Rector's
-// ChangeSwitchToMatchRector checks none of the first three.
+// ChangeSwitchToMatchRector skips a case with more than one statement or
+// without break, return or throw, so it refuses most fall-through and
+// side-effect cases (2 and 3). It does not check the comparison (1).
 //
 // 1. Comparison: switch compares with ==, match with ===. If the subject
 //    is untyped or int|string, `case 200:` also matched "200"; `200 =>`
 //    does not. Rector 2.8.4 converted such a switch on a parameter with no
 //    type and no docblock; with `@param int|string` it left it alone. A
 //    missing type is no guarantee the values are all one type.
+//    On a native `string` subject with int arms (or the reverse) Rector
+//    2.8.4 inserts the cast itself: `match ((int) $code)`. Review that
+//    diff like a cast you wrote, see below.
 //    To keep the behaviour, keep the comparison:
 //    `match (true) { $code == 200 => 'OK', ... }`. A cast or a list of
 //    values is not the same: `(int) '200abc'` is 200 where the switch
@@ -400,7 +405,6 @@ literals and constant groups are converted by hand, one value set per change.
 - Missing `match` cases reported by PHPStan (`match.unhandled`)
 - Methods encapsulate related logic
 - Self-documenting API
-```
 
 ### Readonly Properties
 

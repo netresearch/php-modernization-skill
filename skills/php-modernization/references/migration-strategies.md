@@ -111,7 +111,8 @@ return RectorConfig::configure()
 ### Running Rector
 
 ```bash
-# Dry run (preview changes); exit 0 = no change, 2 = changes proposed
+# Dry run (preview changes); exit 0 = no change, 2 = changes proposed,
+# 1 = error (config, unknown rule, parse error): not "no change"
 vendor/bin/rector process --dry-run
 
 # One rule on one area; --only needs the rule to be registered in the
@@ -430,8 +431,9 @@ $color = match($status) {
 };
 ```
 
-The two are equal only when `$status` is always a string: `switch` compares
-with `==`, `match` with `===`. Check the comparison, fall-through and
+The two can differ when `$status` is not always a string: `switch` compares
+with `==`, `match` with `===`. For example `true == 'active'` holds, so the
+switch gives `'green'` for `true` and the match gives `'gray'`. Check the comparison, fall-through and
 `default` before converting — see "Match Expression" in `php8-features.md`.
 
 ### Property Initialization
