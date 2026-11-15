@@ -292,27 +292,50 @@ def run_php_cs_fixer(ctx: Context, *, dry_run: bool) -> ToolResult:
     binary = find_binary(ctx.root, "php-cs-fixer", ctx.composer)
     if binary is None:
         return _missing("php-cs-fixer", "php-cs-fixer")
-    cmd = [str(binary), "fix"]
+    base = [str(binary), "fix"]
     if ctx.php_cs_fixer_config:
-        cmd.append(f"--config={ctx.php_cs_fixer_config}")
-    if ctx.paths:
-        # Without intersection the paths replace the config's Finder, and
-        # files the project excludes get fixed.
-        cmd += ["--path-mode=intersection", *ctx.paths]
-    if dry_run:
-        cmd += ["--dry-run", "--diff", "--format=json"]
+        base.append(f"--config={ctx.php_cs_fixer_config}")
+    tail = ["--dry-run", "--diff", "--format=json"] if dry_run else []
+    # Apply mode keeps a report too: its stderr decides the fallback below.
+    artifact = "php-cs-fixer.json" if dry_run else "php-cs-fixer.txt"
+    # A pass for a --path says nothing about files outside the config's
+    # Finder: intersection leaves them out.
+    scoped = " within the config's Finder; a path outside it is not checked"
 
     # PHP-CS-Fixer exit codes are bit flags; 8 alone = "files need fixing".
     def classify(rc: int) -> tuple[str, str]:
         if rc == 0:
-            return "pass", "php-cs-fixer: clean" if dry_run else "all files fixed"
+            done = "php-cs-fixer: clean" if dry_run else "all files fixed"
+            return "pass", done + (scoped if ctx.paths else "")
         if dry_run and rc == 8:
             return "changes", "php-cs-fixer: changes proposed (exit 8)"
         return "fail", f"php-cs-fixer: error (exit {rc})"
 
-    return _execute(
-        ctx, "php-cs-fixer", cmd, "php-cs-fixer.json" if dry_run else None, classify
+    if not ctx.paths:
+        return _execute(ctx, "php-cs-fixer", base + tail, artifact, classify)
+    # Without intersection the paths replace the config's Finder, and files
+    # the project excludes get fixed.
+    result = _execute(
+        ctx,
+        "php-cs-fixer",
+        [*base, "--path-mode=intersection", *ctx.paths, *tail],
+        artifact,
+        classify,
     )
+    # The message is not stderr's last line (php-cs-fixer prints its usage
+    # after it), so read the whole stderr report.
+    stderr_file = ctx.root / ARTIFACT_DIR / f"{artifact}.stderr"
+    try:
+        stderr = stderr_file.read_text(encoding="utf-8")
+    except OSError:
+        stderr = ""
+    if "not-fully defined Finder" not in stderr + result.summary:
+        return result
+    # A config without a Finder takes its paths from the command line, and
+    # php-cs-fixer refuses intersection for it: nothing to exclude, so the
+    # paths are used as given.
+    scoped = ""
+    return _execute(ctx, "php-cs-fixer", [*base, *ctx.paths, *tail], artifact, classify)
 
 
 def _phpcs_exit_settings(ctx: Context) -> tuple[bool, bool]:
@@ -507,10 +530,16 @@ def _lint_script_targets(root: Path, composer: dict | None) -> list[str]:
                 if skip:
                     skip = False
                     continue
+                if token in {"&&", "||", ";", "|"}:
+                    break  # the next command's arguments are not lint targets
+                ends_command = token.endswith(";")
+                token = token.rstrip(";")
                 if token in _LINT_VALUE_OPTIONS:
                     skip = True
                     continue
-                if token.startswith("-") or token in {"&&", "||", ";", "|"}:
+                if not token or token.startswith("-"):
+                    if ends_command:
+                        break
                     continue
                 matches = (
                     sorted(str(p.relative_to(root)) for p in root.glob(token))
@@ -520,6 +549,8 @@ def _lint_script_targets(root: Path, composer: dict | None) -> list[str]:
                 for rel in matches:
                     if (root / rel).exists() and rel not in targets:
                         targets.append(rel)
+                if ends_command:
+                    break
     return targets
 
 
@@ -698,11 +729,19 @@ def run_phpunit(ctx: Context) -> ToolResult:
 
 
 def _infection_sets_min_msi(root: Path) -> bool:
-    """Whether the project's Infection config sets its own minMsi."""
-    for name in ("infection.json5", "infection.json", "infection.json.dist"):
+    """Whether the config Infection loads sets its own minMsi.
+
+    Infection loads the first of these that exists (0.35.11,
+    SchemaConfigurationLoader::POSSIBLE_DEFAULT_CONFIG_FILE_NAMES).
+    """
+    for name in (
+        "infection.json5",
+        "infection.json",
+        "infection.json5.dist",
+        "infection.json.dist",
+    ):
         try:
-            if "minMsi" in (root / name).read_text(encoding="utf-8"):
-                return True
+            return "minMsi" in (root / name).read_text(encoding="utf-8")
         except OSError:
             continue
     return False

@@ -1032,14 +1032,83 @@ class ModernizeLoopTest(unittest.TestCase):
             args = (root / "vendor" / "bin" / "php-cs-fixer.args").read_text().split()
             self.assertIn("--path-mode=intersection", args)
 
+    def test_php_cs_fixer_config_without_a_finder_gets_the_paths(self) -> None:
+        # php-cs-fixer refuses intersection for a config with no Finder.
+        with TempProject("fully-modern") as root:
+            fixer = fake_tool(root, "php-cs-fixer", exit_code=8)
+            fixer.write_text(
+                fixer.read_text().replace(
+                    "#!/bin/sh\n",
+                    "#!/bin/sh\n"
+                    'case " $* " in *" --path-mode=intersection "*)\n'
+                    '  echo "Cannot create intersection with not-fully defined'
+                    ' Finder in configuration file." >&2; exit 16;; esac\n',
+                ),
+                encoding="utf-8",
+            )
+            result = run_py(
+                "modernize_loop.py",
+                "--root",
+                root,
+                "--tools",
+                "php-cs-fixer",
+                "--path",
+                "src",
+            )
+            self.assertEqual(loop_status(result), {"php-cs-fixer": "changes"})
+            self.assertNotIn(
+                "--path-mode=intersection",
+                (root / "vendor" / "bin" / "php-cs-fixer.args").read_text().split(),
+            )
+
+    def test_php_cs_fixer_pass_for_a_path_names_its_scope(self) -> None:
+        with TempProject("fully-modern") as root:
+            fake_tool(root, "php-cs-fixer", exit_code=0)
+            result = run_py(
+                "modernize_loop.py",
+                "--root",
+                root,
+                "--tools",
+                "php-cs-fixer",
+                "--path",
+                "src",
+            )
+            summary = json.loads(result.stdout)["results"][0]["summary"]
+            self.assertIn("not checked", summary)
+
+    def test_lint_script_targets_end_at_the_command(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import modernize_loop
+
+        with TempProject("generic-composer-minimal") as root:
+            (root / "Build").mkdir()
+            for script, expected in (
+                ("parallel-lint src tests && phpstan analyse Build", ["src", "tests"]),
+                ("parallel-lint src tests; echo ok", ["src", "tests"]),
+            ):
+                with self.subTest(script=script):
+                    targets = modernize_loop._lint_script_targets(
+                        root, {"scripts": {"lint": script}}
+                    )
+                    self.assertEqual(targets, expected)
+
     def test_infection_keeps_the_project_min_msi(self) -> None:
-        for config, expected in (('{"minMsi": 95}', False), ("{}", True)):
+        cases = (
+            ({"infection.json5": '{"minMsi": 95}'}, False),
+            ({"infection.json5": "{}"}, True),
+            ({"infection.json5.dist": '{"minMsi": 60}'}, False),
+            # Infection loads infection.json5 first; a minMsi elsewhere is
+            # not the threshold it runs with.
+            ({"infection.json5": "{}", "infection.json.dist": '{"minMsi": 60}'}, True),
+        )
+        for files, expected in cases:
             with (
-                self.subTest(config=config),
+                self.subTest(files=sorted(files)),
                 TempProject("fully-modern") as root,
             ):
                 fake_tool(root, "infection", exit_code=0)
-                (root / "infection.json5").write_text(config, encoding="utf-8")
+                for name, text in files.items():
+                    (root / name).write_text(text, encoding="utf-8")
                 run_py(
                     "modernize_loop.py",
                     "--root",
