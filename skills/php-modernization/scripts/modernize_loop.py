@@ -367,6 +367,10 @@ def _phpcs_exit_settings(ctx: Context) -> tuple[bool, bool]:
     if not ctx.phpcs_config:
         return False, False
     try:
+        # The project's own phpcs.xml: the project is trusted as code (its
+        # phpcs runs anyway), and the scripts are stdlib-only. See
+        # docs/SECURITY-ASSURANCE.md.
+        # nosemgrep: python.lang.security.use-defused-xml-parse.use-defused-xml-parse
         tree = ElementTree.parse(ctx.root / ctx.phpcs_config)
     except (OSError, ElementTree.ParseError):
         return False, False
