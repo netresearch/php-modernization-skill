@@ -1391,6 +1391,44 @@ class ModernizeLoopTest(unittest.TestCase):
             self.assertIn("tests", args)
             for third_party in ("node_modules", "vendor", "."):
                 self.assertNotIn(third_party, args)
+            # A nested vendor-dir: its parent's own code stays, it does not.
+            composer["config"] = {"vendor-dir": "lib/deps"}
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            (root / "lib" / "deps" / "x").mkdir(parents=True)
+            (root / "lib" / "Own.php").write_text("<?php\n", "utf-8")
+            run_py("modernize_loop.py", "--root", root, "--tools", "php-cs-fixer")
+            args = (root / "vendor" / "bin" / "php-cs-fixer.args").read_text().split()
+            self.assertIn("lib/Own.php", args)
+            self.assertNotIn("lib", args)
+            self.assertNotIn("lib/deps", args)
+            self.assertNotIn("vendor", args)
+
+    def test_php_cs_fixer_fallback_without_own_code_is_skipped(self) -> None:
+        with TempProject("fully-modern") as root:
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer["autoload"] = {"psr-4": {"Vendor\\Pkg\\": ""}}
+            composer.pop("autoload-dev", None)
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            for entry in sorted(root.iterdir()):
+                if entry.name not in {
+                    "vendor",
+                    "composer.json",
+                } and not entry.name.startswith("."):
+                    shutil.rmtree(entry) if entry.is_dir() else entry.unlink()
+            fixer = fake_tool(root, "php-cs-fixer", exit_code=0)
+            fixer.write_text(
+                fixer.read_text().replace(
+                    '/calls.log"\n',
+                    '/calls.log"\n'
+                    'echo "You must call one of in() or append()" >&2; exit 1\n',
+                ),
+                encoding="utf-8",
+            )
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "php-cs-fixer"
+            )
+            self.assertEqual(loop_status(result), {"php-cs-fixer": "skipped"})
+            self.assertEqual(len(calls(root)), 1)
 
     def test_several_rector_rules_need_rector_2_6_7(self) -> None:
         rules = ("--rector-only", "A\\One", "--rector-only", "B\\Two")

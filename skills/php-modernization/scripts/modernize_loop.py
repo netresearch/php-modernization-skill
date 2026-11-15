@@ -331,10 +331,14 @@ def _fixer_needs_paths(ctx: Context, artifact: str, result: ToolResult) -> bool:
 
 
 def _third_party_dirs(ctx: Context) -> list[str]:
-    """Existing directories at the root that hold code the project does not own."""
+    """Existing directories that hold code the project does not own.
+
+    "vendor" counts even next to another vendor-dir: passed by name, the
+    fixer scans it.
+    """
     vendor_dir = ((ctx.composer or {}).get("config") or {}).get("vendor-dir")
     found: list[str] = []
-    for name in (vendor_dir or "vendor", ".Build", "node_modules"):
+    for name in (vendor_dir, "vendor", ".Build", "node_modules"):
         if not isinstance(name, str):
             continue
         name = name.rstrip("/")
@@ -344,22 +348,31 @@ def _third_party_dirs(ctx: Context) -> list[str]:
 
 
 def _root_entries(ctx: Context) -> list[str]:
-    """The project root as explicit paths, without third-party directories."""
-    # A nested vendor-dir (lib/vendor) keeps its parent, which can hold the
-    # project's own code; the fixer's Finder skips a directory named vendor.
-    skip = {d for d in _third_party_dirs(ctx) if "/" not in d}
-    try:
-        entries = sorted(ctx.root.iterdir())
-    except OSError:
-        return ["."]
-    paths = [
-        p.name
-        for p in entries
-        if not p.name.startswith(".")
-        and p.name not in skip
-        and (p.is_dir() or p.suffix == ".php")
-    ]
-    return paths or ["."]
+    """The project root as explicit paths, without third-party directories.
+
+    A directory that contains a nested vendor-dir (lib/deps) is replaced by
+    its own entries, so its parent's code is kept and the vendor-dir is not.
+    Empty when nothing outside the third-party directories is left.
+    """
+    third_party = [PurePosixPath(d) for d in _third_party_dirs(ctx)]
+
+    def entries(rel: PurePosixPath) -> list[str]:
+        try:
+            children = sorted((ctx.root / rel).iterdir())
+        except OSError:
+            return []
+        out: list[str] = []
+        for p in children:
+            child = rel / p.name
+            if p.name.startswith(".") or child in third_party:
+                continue
+            if p.is_dir() and any(t.is_relative_to(child) for t in third_party):
+                out += entries(child)
+            elif p.is_dir() or p.suffix == ".php":
+                out.append(str(child))
+        return out
+
+    return entries(PurePosixPath("."))
 
 
 def run_php_cs_fixer(ctx: Context, *, dry_run: bool) -> ToolResult:
@@ -407,6 +420,11 @@ def run_php_cs_fixer(ctx: Context, *, dry_run: bool) -> ToolResult:
         dirs = source_dirs(ctx.root, ctx.composer)
         found = dirs["src"] + [d for d in dirs["tests"] if d not in dirs["src"]]
         paths = _root_entries(ctx) if "." in found or not found else found
+        if not paths:
+            return _skipped(
+                "php-cs-fixer",
+                "the config has no Finder and the root holds only third-party code",
+            )
         return _execute(ctx, "php-cs-fixer", [*base, *paths, *tail], artifact, classify)
     # Without intersection the paths replace the config's Finder, and files
     # the project excludes get fixed.
