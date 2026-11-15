@@ -67,19 +67,40 @@ class TempProject:
         self._tmp.cleanup()
 
 
-def fake_tool(root: Path, name: str, exit_code: int) -> Path:
-    """Install an executable vendor/bin/<name> that logs its arguments."""
+def fake_tool(root: Path, name: str, exit_code: int, stdout: str = "{}") -> Path:
+    """Install an executable vendor/bin/<name> that logs its arguments.
+
+    A fake Rector gets a rector.php when the project has no Rector config:
+    the loop skips Rector without one.
+    """
+    if name == "rector" and not any(
+        (root / rel).is_file()
+        for rel in ("rector.php", "Build/rector.php", "Build/rector/rector.php")
+    ):
+        (root / "rector.php").write_text("<?php\n", encoding="utf-8")
     binary = root / "vendor" / "bin" / name
     binary.parent.mkdir(parents=True, exist_ok=True)
+    (binary.parent / f"{name}.stdout").write_text(stdout + "\n", encoding="utf-8")
     binary.write_text(
         "#!/bin/sh\n"
         f'printf "%s\\n" "$@" > "$(dirname "$0")/{name}.args"\n'
-        'echo "{}"\n'
+        f'echo "{name} $*" >> "$(dirname "$0")/calls.log"\n'
+        f'cat "$(dirname "$0")/{name}.stdout"\n'
         f"exit {exit_code}\n",
         encoding="utf-8",
     )
     binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
     return binary
+
+
+class MakefileTargetTest(unittest.TestCase):
+    def test_double_colon_rules_and_assignments(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import _common
+
+        text = "clean::\nFOO ::= bar\nbuild: dep\nX := 1\ntest:\n"
+        names = [m.group(1) for m in _common._MAKE_TARGET_RE.finditer(text)]
+        self.assertEqual(names, ["clean", "build", "test"])
 
 
 class IntrospectTest(unittest.TestCase):
@@ -110,6 +131,98 @@ class IntrospectTest(unittest.TestCase):
             profile = json.loads(result.stdout)
             self.assertEqual(profile["archetype"], "generic-composer")
             self.assertEqual(profile["autoload_psr4"], {"Acme\\": "lib/"})
+
+    def test_reports_the_project_tools_and_commands(self) -> None:
+        result = run_py("introspect.py", "--root", FIXTURES / "generic-composer-phpcs")
+        profile = json.loads(result.stdout)
+        self.assertEqual(profile["coding_standard"], "phpcs")
+        self.assertEqual(profile["config_files"]["phpcs"], "phpcs.xml.dist")
+        self.assertIsNone(profile["config_files"]["php_cs_fixer"])
+        self.assertTrue(profile["tooling"]["phpcs"])
+        self.assertTrue(profile["tooling"]["phpunit"])
+        self.assertFalse(profile["tooling"]["php_cs_fixer"])
+        self.assertEqual(profile["source_dirs"], {"src": ["src"], "tests": ["tests"]})
+        self.assertEqual(
+            profile["project_commands"]["composer_scripts"], ["cs:check", "cs:fix"]
+        )
+
+    def test_source_dirs_follow_composer_autoload(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            for d in ("lib", "packages/a/src", "spec"):
+                Path(tmp, d).mkdir(parents=True)
+            Path(tmp, "composer.json").write_text(
+                json.dumps(
+                    {
+                        "autoload": {
+                            "psr-4": {
+                                "A\\": ["lib/", "packages/a/src/"],
+                                "B\\": "gone/",
+                            }
+                        },
+                        "autoload-dev": {"classmap": ["spec"]},
+                    }
+                ),
+                encoding="utf-8",
+            )
+            profile = json.loads(run_py("introspect.py", "--root", tmp).stdout)
+            # Only existing directories; "gone/" is declared but absent.
+            self.assertEqual(
+                profile["source_dirs"],
+                {"src": ["lib", "packages/a/src"], "tests": ["spec"]},
+            )
+
+    def test_classmap_wildcards_are_expanded(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import _common
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "packages" / "a" / "src").mkdir(parents=True)
+            (root / "packages" / "b").mkdir(parents=True)
+            dirs = _common.source_dirs(
+                root, {"autoload": {"classmap": ["packages/*/src/"]}}
+            )
+            self.assertEqual(dirs["src"], ["packages/a/src"])
+            # An absolute pattern makes Path.glob raise; it must not stop
+            # the profile.
+            absolute = _common.source_dirs(
+                root, {"autoload": {"classmap": [f"{root}/packages/*/src/"]}}
+            )
+            self.assertEqual(absolute["src"], [f"{root}/packages/a/src"])
+
+    @unittest.skipIf(os.geteuid() == 0, "root reads a directory without permission")
+    def test_unreadable_workflow_directory_keeps_the_profile(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import _common
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            workflows = root / ".github" / "workflows"
+            workflows.mkdir(parents=True)
+            (root / ".gitlab-ci.yml").write_text("{}\n", encoding="utf-8")
+            workflows.chmod(0)
+            try:
+                self.assertEqual(_common.ci_files(root), [".gitlab-ci.yml"])
+            finally:
+                workflows.chmod(0o755)
+
+    def test_makefile_targets_and_includes(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            Path(tmp, "composer.json").write_text("{}", encoding="utf-8")
+            Path(tmp, "Makefile").write_text(
+                ".PHONY: test\ninclude Make/*.mk\nVAR := 1\ntest: lint\n\tphpunit\nlint:\n\tphp -l\n",
+                encoding="utf-8",
+            )
+            Path(tmp, ".ddev").mkdir()
+            Path(tmp, ".ddev", "config.yaml").write_text("name: x\n", encoding="utf-8")
+            commands = json.loads(run_py("introspect.py", "--root", tmp).stdout)[
+                "project_commands"
+            ]
+            self.assertEqual(
+                commands["makefile"],
+                {"file": "Makefile", "targets": ["test", "lint"], "includes": True},
+            )
+            self.assertTrue(commands["ddev"])
 
     def test_missing_root_still_emits_a_profile_and_exits_zero(self) -> None:
         result = run_py("introspect.py", "--root", REPO_ROOT / "does-not-exist")
@@ -326,8 +439,134 @@ class VerifierTest(unittest.TestCase):
             "--check",
             "PM-02",
         )
-        ids = {c["id"] for c in json.loads(result.stdout)["checks"]}
+        report = json.loads(result.stdout)
+        ids = {c["id"] for c in report["checks"]}
         self.assertEqual(ids, {"PM-02"})
+        # The summary and the exit code describe PM-02 (skipped there: no
+        # PHPStan config), not the whole project, which fails.
+        self.assertEqual(report["summary"]["status"], "pass")
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_check_of_a_review_checkpoint_is_not_evaluated(self) -> None:
+        base = (
+            "verify_php_project.py",
+            "--root",
+            FIXTURES / "fully-modern",
+            "--no-tools",
+            "--no-cache",
+            "--check",
+        )
+        review = run_py(*base, "PM-21")
+        self.assertEqual(review.returncode, 3, review.stderr)
+        report = json.loads(review.stdout)
+        self.assertEqual(report["summary"]["status"], "not_evaluated")
+        self.assertEqual(report["checkpoint"]["status"], "not_reviewed")
+        self.assertEqual(report["checks"], [])
+
+        elsewhere = run_py(*base, "PM-07")
+        self.assertEqual(elsewhere.returncode, 3, elsewhere.stderr)
+        self.assertEqual(
+            json.loads(elsewhere.stdout)["checkpoint"]["status"], "not_run"
+        )
+
+        unknown = run_py(*base, "PM-999")
+        self.assertEqual(unknown.returncode, 2)
+        self.assertIn("unknown checkpoint", unknown.stderr)
+
+        # Without a readable checkpoints.yaml the id cannot be called
+        # unknown: the answer is not_evaluated, exit 3.
+        # The skill copy carries no checkpoints.yaml.
+        with SkillCopy() as skill:
+            self.assertFalse((skill / "checkpoints.yaml").exists())
+            blind = verify_with(skill, "--check", "PM-21")
+            self.assertEqual(blind.returncode, 3, blind.stderr)
+            self.assertEqual(json.loads(blind.stdout)["checkpoint"]["kind"], "unknown")
+
+        # JUnit says the checkpoint was not evaluated instead of an empty suite.
+        junit = run_py(*base, "PM-21", "--format", "junit")
+        self.assertEqual(junit.returncode, 3)
+        self.assertIn('name="PM-21: not_reviewed"', junit.stdout)
+        self.assertIn('skipped="1"', junit.stdout)
+
+    def test_cache_follows_the_phpcs_config(self) -> None:
+        with TempProject("generic-composer-phpcs") as root:
+            config = root / "phpcs.xml.dist"
+            saved = config.read_text(encoding="utf-8")
+            config.unlink()
+            base = ("verify_php_project.py", "--root", root, "--no-tools")
+            first = json.loads(run_py(*base, "--check", "PM-04").stdout)
+            self.assertEqual(first["checks"][0]["status"], "fail")
+            config.write_text(saved, encoding="utf-8")
+            second = json.loads(run_py(*base, "--check", "PM-04").stdout)
+            self.assertEqual(second["checks"][0]["status"], "pass")
+
+    def test_check_keeps_the_count_of_failed_tool_runs(self) -> None:
+        with TempProject("fully-modern") as root:
+            fake_tool(root, "phpstan", exit_code=1)
+            base = ("verify_php_project.py", "--root", root, "--no-cache")
+            full = json.loads(run_py(*base).stdout)
+            self.assertEqual(full["summary"]["tool_runs_failed"], 1)
+            one = json.loads(run_py(*base, "--check", "PM-01").stdout)
+            self.assertEqual(one["summary"]["tool_runs_failed"], 1)
+
+    def test_verifier_finds_phpstan_in_the_composer_bin_dir(self) -> None:
+        with TempProject("fully-modern") as root:
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer["config"] = {"bin-dir": "bin"}
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            fake_tool(root, "phpstan", exit_code=1)
+            (root / "vendor" / "bin").rename(root / "bin")
+            report = json.loads(
+                run_py("verify_php_project.py", "--root", root, "--no-cache").stdout
+            )
+            self.assertEqual(report["summary"]["tool_runs_failed"], 1)
+
+    def test_verifier_finds_phpcs_in_the_composer_bin_dir(self) -> None:
+        with TempProject("generic-composer-phpcs") as root:
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer.get("require-dev", {}).pop("squizlabs/php_codesniffer")
+            composer["config"] = {"bin-dir": "tools"}
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            base = ("verify_php_project.py", "--root", root, "--no-tools", "--no-cache")
+            without = json.loads(run_py(*base, "--check", "PM-17").stdout)
+            self.assertEqual(without["checks"][0]["status"], "fail")
+            fake_tool(root, "phpcs", exit_code=0)
+            (root / "vendor" / "bin").rename(root / "tools")
+            found = json.loads(run_py(*base, "--check", "PM-17").stdout)
+            self.assertEqual(found["checks"][0]["status"], "pass")
+
+    def test_phpstan_dist_neon_is_a_phpstan_config(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            (root / "phpstan.dist.neon").write_text(
+                "parameters:\n  level: 8\n", "utf-8"
+            )
+            profile = json.loads(run_py("introspect.py", "--root", root).stdout)
+            self.assertEqual(profile["config_files"]["phpstan"], "phpstan.dist.neon")
+
+    def test_report_lists_review_checkpoints_as_not_reviewed(self) -> None:
+        result = run_py(
+            "verify_php_project.py",
+            "--root",
+            FIXTURES / "fully-modern",
+            "--no-tools",
+            "--no-cache",
+        )
+        report = json.loads(result.stdout)
+        self.assertEqual(report["summary"]["status"], "pass")
+        coverage = report["review_coverage"]
+        for checkpoint in ("PM-21", "PM-22", "PM-40"):
+            self.assertIn(checkpoint, coverage["llm_reviews_not_reviewed"])
+        self.assertIn("PM-02", coverage["verifier_checks"])
+        self.assertNotIn("PM-02", coverage["mechanical_not_in_verifier"])
+
+    def test_failing_phpstan_run_is_counted_without_changing_status(self) -> None:
+        with TempProject("fully-modern") as root:
+            fake_tool(root, "phpstan", exit_code=1)
+            result = run_py("verify_php_project.py", "--root", root, "--no-cache")
+            report = json.loads(result.stdout)
+            self.assertEqual(report["summary"]["tool_runs_failed"], 1)
+            self.assertEqual(report["summary"]["status"], "pass")
+            self.assertEqual(result.returncode, 0)
 
     def test_cache_is_written_and_reused(self) -> None:
         with TempProject("generic-composer-minimal") as root:
@@ -369,28 +608,54 @@ class VerifierTest(unittest.TestCase):
             self.assertNotEqual(json.loads(result.stdout)["skill_version"], "1.17.0")
 
 
+def phpcs_totals(errors: int, fixable: int, warnings: int = 0) -> str:
+    return json.dumps(
+        {
+            "totals": {"errors": errors, "warnings": warnings, "fixable": fixable},
+            "files": {},
+        }
+    )
+
+
+def calls(root: Path) -> list[str]:
+    log = root / "vendor" / "bin" / "calls.log"
+    return log.read_text(encoding="utf-8").splitlines() if log.is_file() else []
+
+
+def loop_status(result: subprocess.CompletedProcess[str]) -> dict[str, str]:
+    return {r["tool"]: r["status"] for r in json.loads(result.stdout)["results"]}
+
+
 class ModernizeLoopTest(unittest.TestCase):
     def test_dry_run_without_tools_reports_them_missing(self) -> None:
         with TempProject("generic-composer-minimal") as root:
-            result = run_py("modernize_loop.py", "--root", root)
+            result = run_py(
+                "modernize_loop.py",
+                "--root",
+                root,
+                "--tools",
+                "rector,php-cs-fixer,phpcs,phpstan,phpunit,infection-diff",
+            )
             self.assertEqual(result.returncode, 0, result.stderr)
             transcript = json.loads(result.stdout)
             self.assertEqual(transcript["mode"], "dry-run")
-            status = {r["tool"]: r["status"] for r in transcript["results"]}
             self.assertEqual(
-                status,
+                loop_status(result),
                 {
-                    "php-cs-fixer": "missing",
-                    "rector": "missing",
+                    "rector": "skipped",
+                    "php-cs-fixer": "skipped",
+                    "phpcs": "skipped",
                     "phpstan": "missing",
+                    "phpunit": "skipped",
                     "infection-diff": "skipped",
                 },
             )
             actions = {a["tool"] for a in transcript["next_actions"]}
-            self.assertEqual(actions, {"php-cs-fixer", "rector", "phpstan"})
+            self.assertEqual(actions, {"phpstan"})
 
-    def test_dry_run_passes_dry_run_flags_and_fails_on_findings(self) -> None:
+    def test_dry_run_passes_dry_run_flags_and_reports_proposed_changes(self) -> None:
         with TempProject("generic-composer-minimal") as root:
+            (root / ".php-cs-fixer.dist.php").write_text("<?php\n", "utf-8")
             fake_tool(root, "rector", exit_code=0)
             fake_tool(root, "php-cs-fixer", exit_code=8)
             result = run_py(
@@ -402,13 +667,168 @@ class ModernizeLoopTest(unittest.TestCase):
             self.assertIn(
                 "--dry-run", (bin_dir / "php-cs-fixer.args").read_text().split()
             )
-            status = {
-                r["tool"]: r["status"] for r in json.loads(result.stdout)["results"]
-            }
-            self.assertEqual(status, {"rector": "pass", "php-cs-fixer": "fail"})
+            self.assertEqual(
+                loop_status(result), {"rector": "pass", "php-cs-fixer": "changes"}
+            )
+            actions = json.loads(result.stdout)["next_actions"]
+            self.assertEqual(
+                [(a["tool"], a["action"]) for a in actions],
+                [("php-cs-fixer", "review_diff")],
+            )
             self.assertTrue(
                 (root / ".build" / "php-modernization" / "rector.json").is_file()
             )
+
+    def test_rector_exit_two_is_changes_and_other_codes_are_errors(self) -> None:
+        for code, expected in ((2, "changes"), (1, "fail")):
+            with (
+                self.subTest(code=code),
+                TempProject("generic-composer-minimal") as root,
+            ):
+                fake_tool(root, "rector", exit_code=code)
+                result = run_py(
+                    "modernize_loop.py", "--root", root, "--tools", "rector"
+                )
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(loop_status(result), {"rector": expected})
+
+    def test_refactoring_runs_before_formatting_whatever_the_tools_order(self) -> None:
+        with TempProject("fully-modern") as root:
+            for tool in ("rector", "php-cs-fixer", "phpstan"):
+                fake_tool(root, tool, exit_code=0)
+            result = run_py(
+                "modernize_loop.py",
+                "--root",
+                root,
+                "--tools",
+                "phpstan,php-cs-fixer,rector",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                [line.split()[0] for line in calls(root)],
+                ["rector", "php-cs-fixer", "phpstan"],
+            )
+
+    def test_phpcs_project_uses_phpcs_and_not_php_cs_fixer(self) -> None:
+        with TempProject("generic-composer-phpcs") as root:
+            fake_tool(root, "phpcs", exit_code=1, stdout=phpcs_totals(2, 2))
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "php-cs-fixer,phpcs"
+            )
+            self.assertEqual(result.returncode, 1, result.stderr)
+            transcript = json.loads(result.stdout)
+            self.assertEqual(transcript["coding_standard"], "phpcs")
+            self.assertEqual(
+                loop_status(result), {"php-cs-fixer": "skipped", "phpcs": "changes"}
+            )
+            self.assertIn(
+                "--report=json",
+                (root / "vendor" / "bin" / "phpcs.args").read_text().split(),
+            )
+            # No advice to install a second coding-standard tool.
+            tools = {a["tool"] for a in transcript["next_actions"]}
+            self.assertNotIn("php-cs-fixer", tools)
+
+    def test_php_cs_fixer_without_a_config_does_not_run(self) -> None:
+        # Without a config php-cs-fixer would apply its built-in rules.
+        with TempProject("generic-composer-minimal") as root:
+            fake_tool(root, "php-cs-fixer", exit_code=8)
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "php-cs-fixer"
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(loop_status(result), {"php-cs-fixer": "skipped"})
+            self.assertEqual(calls(root), [])
+
+    def test_phpcs_verdict_respects_the_ignore_on_exit_settings(self) -> None:
+        # The project's own phpcs exits 0 for warnings with
+        # ignore_warnings_on_exit; the loop must not fail where it passes.
+        settings = (
+            ("ignore_warnings_on_exit", phpcs_totals(0, 0, warnings=3), "pass"),
+            ("ignore_errors_on_exit", phpcs_totals(2, 0), "pass"),
+            ("ignore_warnings_on_exit", phpcs_totals(2, 0, warnings=3), "fail"),
+            (None, phpcs_totals(0, 0, warnings=3), "fail"),
+            # One unfixable error, one fixable warning: totals.fixable is 1,
+            # but the fixable finding is the ignored warning.
+            (
+                "ignore_warnings_on_exit",
+                json.dumps(
+                    {
+                        "totals": {"errors": 1, "warnings": 1, "fixable": 1},
+                        "files": {
+                            "src/A.php": {
+                                "messages": [
+                                    {"type": "ERROR", "fixable": False},
+                                    {"type": "WARNING", "fixable": True},
+                                ]
+                            }
+                        },
+                    }
+                ),
+                "fail",
+            ),
+            # PHP printed a deprecation before the report.
+            (None, "Deprecated: x in y\n" + phpcs_totals(2, 2), "changes"),
+        )
+        for name, stdout, expected in settings:
+            with (
+                self.subTest(setting=name, expected=expected),
+                TempProject("generic-composer-phpcs") as root,
+            ):
+                if name:
+                    config = root / "phpcs.xml.dist"
+                    text = config.read_text(encoding="utf-8")
+                    config.write_text(
+                        text.replace(
+                            "</ruleset>",
+                            f'  <config name="{name}" value="1"/>\n</ruleset>',
+                        ),
+                        encoding="utf-8",
+                    )
+                fake_tool(root, "phpcs", exit_code=0, stdout=stdout)
+                result = run_py("modernize_loop.py", "--root", root, "--tools", "phpcs")
+                self.assertEqual(loop_status(result), {"phpcs": expected})
+
+    def test_phpcs_verdict_follows_the_json_totals_not_the_exit_code(self) -> None:
+        # PHPCS 3.x exits 2 for every finding, 4.x uses bit flags: the totals
+        # of --report=json are the same in both.
+        cases = (
+            (2, phpcs_totals(2, 2), "changes"),  # 3.x, all fixable
+            (1, phpcs_totals(2, 2), "changes"),  # 4.x, all fixable
+            (2, phpcs_totals(3, 1), "fail"),  # needs a human
+            (0, phpcs_totals(0, 0), "pass"),
+            (16, "not json", "error"),
+        )
+        for code, stdout, expected in cases:
+            with (
+                self.subTest(code=code, expected=expected),
+                TempProject("generic-composer-phpcs") as root,
+            ):
+                fake_tool(root, "phpcs", exit_code=code, stdout=stdout)
+                result = run_py("modernize_loop.py", "--root", root, "--tools", "phpcs")
+                self.assertEqual(loop_status(result), {"phpcs": expected})
+
+    def test_apply_with_phpcs_runs_phpcbf_then_checks(self) -> None:
+        for leftover, expected in ((0, "pass"), (2, "fail")):
+            with (
+                self.subTest(leftover=leftover),
+                TempProject("generic-composer-phpcs") as root,
+            ):
+                # PHPCS 3.x phpcbf exits 1 after a successful fix.
+                fake_tool(root, "phpcbf", exit_code=1)
+                fake_tool(root, "phpcs", exit_code=0, stdout=phpcs_totals(leftover, 0))
+                result = run_py(
+                    "modernize_loop.py",
+                    "--root",
+                    root,
+                    "--mode",
+                    "apply",
+                    "--confirm",
+                    "--tools",
+                    "phpcs",
+                )
+                self.assertEqual(loop_status(result), {"phpcs": expected})
+                self.assertEqual(calls(root), ["phpcbf ", "phpcs --report=json"])
 
     def test_apply_without_confirm_exits_two_and_runs_nothing(self) -> None:
         with TempProject("generic-composer-minimal") as root:
@@ -418,7 +838,7 @@ class ModernizeLoopTest(unittest.TestCase):
             self.assertIn("requires --confirm", result.stderr)
             self.assertFalse((root / "vendor" / "bin" / "rector.args").exists())
 
-    def test_apply_with_confirm_runs_without_dry_run(self) -> None:
+    def test_apply_with_confirm_runs_without_dry_run_then_rechecks(self) -> None:
         with TempProject("generic-composer-minimal") as root:
             fake_tool(root, "rector", exit_code=0)
             result = run_py(
@@ -432,8 +852,601 @@ class ModernizeLoopTest(unittest.TestCase):
                 "rector",
             )
             self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                calls(root),
+                ["rector process", "rector process --dry-run --output-format=json"],
+            )
+            self.assertEqual(
+                loop_status(result), {"rector": "pass", "rector-recheck": "pass"}
+            )
+
+    def test_rector_recheck_runs_after_the_formatter(self) -> None:
+        with TempProject("fully-modern") as root:
+            for tool in ("rector", "php-cs-fixer", "phpstan"):
+                fake_tool(root, tool, exit_code=0)
+            result = run_py(
+                "modernize_loop.py",
+                "--root",
+                root,
+                "--mode",
+                "apply",
+                "--confirm",
+                "--tools",
+                "rector,php-cs-fixer,phpstan",
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(
+                [" ".join(line.split()[:3]) for line in calls(root)],
+                [
+                    "rector process",
+                    "php-cs-fixer fix --config=.php-cs-fixer.dist.php",
+                    "rector process --dry-run",
+                    "phpstan analyse --no-progress",
+                ],
+            )
+
+    def test_scope_and_rule_are_passed_to_rector(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            fake_tool(root, "rector", exit_code=0)
+            rule = "Rector\\Php80\\Rector\\Switch_\\ChangeSwitchToMatchRector"
+            result = run_py(
+                "modernize_loop.py",
+                "--root",
+                root,
+                "--tools",
+                "rector",
+                "--path",
+                "src",
+                "--rector-only",
+                rule,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
             args = (root / "vendor" / "bin" / "rector.args").read_text().split()
-            self.assertEqual(args, ["process"])
+            self.assertEqual(args[:3], ["process", "src", f"--only={rule}"])
+            self.assertEqual(json.loads(result.stdout)["scope"], ["src"])
+
+    def test_configs_under_build_are_named_on_the_command_line(self) -> None:
+        # PHPStan and Rector read their config from the working directory
+        # only; without the flag a TYPO3 extension's Build/phpstan.neon is
+        # ignored and the run ends with "At least one path must be specified".
+        with TempProject("typo3-extension-minimal") as root:
+            (root / "Build").mkdir()
+            (root / "Build" / "phpstan.neon").write_text(
+                "parameters:\n  level: 9\n", "utf-8"
+            )
+            (root / "Build" / "rector.php").write_text("<?php\n", "utf-8")
+            for tool in ("rector", "phpstan"):
+                fake_tool(root, tool, exit_code=0)
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "rector,phpstan"
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            bin_dir = root / "vendor" / "bin"
+            self.assertIn(
+                "--config=Build/rector.php",
+                (bin_dir / "rector.args").read_text().split(),
+            )
+            self.assertIn(
+                "--configuration=Build/phpstan.neon",
+                (bin_dir / "phpstan.args").read_text().split(),
+            )
+            (bin_dir / "phpstan.args").unlink()
+            run_py("verify_php_project.py", "--root", root, "--no-cache")
+            self.assertIn(
+                "--configuration=Build/phpstan.neon",
+                (bin_dir / "phpstan.args").read_text().split(),
+            )
+
+    def test_path_dot_keeps_the_configured_scope(self) -> None:
+        # "rector process ." would replace the config's paths and reach vendor/.
+        with TempProject("generic-composer-minimal") as root:
+            fake_tool(root, "rector", exit_code=0)
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "rector", "--path", "."
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            args = (root / "vendor" / "bin" / "rector.args").read_text().split()
+            self.assertNotIn(".", args)
+            self.assertEqual(json.loads(result.stdout)["scope"], [])
+
+    def test_a_stale_stderr_report_is_removed(self) -> None:
+        with TempProject("fully-modern") as root:
+            fake_tool(root, "phpstan", exit_code=0)
+            stale = root / ".build" / "php-modernization" / "phpstan.json.stderr"
+            stale.parent.mkdir(parents=True)
+            stale.write_text("crash from an earlier run\n", encoding="utf-8")
+            result = run_py("modernize_loop.py", "--root", root, "--tools", "phpstan")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(stale.exists())
+
+    def test_missing_path_is_a_usage_error(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            result = run_py("modernize_loop.py", "--root", root, "--path", "nope")
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("does not exist", result.stderr)
+
+    def test_path_outside_the_root_is_refused(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            fake_tool(root, "rector", exit_code=0)
+            for outside in ("..", "../..", str(root.parent), "src/../../"):
+                with self.subTest(path=outside):
+                    result = run_py(
+                        "modernize_loop.py",
+                        "--root",
+                        root,
+                        "--tools",
+                        "rector",
+                        "--path",
+                        outside,
+                    )
+                    self.assertEqual(result.returncode, 2)
+                    self.assertIn("outside --root", result.stderr)
+            self.assertEqual(calls(root), [])
+
+    def test_phpunit_runs_with_the_project_config(self) -> None:
+        with TempProject("generic-composer-phpcs") as root:
+            fake_tool(root, "phpunit", exit_code=1)
+            (root / "phpunit.xml.dist").write_text("<phpunit/>\n", encoding="utf-8")
+            result = run_py("modernize_loop.py", "--root", root, "--tools", "phpunit")
+            self.assertEqual(result.returncode, 1)
+            self.assertEqual(loop_status(result), {"phpunit": "fail"})
+            self.assertEqual(
+                (root / "vendor" / "bin" / "phpunit.args").read_text().split(),
+                ["--configuration=phpunit.xml.dist"],
+            )
+
+    @unittest.skipUnless(shutil.which("php"), "needs a php binary")
+    def test_lint_finds_a_syntax_error_in_the_source_dirs(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            clean = run_py("modernize_loop.py", "--root", root, "--tools", "lint")
+            self.assertEqual(loop_status(clean), {"lint": "pass"}, clean.stdout)
+            (root / "src" / "Broken.php").write_text("<?php\nfunction (\n", "utf-8")
+            broken = run_py("modernize_loop.py", "--root", root, "--tools", "lint")
+            self.assertEqual(broken.returncode, 1)
+            self.assertEqual(loop_status(broken), {"lint": "fail"})
+            report = (root / ".build" / "php-modernization" / "lint.txt").read_text()
+            self.assertIn("Broken.php", report)
+
+    @unittest.skipUnless(shutil.which("php"), "needs a php binary")
+    def test_lint_skips_vendor_and_the_project_excludes(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            for rel in ("vendor/pkg/Old.php", "tests/Fixtures/Invalid.php"):
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text("<?php\nfunction (\n", "utf-8")
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer.setdefault("scripts", {})["lint"] = (
+                "parallel-lint --exclude tests/Fixtures src tests"
+            )
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "lint", "--path", "."
+            )
+            self.assertEqual(loop_status(result), {"lint": "pass"}, result.stdout)
+            # Control: without the project's exclude the fixture is linted.
+            del composer["scripts"]["lint"]
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            result = run_py("modernize_loop.py", "--root", root, "--tools", "lint")
+            self.assertEqual(loop_status(result), {"lint": "fail"})
+
+    @unittest.skipUnless(shutil.which("php"), "needs a php binary")
+    def test_lint_of_a_root_mapped_package_skips_vendor(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer["autoload"] = {"psr-4": {"Vendor\\Pkg\\": ""}}
+            composer.pop("autoload-dev", None)
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            (root / "vendor" / "pkg").mkdir(parents=True)
+            (root / "vendor" / "pkg" / "Old.php").write_text("<?php\nfunction (\n")
+            result = run_py("modernize_loop.py", "--root", root, "--tools", "lint")
+            # Linted, not skipped, and vendor/ is not part of it.
+            self.assertEqual(loop_status(result), {"lint": "pass"}, result.stdout)
+            (root / "Broken.php").write_text("<?php\nfunction (\n", "utf-8")
+            result = run_py("modernize_loop.py", "--root", root, "--tools", "lint")
+            self.assertEqual(loop_status(result), {"lint": "fail"})
+
+    def test_rector_without_a_config_is_skipped_and_build_configs_are_found(
+        self,
+    ) -> None:
+        # Rector without a config analyses nothing and exits 0.
+        with TempProject("generic-composer-minimal") as root:
+            binary = root / "vendor" / "bin" / "rector"
+            fake_tool(root, "rector", exit_code=0)
+            (root / "rector.php").unlink()
+            result = run_py("modernize_loop.py", "--root", root, "--tools", "rector")
+            self.assertEqual(loop_status(result), {"rector": "skipped"})
+            self.assertEqual(calls(root), [])
+            # The TYPO3 tea layout: Build/rector/config.php and
+            # Build/php-cs-fixer/config.php.
+            for rel in ("Build/rector/config.php", "Build/php-cs-fixer/config.php"):
+                (root / rel).parent.mkdir(parents=True, exist_ok=True)
+                (root / rel).write_text("<?php\n", encoding="utf-8")
+            fake_tool(root, "php-cs-fixer", exit_code=0)
+            self.assertTrue(binary.is_file())
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "rector,php-cs-fixer"
+            )
+            self.assertEqual(
+                json.loads(result.stdout)["coding_standard"], "php-cs-fixer"
+            )
+            bin_dir = root / "vendor" / "bin"
+            self.assertIn(
+                "--config=Build/rector/config.php",
+                (bin_dir / "rector.args").read_text().split(),
+            )
+            self.assertIn(
+                "--config=Build/php-cs-fixer/config.php",
+                (bin_dir / "php-cs-fixer.args").read_text().split(),
+            )
+
+    def test_php_cs_fixer_keeps_the_config_finder_for_a_path(self) -> None:
+        with TempProject("fully-modern") as root:
+            fake_tool(root, "php-cs-fixer", exit_code=0)
+            run_py(
+                "modernize_loop.py",
+                "--root",
+                root,
+                "--tools",
+                "php-cs-fixer",
+                "--path",
+                "src",
+            )
+            args = (root / "vendor" / "bin" / "php-cs-fixer.args").read_text().split()
+            self.assertIn("--path-mode=intersection", args)
+
+    def test_php_cs_fixer_config_without_a_finder_gets_the_paths(self) -> None:
+        # php-cs-fixer refuses intersection for a config with no Finder.
+        with TempProject("fully-modern") as root:
+            fixer = fake_tool(root, "php-cs-fixer", exit_code=8)
+            fixer.write_text(
+                fixer.read_text().replace(
+                    "#!/bin/sh\n",
+                    "#!/bin/sh\n"
+                    'case " $* " in *" --path-mode=intersection "*)\n'
+                    '  echo "Cannot create intersection with not-fully defined'
+                    ' Finder in configuration file." >&2; exit 16;; esac\n',
+                ),
+                encoding="utf-8",
+            )
+            result = run_py(
+                "modernize_loop.py",
+                "--root",
+                root,
+                "--tools",
+                "php-cs-fixer",
+                "--path",
+                "src",
+            )
+            self.assertEqual(loop_status(result), {"php-cs-fixer": "changes"})
+            self.assertNotIn(
+                "--path-mode=intersection",
+                (root / "vendor" / "bin" / "php-cs-fixer.args").read_text().split(),
+            )
+
+    def test_php_cs_fixer_pass_for_a_path_names_its_scope(self) -> None:
+        with TempProject("fully-modern") as root:
+            fake_tool(root, "php-cs-fixer", exit_code=0)
+            result = run_py(
+                "modernize_loop.py",
+                "--root",
+                root,
+                "--tools",
+                "php-cs-fixer",
+                "--path",
+                "src",
+            )
+            summary = json.loads(result.stdout)["results"][0]["summary"]
+            self.assertIn("not checked", summary)
+
+    def test_lint_script_glob_skips_dotfiles_like_the_shell(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import modernize_loop
+
+        with TempProject("generic-composer-minimal") as root:
+            for name in ("ext_emconf.php", ".php-cs-fixer.dist.php"):
+                (root / name).write_text("<?php\n", encoding="utf-8")
+            targets = modernize_loop._lint_script_targets(
+                root, {"scripts": {"lint": "parallel-lint *.php src"}}
+            )
+            self.assertEqual(targets, ["ext_emconf.php", "src"])
+
+    def test_lint_script_targets_end_at_the_command(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import modernize_loop
+
+        with TempProject("generic-composer-minimal") as root:
+            (root / "Build").mkdir()
+            for script, expected in (
+                ("parallel-lint src tests && phpstan analyse Build", ["src", "tests"]),
+                ("parallel-lint src tests; echo ok", ["src", "tests"]),
+            ):
+                with self.subTest(script=script):
+                    targets = modernize_loop._lint_script_targets(
+                        root, {"scripts": {"lint": script}}
+                    )
+                    self.assertEqual(targets, expected)
+
+    def test_php_cs_fixer_config_without_a_finder_and_no_path(self) -> None:
+        # Without a Finder the project passes its paths on the command line.
+        with TempProject("fully-modern") as root:
+            fixer = fake_tool(root, "php-cs-fixer", exit_code=8)
+            fixer.write_text(
+                fixer.read_text().replace(
+                    "#!/bin/sh\n",
+                    "#!/bin/sh\n"
+                    'case " $* " in *" src "*) ;; *)\n'
+                    '  echo "You must call one of in() or append()" >&2; exit 1;; esac\n',
+                ),
+                encoding="utf-8",
+            )
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "php-cs-fixer"
+            )
+            self.assertEqual(loop_status(result), {"php-cs-fixer": "changes"})
+            self.assertIn(
+                "src",
+                (root / "vendor" / "bin" / "php-cs-fixer.args").read_text().split(),
+            )
+
+    def test_rector_pass_for_a_path_names_its_scope(self) -> None:
+        with TempProject("fully-modern") as root:
+            fake_tool(root, "rector", exit_code=0)
+            result = run_py(
+                "modernize_loop.py",
+                "--root",
+                root,
+                "--tools",
+                "rector",
+                "--path",
+                "src",
+            )
+            summary = json.loads(result.stdout)["results"][0]["summary"]
+            self.assertIn("not checked", summary)
+
+    def test_infection_keeps_the_project_min_msi(self) -> None:
+        cases = (
+            ({"infection.json5": '{"minMsi": 95}'}, False),
+            ({"infection.json5": "{}"}, True),
+            ({"infection.json5.dist": '{"minMsi": 60}'}, False),
+            # Infection loads infection.json5 first; a minMsi elsewhere is
+            # not the threshold it runs with.
+            ({"infection.json5": "{}", "infection.json.dist": '{"minMsi": 60}'}, True),
+            # A commented-out minMsi sets nothing; Infection runs without one.
+            ({"infection.json5": "{\n  // minMsi: 95\n}"}, True),
+            ({"infection.json5": "{ /* minMsi: 1 */ minMsi: 70 }"}, False),
+        )
+        for files, expected in cases:
+            with (
+                self.subTest(files=sorted(files)),
+                TempProject("fully-modern") as root,
+            ):
+                fake_tool(root, "infection", exit_code=0)
+                for name, text in files.items():
+                    (root / name).write_text(text, encoding="utf-8")
+                run_py(
+                    "modernize_loop.py",
+                    "--root",
+                    root,
+                    "--tools",
+                    "infection-diff",
+                    "--git-diff-base",
+                    "origin/main",
+                )
+                args = (root / "vendor" / "bin" / "infection.args").read_text()
+                self.assertEqual("--min-msi=80" in args.split(), expected)
+
+    def test_binary_under_a_custom_vendor_dir(self) -> None:
+        with TempProject("fully-modern") as root:
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer["config"] = {"vendor-dir": ".Build/vendor"}
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            fake_tool(root, "phpstan", exit_code=0)
+            target = root / ".Build" / "vendor" / "bin"
+            target.parent.mkdir(parents=True)
+            (root / "vendor").rename(root / ".Build" / "vendor")
+            result = run_py("modernize_loop.py", "--root", root, "--tools", "phpstan")
+            self.assertEqual(loop_status(result), {"phpstan": "pass"}, result.stdout)
+
+    @unittest.skipUnless(shutil.which("php"), "needs a php binary")
+    def test_lint_covers_the_targets_of_the_project_lint_script(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            (root / "ext_emconf.php").write_text("<?php\nfunction (\n", "utf-8")
+            clean = run_py("modernize_loop.py", "--root", root, "--tools", "lint")
+            self.assertEqual(loop_status(clean), {"lint": "pass"})
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer["scripts"] = {"lint": "parallel-lint *.php src tests"}
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            result = run_py("modernize_loop.py", "--root", root, "--tools", "lint")
+            self.assertEqual(loop_status(result), {"lint": "fail"}, result.stdout)
+
+    def test_lint_script_options_end_at_the_command(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import modernize_loop
+
+        script = "parallel-lint src && tar --exclude=src -p x -cf dist.tar ."
+        composer = {"scripts": {"lint": script}}
+        self.assertEqual(modernize_loop._lint_excludes(REPO_ROOT, composer), [])
+        self.assertIsNone(modernize_loop._lint_php(composer))
+        composer = {"scripts": {"lint": "parallel-lint -p php8.1 --exclude x src"}}
+        self.assertEqual(modernize_loop._lint_excludes(REPO_ROOT, composer), ["x"])
+        self.assertEqual(modernize_loop._lint_php(composer), "php8.1")
+
+    def test_lint_excludes_never_narrow_another_call(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import modernize_loop
+
+        with TempProject("generic-composer-minimal") as root:
+            (root / "tests" / "Fixtures").mkdir(parents=True, exist_ok=True)
+            cases = (
+                # Another script lints tests without excluding it.
+                (["parallel-lint --exclude tests .", "parallel-lint tests"], []),
+                # The same exclude in two scripts is kept.
+                (
+                    [
+                        "parallel-lint --exclude tests/Fixtures src tests",
+                        "parallel-lint --exclude tests/Fixtures --checkstyle src tests",
+                    ],
+                    ["tests/Fixtures"],
+                ),
+                # A script that does not lint the excluded path keeps it.
+                (
+                    [
+                        "parallel-lint --exclude tests/Fixtures src tests",
+                        "parallel-lint src",
+                    ],
+                    ["tests/Fixtures"],
+                ),
+            )
+            for scripts, expected in cases:
+                with self.subTest(scripts=scripts):
+                    composer = {
+                        "scripts": {f"lint{i}": c for i, c in enumerate(scripts)}
+                    }
+                    self.assertEqual(
+                        modernize_loop._lint_excludes(root, composer), expected
+                    )
+
+    def test_lint_script_glob_matches_a_named_hidden_directory(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import modernize_loop
+
+        with TempProject("generic-composer-minimal") as root:
+            (root / "src" / ".checks").mkdir(parents=True)
+            (root / "src" / ".checks" / "x.php").write_text("<?php\n", "utf-8")
+            targets = modernize_loop._lint_script_targets(
+                root, {"scripts": {"lint": "parallel-lint src/.checks/*.php"}}
+            )
+            self.assertEqual(targets, ["src/.checks/x.php"])
+
+    @unittest.skipUnless(shutil.which("php"), "needs a php binary")
+    def test_lint_resolves_a_relative_php_against_the_root(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            tools = root / "tools"
+            tools.mkdir()
+            (tools / "php").write_text(
+                f'#!/bin/sh\nexec {shutil.which("php")} "$@"\n', "utf-8"
+            )
+            (tools / "php").chmod(0o755)
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer["scripts"] = {"lint": "parallel-lint -p tools/php src"}
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            result = run_py("modernize_loop.py", "--root", root, "--tools", "lint")
+            self.assertEqual(loop_status(result), {"lint": "pass"}, result.stdout)
+
+    def test_lint_passes_the_project_php_to_parallel_lint(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer["scripts"] = {"lint": "parallel-lint -p php8.1 src"}
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            fake_tool(root, "parallel-lint", exit_code=0)
+            run_py("modernize_loop.py", "--root", root, "--tools", "lint")
+            args = (root / "vendor" / "bin" / "parallel-lint.args").read_text()
+            self.assertIn("-p\nphp8.1\n", args)
+
+    @unittest.skipUnless(shutil.which("php"), "needs a php binary")
+    def test_lint_checks_an_explicit_template_file(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            (root / "templates").mkdir()
+            (root / "templates" / "bad.phtml").write_text("<?php\nfunction (\n")
+            result = run_py(
+                "modernize_loop.py",
+                "--root",
+                root,
+                "--tools",
+                "lint",
+                "--path",
+                "templates/bad.phtml",
+            )
+            self.assertEqual(loop_status(result), {"lint": "fail"}, result.stdout)
+
+    def test_php_cs_fixer_fallback_keeps_a_root_mapped_package(self) -> None:
+        # Without a Finder the loop passes the source dirs. A package that
+        # maps its root ("") gets the top-level entries: its production
+        # code and tests, but not node_modules or the vendor-dir, which the
+        # real fixer would otherwise rewrite in apply mode.
+        with TempProject("fully-modern") as root:
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer["autoload"] = {"psr-4": {"Vendor\\Pkg\\": ""}}
+            composer["autoload-dev"] = {"psr-4": {"Vendor\\Pkg\\Tests\\": "tests/"}}
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            (root / "tests").mkdir(exist_ok=True)
+            (root / "Root.php").write_text("<?php\n", "utf-8")
+            (root / "node_modules" / "x").mkdir(parents=True)
+            fixer = fake_tool(root, "php-cs-fixer", exit_code=0)
+            # After the arguments are logged, so a failed call leaves them too.
+            fixer.write_text(
+                fixer.read_text().replace(
+                    '/calls.log"\n',
+                    '/calls.log"\n'
+                    'case " $* " in *" tests "*) ;; *)\n'
+                    '  echo "You must call one of in() or append()" >&2; exit 1;; esac\n',
+                ),
+                encoding="utf-8",
+            )
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "php-cs-fixer"
+            )
+            self.assertEqual(loop_status(result), {"php-cs-fixer": "pass"})
+            args = (root / "vendor" / "bin" / "php-cs-fixer.args").read_text().split()
+            self.assertIn("Root.php", args)
+            self.assertIn("tests", args)
+            for third_party in ("node_modules", "vendor", "."):
+                self.assertNotIn(third_party, args)
+            # A nested vendor-dir: its parent's own code stays, it does not.
+            composer["config"] = {"vendor-dir": "lib/deps"}
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            (root / "lib" / "deps" / "x").mkdir(parents=True)
+            (root / "lib" / "Own.php").write_text("<?php\n", "utf-8")
+            run_py("modernize_loop.py", "--root", root, "--tools", "php-cs-fixer")
+            args = (root / "vendor" / "bin" / "php-cs-fixer.args").read_text().split()
+            self.assertIn("lib/Own.php", args)
+            self.assertNotIn("lib", args)
+            self.assertNotIn("lib/deps", args)
+            self.assertNotIn("vendor", args)
+
+    def test_php_cs_fixer_fallback_without_own_code_is_skipped(self) -> None:
+        with TempProject("fully-modern") as root:
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer["autoload"] = {"psr-4": {"Vendor\\Pkg\\": ""}}
+            composer.pop("autoload-dev", None)
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            for entry in sorted(root.iterdir()):
+                if entry.name not in {
+                    "vendor",
+                    "composer.json",
+                } and not entry.name.startswith("."):
+                    shutil.rmtree(entry) if entry.is_dir() else entry.unlink()
+            fixer = fake_tool(root, "php-cs-fixer", exit_code=0)
+            fixer.write_text(
+                fixer.read_text().replace(
+                    '/calls.log"\n',
+                    '/calls.log"\n'
+                    'echo "You must call one of in() or append()" >&2; exit 1\n',
+                ),
+                encoding="utf-8",
+            )
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "php-cs-fixer"
+            )
+            self.assertEqual(loop_status(result), {"php-cs-fixer": "skipped"})
+            self.assertEqual(len(calls(root)), 1)
+
+    def test_several_rector_rules_need_rector_2_6_7(self) -> None:
+        rules = ("--rector-only", "A\\One", "--rector-only", "B\\Two")
+        with TempProject("fully-modern") as root:
+            fake_tool(root, "rector", exit_code=0, stdout="Rector 2.6.6")
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "rector", *rules
+            )
+            self.assertEqual(loop_status(result), {"rector": "fail"})
+            self.assertEqual(calls(root), ["rector --version"])
+            fake_tool(root, "rector", exit_code=0, stdout="Rector 2.6.7")
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "rector", *rules
+            )
+            self.assertEqual(loop_status(result), {"rector": "pass"}, result.stdout)
+            args = (root / "vendor" / "bin" / "rector.args").read_text().split()
+            self.assertIn("--only=A\\One", args)
+            self.assertIn("--only=B\\Two", args)
 
     def test_unknown_tool_is_a_usage_error(self) -> None:
         result = run_py("modernize_loop.py", "--tools", "phpstan,bogus")

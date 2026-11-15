@@ -23,9 +23,9 @@ mechanical:
   # === PHPSTAN CONFIGURATION ===
   - id: PM-01
     type: file_exists
-    target: "{phpstan.neon,Build/phpstan.neon,Build/phpstan/phpstan.neon,phpstan.neon.dist}"
+    target: "{phpstan.neon,Build/phpstan.neon,Build/phpstan/phpstan.neon,phpstan.neon.dist,phpstan.dist.neon}"
     severity: error
-    desc: "PHPStan configuration must exist (phpstan.neon, Build/phpstan.neon, Build/phpstan/phpstan.neon, or phpstan.neon.dist)"
+    desc: "PHPStan configuration must exist (phpstan.neon, Build/phpstan.neon, Build/phpstan/phpstan.neon, phpstan.neon.dist or phpstan.dist.neon)"
 
   # Grepping every candidate config and passing when ANY of them declares a
   # high enough level was a false pass: PHPStan resolves its config as
@@ -35,7 +35,8 @@ mechanical:
   # 9. The effective config is now picked first, in the same precedence order
   # scripts/verify_php_project.py uses (PHPSTAN_CONFIG_CANDIDATES), and its own
   # `level:` decides — NEON semantics: the including file overrides what it
-  # includes. Only when the effective config declares no level at all does the
+  # includes. Without its own `level:`, the last file it includes that declares
+  # one decides. Only when neither declares a level does the
   # scan fall back to the remaining candidates, so the split layout (root
   # phpstan.neon that just includes Build/phpstan.neon) keeps passing. An
   # `includes:` pointing outside the candidate list (a vendored CI config) is
@@ -47,21 +48,26 @@ mechanical:
     command: |
       LVL='^[[:space:]]*level:[[:space:]]*(9|1[0-9]|max)([[:space:]]|$)'
       CFG=""
-      for c in phpstan.neon phpstan.neon.dist Build/phpstan.neon Build/phpstan/phpstan.neon; do
+      for c in phpstan.neon phpstan.neon.dist phpstan.dist.neon Build/phpstan.neon Build/phpstan/phpstan.neon; do
         if [ -f "$c" ]; then CFG="$c"; break; fi
       done
       if [ -z "$CFG" ]; then exit 1; fi
       if grep -qE '^[[:space:]]*level:' "$CFG"; then
-        grep -qE "$LVL" "$CFG"
-      else
-        grep -hE "$LVL" phpstan.neon phpstan.neon.dist Build/phpstan.neon Build/phpstan/phpstan.neon 2>/dev/null | grep -q .
+        grep -qE "$LVL" "$CFG"; exit $?
       fi
+      # The files CFG includes, relative to CFG; the last one with a level wins.
+      DIR=$(dirname "$CFG"); LAST=""
+      for i in $(awk '/^includes:/{f=1;next} f&&/^[^[:space:]-]/{f=0} f&&/^[[:space:]]*-/{sub(/^[[:space:]]*-[[:space:]]*/,"");gsub(/["\047]/,"");print $1}' "$CFG"); do
+        if [ -f "$DIR/$i" ] && grep -qE '^[[:space:]]*level:' "$DIR/$i"; then LAST="$DIR/$i"; fi
+      done
+      if [ -n "$LAST" ]; then grep -qE "$LVL" "$LAST"; exit $?; fi
+      grep -hE "$LVL" phpstan.neon phpstan.neon.dist phpstan.dist.neon Build/phpstan.neon Build/phpstan/phpstan.neon 2>/dev/null | grep -q .
     severity: error
     desc: "PHPStan level must be 9 or higher (or max)"
 
   - id: PM-03
     type: contains
-    target: "{phpstan.neon,Build/phpstan.neon,Build/phpstan/phpstan.neon,phpstan.neon.dist}"
+    target: "{phpstan.neon,Build/phpstan.neon,Build/phpstan/phpstan.neon,phpstan.neon.dist,phpstan.dist.neon}"
     pattern: "treatPhpDocTypesAsCertain: false"
     severity: warning
     desc: "PHPStan should not trust PHPDoc types over runtime"
@@ -74,11 +80,17 @@ mechanical:
   # a brace target whose alternatives all miss makes a `contains` check SKIP,
   # so widening PM-04 alone would leave those silently unevaluated on exactly
   # the projects this fix is for.
+  #
+  # A PHPCS config satisfies PM-04 as well: a project that enforces its coding
+  # standard with PHPCS has no reason to add PHP-CS-Fixer. PM-05/PM-06/PM-24/
+  # PM-30 keep the PHP-CS-Fixer list, so they skip on such a project — they
+  # read PHP-CS-Fixer rules. Same candidates as PHPCS_CONFIG_CANDIDATES in
+  # scripts/_common.py.
   - id: PM-04
     type: file_exists
-    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php,Build/php-cs-fixer/config.php,.phpcs.xml,phpcs.xml,.phpcs.xml.dist,phpcs.xml.dist,Build/phpcs.xml,Build/phpcs.xml.dist,Build/.phpcs.xml,Build/.phpcs.xml.dist}"
     severity: error
-    desc: "PHP-CS-Fixer configuration must exist (root or Build/, .php-cs-fixer.php or .php-cs-fixer.dist.php)"
+    desc: "Coding-standard configuration must exist: PHP-CS-Fixer (.php-cs-fixer.php or .php-cs-fixer.dist.php, root or Build/) or PHPCS (phpcs.xml[.dist] or .phpcs.xml[.dist], root or Build/)"
 
   # The shared config of netresearch/typo3-ci-workflows (config/php-cs-fixer/
   # rules.php) sets '@PER-CS3x0'. A project that requires it carries no
@@ -97,7 +109,7 @@ mechanical:
   # before the match (which then fails, the safe direction).
   - id: PM-05
     type: regex
-    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php,Build/php-cs-fixer/config.php}"
     pattern: "^[[:space:]]*([^/#*[:space:];]([^;/#]|/[^/*;])*)?(@PER-CS|require[^;]*netresearch/typo3-ci-workflows/config/php-cs-fixer/)"
     severity: error
     desc: "PHP-CS-Fixer must use the @PER-CS ruleset, directly or via the shared netresearch/typo3-ci-workflows config"
@@ -110,7 +122,7 @@ mechanical:
   # A commented-out rule or require does not count (same line prefix as PM-05).
   - id: PM-06
     type: regex
-    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php,Build/php-cs-fixer/config.php}"
     pattern: "^[[:space:]]*([^/#*[:space:];]([^;/#]|/[^/*;])*)?(declare_strict_types[\"']?[[:space:]]*=>[[:space:]]*true|require[^;]*netresearch/typo3-ci-workflows/config/php-cs-fixer/)"
     severity: warning
     desc: "PHP-CS-Fixer should enforce strict_types declaration (declare_strict_types rule, directly or via the shared netresearch/typo3-ci-workflows config)"
@@ -133,7 +145,7 @@ mechanical:
   # === RECTOR CONFIGURATION ===
   - id: PM-09
     type: file_exists
-    target: "{rector.php,Build/rector.php,Build/rector/rector.php}"
+    target: "{rector.php,Build/rector.php,Build/rector/rector.php,Build/rector/config.php}"
     severity: warning
     desc: "Rector configuration should exist for automated refactoring"
 
@@ -148,21 +160,21 @@ mechanical:
   # use of the class; its `use` import alone applies no set.
   - id: PM-10
     type: regex
-    target: "{rector.php,Build/rector.php,Build/rector/rector.php}"
+    target: "{rector.php,Build/rector.php,Build/rector/rector.php,Build/rector/config.php}"
     pattern: "^[[:space:]]*([^/#*[:space:];]([^;/#]|/[^/*;])*)?(LevelSetList::|require[^;]*netresearch/typo3-ci-workflows/config/rector/rector\\.php)"
     severity: warning
     desc: "Rector should use LevelSetList for PHP version upgrades"
 
   - id: PM-11
     type: regex
-    target: "{rector.php,Build/rector.php,Build/rector/rector.php}"
+    target: "{rector.php,Build/rector.php,Build/rector/rector.php,Build/rector/config.php}"
     pattern: "^[[:space:]]*([^/#*[:space:];]([^;/#]|/[^/*;])*)?(SetList::DEAD_CODE|require[^;]*netresearch/typo3-ci-workflows/config/rector/rector\\.php)"
     severity: info
     desc: "Rector should include DeadCodeSet rules"
 
   - id: PM-12
     type: regex
-    target: "{rector.php,Build/rector.php,Build/rector/rector.php}"
+    target: "{rector.php,Build/rector.php,Build/rector/rector.php,Build/rector/config.php}"
     pattern: "^[[:space:]]*([^/#*[:space:];]([^;/#]|/[^/*;])*)?(SetList::CODE_QUALITY|require[^;]*netresearch/typo3-ci-workflows/config/rector/rector\\.php)"
     severity: info
     desc: "Rector should include CodeQualitySetList rules"
@@ -213,11 +225,26 @@ mechanical:
     severity: warning
     desc: "PHPStan should be available (directly or transitively via a CI package)"
 
+  # A project with a PHPCS config and no PHP-CS-Fixer config needs PHPCS, not
+  # PHP-CS-Fixer — the same rule as check_pm17_phpcs in verify_php_project.py.
   - id: PM-17
-    type: command
-    pattern: "find .Build/bin/php-cs-fixer vendor/bin/php-cs-fixer composer.json composer.lock -maxdepth 0 2>/dev/null | xargs -r grep -l php-cs-fixer 2>/dev/null | grep -q ."
+    type: script
+    command: |
+      FIXER=0
+      for c in .php-cs-fixer.php .php-cs-fixer.dist.php Build/.php-cs-fixer.php Build/.php-cs-fixer.dist.php Build/php-cs-fixer/config.php; do
+        [ -f "$c" ] && FIXER=1
+      done
+      PHPCS=0
+      for c in .phpcs.xml phpcs.xml .phpcs.xml.dist phpcs.xml.dist Build/phpcs.xml Build/phpcs.xml.dist Build/.phpcs.xml Build/.phpcs.xml.dist; do
+        [ -f "$c" ] && PHPCS=1
+      done
+      if [ "$FIXER" = 0 ] && [ "$PHPCS" = 1 ]; then
+        [ -f vendor/bin/phpcs ] || [ -f .Build/bin/phpcs ] || grep -qs squizlabs/php_codesniffer composer.json composer.lock
+      else
+        find .Build/bin/php-cs-fixer vendor/bin/php-cs-fixer composer.json composer.lock -maxdepth 0 2>/dev/null | xargs -r grep -l php-cs-fixer 2>/dev/null | grep -q .
+      fi
     severity: warning
-    desc: "PHP-CS-Fixer should be available (directly or transitively via a CI package)"
+    desc: "The coding-standard tool should be available (directly or transitively via a CI package): PHP-CS-Fixer, or PHPCS where the project configures PHPCS and not PHP-CS-Fixer"
 
   # Rector can be a direct require-dev OR pulled transitively via the
   # netresearch/typo3-ci-workflows meta-package. Same pattern as TT-64
@@ -243,7 +270,7 @@ mechanical:
   # `target` and emitted "Target file not found:" with no path.
   - id: PM-30
     type: regex
-    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php,Build/php-cs-fixer/config.php}"
     # The factory of the shared netresearch/typo3-ci-workflows config
     # (config/php-cs-fixer/config.php, v1.5.0 line 33, v1.12.0 line 56) sets
     # header_comment from the header string the project passes. Requiring
@@ -262,7 +289,7 @@ mechanical:
   # enables @PER-CS3x0, not @PER-CS3x0:risky.
   - id: PM-24
     type: regex
-    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php}"
+    target: "{.php-cs-fixer.php,.php-cs-fixer.dist.php,Build/.php-cs-fixer.php,Build/.php-cs-fixer.dist.php,Build/php-cs-fixer/config.php}"
     pattern: "^[[:space:]]*([^/#*[:space:];]([^;/#]|/[^/*;])*)?@PER-CS[0-9x.]*:risky[\"']?[[:space:]]*=>[[:space:]]*true"
     severity: info
     desc: "PHP-CS-Fixer should enable @PER-CS:risky for comprehensive enforcement"
@@ -327,7 +354,7 @@ mechanical:
   # added for parity with PM-01/PM-02.
   - id: PM-53
     type: command
-    pattern: "find phpstan.neon phpstan.neon.dist Build/phpstan.neon Build/phpstan/phpstan.neon -maxdepth 0 2>/dev/null | head -1 | xargs -r awk '/^[[:space:]]*level:[[:space:]]*(10|max)([[:space:]]|$)/{ok=1} END{exit !ok}'"
+    pattern: "find phpstan.neon phpstan.neon.dist phpstan.dist.neon Build/phpstan.neon Build/phpstan/phpstan.neon -maxdepth 0 2>/dev/null | head -1 | xargs -r awk '/^[[:space:]]*level:[[:space:]]*(10|max)([[:space:]]|$)/{ok=1} END{exit !ok}'"
     severity: warning
     desc: "Projects should target PHPStan level 10 (max) for full strict typing (not gated on PHP version — verify applicability)"
 

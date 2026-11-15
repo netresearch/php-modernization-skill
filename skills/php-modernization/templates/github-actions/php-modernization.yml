@@ -102,7 +102,7 @@ jobs:
         run: |
           uv run skills/php-modernization/scripts/modernize_loop.py \
             --mode dry-run \
-            --tools php-cs-fixer,rector,phpstan \
+            --tools rector,php-cs-fixer,phpcs,lint,phpstan,phpunit \
             | tee modernize-loop.json
 
       - name: Upload artifacts

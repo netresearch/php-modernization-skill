@@ -8,8 +8,11 @@
 """Standalone PHP project introspection — agent-harness cheap first-touch.
 
 Emits a project-profile JSON that captures archetype, PHP version, tooling
-boolean fingerprints, PSR-4 autoload mapping and baseline presence — without
-running any subprocess except `php --version` to detect the runtime.
+boolean fingerprints, the config file each tool uses, the coding-standard tool
+(PHP-CS-Fixer or PHPCS), source and test directories, the project's own
+commands (Composer scripts, Makefile targets, DDEV, CI files), PSR-4 autoload
+mapping and baseline presence — without running any subprocess except
+`php --version` to detect the runtime. Files are read, never executed.
 
 Always exits 0 (informational, never fails). Output goes to stdout.
 """
@@ -30,12 +33,25 @@ from typing import Any
 # don't add their own directory to sys.path, so we add it explicitly.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from _common import (
+    FRACTOR_CONFIG_CANDIDATES,
+    LINTER_PACKAGES,
+    PHP_CS_FIXER_CANDIDATES,
+    PHPCS_CONFIG_CANDIDATES,
+    PHPSTAN_CONFIG_CANDIDATES,
+    PHPUNIT_CONFIG_CANDIDATES,
+    RECTOR_CONFIG_CANDIDATES,
     SCHEMA_VERSION,
     SKILL_ID,
+    ci_files,
+    coding_standard,
     composer_dep_mentions,
+    composer_scripts,
     detect_archetype,
+    first_existing,
+    makefile,
     php_version_constraint,
     read_composer_json,
+    source_dirs,
 )
 
 PHPSTAN_BASELINE_CANDIDATES: tuple[str, ...] = (
@@ -109,6 +125,13 @@ def build_profile(root: Path) -> dict[str, Any]:
         "phpat": composer_dep_mentions(root, "phpat"),
         "infection": composer_dep_mentions(root, "infection"),
         "psalm": composer_dep_mentions(root, "vimeo/psalm"),
+        "phpcs": composer_dep_mentions(root, "squizlabs/php_codesniffer")
+        or first_existing(root, PHPCS_CONFIG_CANDIDATES) is not None,
+        "fractor": composer_dep_mentions(root, "a9f/fractor")
+        or composer_dep_mentions(root, "a9f/typo3-fractor"),
+        "phpunit": composer_dep_mentions(root, "phpunit/phpunit")
+        or first_existing(root, PHPUNIT_CONFIG_CANDIDATES) is not None,
+        "php_linter": any(composer_dep_mentions(root, pkg) for pkg in LINTER_PACKAGES),
         "composer_audit_supported": (root / "composer.lock").is_file()
         and (
             shutil.which("composer") is not None
@@ -121,6 +144,16 @@ def build_profile(root: Path) -> dict[str, Any]:
         "psalm": _has_baseline(root, PSALM_BASELINE_CANDIDATES),
     }
 
+    php_cs_fixer_config = first_existing(root, PHP_CS_FIXER_CANDIDATES)
+    config_files = {
+        "phpstan": first_existing(root, PHPSTAN_CONFIG_CANDIDATES),
+        "rector": first_existing(root, RECTOR_CONFIG_CANDIDATES),
+        "php_cs_fixer": php_cs_fixer_config,
+        "phpcs": first_existing(root, PHPCS_CONFIG_CANDIDATES),
+        "phpunit": first_existing(root, PHPUNIT_CONFIG_CANDIDATES),
+        "fractor": first_existing(root, FRACTOR_CONFIG_CANDIDATES),
+    }
+
     return {
         "schema_version": SCHEMA_VERSION,
         "skill": SKILL_ID,
@@ -130,6 +163,15 @@ def build_profile(root: Path) -> dict[str, Any]:
         "php_version_constraint": php_version_constraint(composer),
         "php_runtime": _detect_php_runtime(),
         "tooling": tooling,
+        "config_files": config_files,
+        "coding_standard": coding_standard(root, php_cs_fixer_config),
+        "source_dirs": source_dirs(root, composer),
+        "project_commands": {
+            "composer_scripts": composer_scripts(composer),
+            "makefile": makefile(root),
+            "ddev": (root / ".ddev" / "config.yaml").is_file(),
+            "ci_files": ci_files(root),
+        },
         "autoload_psr4": _autoload_psr4(composer),
         "baselines": baselines,
     }
@@ -173,7 +215,27 @@ def main(argv: list[str] | None = None) -> int:
                 "phpat": False,
                 "infection": False,
                 "psalm": False,
+                "phpcs": False,
+                "fractor": False,
+                "phpunit": False,
+                "php_linter": False,
                 "composer_audit_supported": False,
+            },
+            "config_files": {
+                "phpstan": None,
+                "rector": None,
+                "php_cs_fixer": None,
+                "phpcs": None,
+                "phpunit": None,
+                "fractor": None,
+            },
+            "coding_standard": "none",
+            "source_dirs": {"src": [], "tests": []},
+            "project_commands": {
+                "composer_scripts": [],
+                "makefile": None,
+                "ddev": False,
+                "ci_files": [],
             },
             "autoload_psr4": {},
             "baselines": {"phpstan": False, "psalm": False},
