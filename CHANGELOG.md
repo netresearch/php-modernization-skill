@@ -11,6 +11,10 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+### Fixed
+
+- The verifier reports as `skill_version` the `metadata.version` it reads from the `SKILL.md` next to its `scripts/` directory, instead of a hard-coded constant that each release had to raise by hand. Only a `version` directly under `metadata:` in the first frontmatter block counts; when `SKILL.md` is missing or unreadable, or has no `metadata.version`, the report carries `"unknown"` and the verifier runs and exits as before (#182)
+
 ## [1.24.2] - 2026-11-12
 
 ### Added
