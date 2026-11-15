@@ -32,12 +32,14 @@ Skills are portable packages of procedural knowledge that work across any AI age
 
 ## Agent Contract
 
-The skill follows a four-step loop. Cheap commands first; expensive analysis only when needed.
+The skill follows a six-step loop. Cheap commands first; expensive analysis only when needed.
 
-1. **Discover** — read [`SKILL.md`](skills/php-modernization/SKILL.md), then profile the project.
+1. **Discover** — read [`SKILL.md`](skills/php-modernization/SKILL.md), then profile the project and read its own commands.
 2. **Drill** — narrow to one finding at a time when more than three things fail.
-3. **Apply** — preview every fix in `--mode dry-run` before mutating files.
-4. **References** — load `references/<topic>.md` only when the long-form rationale is needed.
+3. **Use the project's tools** — run Rector, PHPStan, the coding-standard tool, lint and the tests the project has; report a check that did not run as not run.
+4. **Decide what the tools cannot** — behaviour that must stay, enum or open value set, `match` comparisons, `readonly` over mutable members.
+5. **Apply in bounded steps** — preview one scope in `--mode dry-run`, review the diff, apply, then run the checks again.
+6. **References** — load `references/<topic>.md` only when the long-form rationale is needed.
 
 ### One-line invocations
 

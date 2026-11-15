@@ -435,8 +435,9 @@ $color = match($status) {
 
 The two can differ when `$status` is not always a string: `switch` compares
 with `==`, `match` with `===`. For example `true == 'active'` holds, so the
-switch gives `'green'` for `true` and the match gives `'gray'`. Check the comparison, fall-through and
-`default` before converting — see "Match Expression" in `php8-features.md`.
+switch gives `'green'` for `true` and the match gives `'gray'`. A string
+subject differs too when the arms are numeric strings (`"1e3" == "1000"`).
+Check the comparison, fall-through and `default` before converting — see "Match Expression" in `php8-features.md`.
 
 ### Property Initialization
 

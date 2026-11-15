@@ -24,7 +24,7 @@ skills/php-modernization/
 
 ### SKILL.md (agent router)
 
-YAML frontmatter (name, description, license, compatibility, allowed-tools) followed by a short contract: a four-step decision flow, a reference-routing table, five hard guardrails, the tooling baseline, and a migration checklist. Agents read this first; nothing else is loaded eagerly.
+YAML frontmatter (name, description, license, compatibility, allowed-tools) followed by a short contract: a six-step agent contract, a reference-routing table, five hard guardrails, the tooling baseline, and a migration checklist. Agents read this first; nothing else is loaded eagerly.
 
 ### References (lazy-loaded)
 
@@ -89,9 +89,11 @@ The verifier and orchestrator branch on archetype. Detection is pure (no subproc
 
 The agent contract codifies the loop:
 
-1. **Discover** — read `SKILL.md`, then run `introspect.py` (cheap) or `verify_php_project.py --summary` for a full picture.
+1. **Discover** — read `SKILL.md`, then run `introspect.py` (cheap) or `verify_php_project.py --summary` for a full picture, and read the project's own commands (Composer scripts, Makefile, CI).
 2. **Drill** — for any failing checkpoint, narrow with `verify_php_project.py --check PM-XX`. Only fan out to the full report when triaging more than three findings.
-3. **Apply** — preview with `modernize_loop.py --mode dry-run`. Review the transcript before applying.
-4. **References** — load `references/<topic>.md` only when a fix needs the long-form rationale.
+3. **Use the project's tools** — Rector, PHPStan, the configured coding-standard tool, lint, PHPUnit; a check that did not run is reported as not run.
+4. **Decide what the tools cannot** — behaviour, value sets, comparisons and immutability, from callers, data and tests; the `llm_review` checkpoints cover this, the verifier does not.
+5. **Apply in bounded steps** — dry-run of one scope, review of the diff, apply, then formatter, lint, PHPStan and tests, until the same dry-run proposes nothing.
+6. **References** — load `references/<topic>.md` only when a fix needs the long-form rationale.
 
 CI mirrors the same flow via [skills/php-modernization/templates/github-actions/php-modernization.yml](../skills/php-modernization/templates/github-actions/php-modernization.yml): verifier → SARIF upload → orchestrator dry-run → PR summary comment on failure.

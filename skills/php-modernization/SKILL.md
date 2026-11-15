@@ -26,7 +26,7 @@ allowed-tools:
 ## Agent contract
 
 1. **Discover**: `uv run ${CLAUDE_SKILL_DIR}/scripts/introspect.py` (cheap), or `verify_php_project.py --summary` (full, with `agent_actions[]`). Then read the project's own commands — `composer.json` scripts, `Makefile`, DDEV/Docker wrappers, CI config. They fix the runtime, the config and the paths; use them over a bare `vendor/bin/*` call. Exception: when you must add a flag (`--dry-run`, `--only`, a path), run the command the script wraps with the flag written out, in the same runtime — Composer aliases can drop `--`-forwarded flags.
-2. **Drill**: `... --check PM-XX` per finding. Full output when triaging >3.
+2. **Drill**: `... --check PM-XX` per finding. Full output when triaging >3. The verifier does not evaluate `llm_review` checkpoints (step 4): no result for one is no pass.
 3. **Use the project's tools, and run them.** Naming a tool is not using it. A check you did not run is reported as not run.
 
    | Concern | Tool (the one the project has) |

@@ -122,11 +122,16 @@ $label = match($status) {
 // Before converting a switch, check four things. Rector's
 // ChangeSwitchToMatchRector skips a case with more than one statement or
 // without break, return or throw, so it refuses most fall-through and
-// side-effect cases (2 and 3). It does not check the comparison (1).
+// side-effect cases (2 and 3). It reads the subject type (see 1), but it
+// does not check that == and === give the same result for the values.
 //
 // 1. Comparison: switch compares with ==, match with ===. If the subject
 //    is untyped or int|string, `case 200:` also matched "200"; `200 =>`
-//    does not. Rector 2.8.4 converted such a switch on a parameter with no
+//    does not. A `string` subject is not safe either when the arms are
+//    numeric strings: == compares two numeric strings as numbers, so
+//    `case "1000":` also matched "1e3", "01000", " 1000" and "1000.0",
+//    and `"1000" =>` matches none of them (measured with PHP 8.5).
+//    Rector 2.8.4 converted such a switch on a parameter with no
 //    type and no docblock; with `@param int|string` it left it alone. A
 //    missing type is no guarantee the values are all one type.
 //    On a native `string` subject with int arms (or the reverse) Rector

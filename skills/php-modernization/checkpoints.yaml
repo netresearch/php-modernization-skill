@@ -361,7 +361,7 @@ mechanical:
   # === IMMUTABILITY BOUNDARIES (guardrail) ===
   - id: PM-39
     type: command
-    pattern: "! grep -rlE --exclude-dir=.Build --exclude-dir=vendor --exclude-dir=node_modules '^(final\\s+)?readonly\\s+class' src/ Classes/ packages/ 2>/dev/null | xargs -r grep -lE '#\\[(ORM\\\\)?Entity|#\\[(ORM\\\\)?MappedSuperclass' 2>/dev/null | grep -q ."
+    pattern: "! grep -rlE --exclude-dir=.Build --exclude-dir=vendor --exclude-dir=node_modules '^((final|abstract)\\s+)?readonly\\s+((final|abstract)\\s+)?class' src/ Classes/ packages/ 2>/dev/null | xargs -r grep -lE '#\\[(ORM\\\\)?Entity|#\\[(ORM\\\\)?MappedSuperclass' 2>/dev/null | grep -q ."
     severity: error
     desc: "readonly must not be applied to Doctrine entities or mapped-superclasses (Doctrine hydrates them via reflection-bypassing the constructor). Embeddables are a nuanced case — see references/doctrine-modernization-edges.md"
 
@@ -460,7 +460,8 @@ llm_reviews:
          match expressions? Before proposing one (or accepting a
          ChangeSwitchToMatchRector diff), check: switch compares with ==,
          match with === (an untyped or int|string subject changes
-         behaviour; match (true) with == keeps it, a cast such as
+         behaviour, and so does a string subject with numeric-string arms,
+         "1e3" == "1000"; match (true) with == keeps it, a cast such as
          (int) $code does not, and Rector inserts such a cast itself on a
          native string subject with int arms); a case without break falls through; a case with side
          effects does not fit one arm; a missing default makes match throw
@@ -617,7 +618,12 @@ llm_reviews:
       2. Implements a Form-bound interface (e.g., extends Symfony AbstractType bound model)
       3. Implements __unserialize / Serializable / is restored via session/cache
       4. Used as a hydration target by a deserializer (Symfony Serializer, JMS, Symfony ObjectMapper)
-      For these four, readonly is INCORRECT: remove it.
+      5. Assigned after construction (setter, framework property injection,
+         a wither that writes through reflection)
+      For these, readonly is INCORRECT: remove it. Exception: an
+      #[ORM\Embeddable] value object can be `final readonly` on ORM 3.x;
+      check it against references/doctrine-modernization-edges.md before
+      reporting it.
 
       Then review `readonly class` declarations and `readonly` properties
       that are described or used as value objects and hold a mutable object
