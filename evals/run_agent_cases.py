@@ -102,6 +102,8 @@ BOX_TREE = "/work"
 BOX_PLUGIN = "/plugin"
 BOX_HOME = "/home/agent"
 INVOKE = f"/{SKILL}:{SKILL}"
+# Arms whose prompt starts with the slash command.
+INVOKE_ARM = "invoke:"
 PROMPT_SUFFIX = (
     "\n\nThe project is in the current directory. When the task is done, stop."
 )
@@ -140,7 +142,12 @@ def plugin_root(arm: str, out: Path) -> tuple[Path, str]:
     ref = arm.split(":", 1)[1]
     if ref == "WORKTREE":
         target = out / "_plugins" / "WORKTREE"
-        files = sh(["git", "ls-files", "-z"], REPO).stdout.split("\0")
+        # Untracked files that are not ignored belong to the working tree
+        # the "+dirty" label claims to measure.
+        files = sh(
+            ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+            REPO,
+        ).stdout.split("\0")
         for rel in filter(None, files):
             if rel.split("/", 1)[0] in NOT_PLUGIN:
                 continue
@@ -191,7 +198,7 @@ def host_git(tree: Path) -> list[str]:
     ]
 
 
-def prepare_tree(case_id: str, tree: Path) -> None:
+def prepare_tree(case_id: str, tree: Path, *, host_repo: bool = True) -> None:
     shutil.copytree(CASES / case_id / "project", tree)
     # The agent gets its own vendor/: it may run composer dump-autoload or
     # install a package without touching the shared copy the checker uses.
@@ -204,7 +211,7 @@ def prepare_tree(case_id: str, tree: Path) -> None:
     )
     # Two repositories with the same baseline: the agent's own (tree/.git),
     # for git status and git diff, and the host's, which records the patch.
-    for git in (["git"], host_git(tree)):
+    for git in (["git"], host_git(tree)) if host_repo else (["git"],):
         for cmd in (
             [*git, "init", "-q", "-b", "main"],
             [*git, "add", "-A"],
@@ -227,7 +234,7 @@ def prepare_tree(case_id: str, tree: Path) -> None:
 def prompt(arm: str, task: str) -> str:
     """The task as the agent gets it; ``invoke:*`` arms start with the skill."""
     text = task + PROMPT_SUFFIX
-    return f"{INVOKE} {text}" if arm.startswith("invoke:") else text
+    return f"{INVOKE} {text}" if arm.startswith(INVOKE_ARM) else text
 
 
 def init_event(transcript: Path) -> dict | None:
@@ -255,14 +262,38 @@ def validity(arm: str, init: dict | None, plugin: Path | None) -> tuple[bool, st
     paths = [str(Path(p.get("path", "")).resolve()) for p in plugins]
     if paths != [expected]:
         return False, f"expected exactly the plugin {expected}, got {paths}"
+    if f"{SKILL}:{SKILL}" not in ours:
+        return False, f"the plugin is listed but the skill did not load: {skills}"
     stray = [s for s in ours if s != f"{SKILL}:{SKILL}"]
     if stray:
         return False, f"another copy of the skill is loaded as well: {stray}"
-    if arm.startswith("invoke:") and INVOKE[1:] not in (
+    if arm.startswith(INVOKE_ARM) and INVOKE[1:] not in (
         init.get("slash_commands") or []
     ):
         return False, f"the slash command {INVOKE} is not available"
     return True, ""
+
+
+def infra_failure(exit_code: int | None, usage: dict) -> str:
+    """Why a run failed outside the agent's control; empty when it did not.
+
+    Such a run is invalid, not failed: an expired login, a refused API call
+    or a CLI that never started says nothing about the arm. A timeout and
+    the turn limit stay agent failures.
+    """
+    if exit_code is None:
+        return ""
+    result = usage.get("result")
+    if not result:
+        return f"the CLI ended without a result event (exit {exit_code})"
+    # ASSUMPTION: an API or login error ends as an error result whose
+    # subtype is not one of the agent's own error_* limits. Not seen in the
+    # 592 runs of 2026-11-14, which all ended in subtype success.
+    if result.get("is_error") and not str(result.get("subtype", "")).startswith(
+        "error_"
+    ):
+        return f"error result: {result.get('result_head', '')[:120]}"
+    return ""
 
 
 def tool_usage(transcript: Path) -> dict:
@@ -286,6 +317,9 @@ def tool_usage(transcript: Path) -> dict:
                 "total_cost_usd": event.get("total_cost_usd"),
                 "is_error": event.get("is_error"),
                 "subtype": event.get("subtype"),
+                "result_head": str(event.get("result") or "")[:200]
+                if event.get("is_error")
+                else "",
             }
         if event.get("type") != "assistant":
             continue
@@ -501,7 +535,10 @@ def score(case_id: str, tree: Path, args: argparse.Namespace) -> str:
     """
     if args.sandbox != "docker":
         cmd = [sys.executable, str(CHECKER), case_id, "--tree", str(tree)]
-        return sh(cmd, REPO, timeout=900).stdout
+        try:
+            return sh(cmd, REPO, timeout=900).stdout
+        except subprocess.TimeoutExpired:
+            return ""
     name = f"pm-eval-check-{uuid.uuid4().hex[:12]}"
     cmd = [
         *box_base(name),
@@ -591,6 +628,10 @@ def run_agent(
                 sh(["docker", "rm", "-f", name], REPO)
     duration = time.monotonic() - start
     valid, reason = validity(arm, init_event(transcript), seen_plugin)
+    usage = tool_usage(transcript)
+    infra = infra_failure(exit_code, usage)
+    if valid and infra:
+        valid, reason = False, infra
     return {
         "valid": valid,
         "invalid_reason": reason,
@@ -598,7 +639,7 @@ def run_agent(
         "exit_code": exit_code,
         "stderr_tail": stderr.strip()[-300:],
         "duration_seconds": round(duration, 1),
-        **tool_usage(transcript),
+        **usage,
     }
 
 
@@ -641,6 +682,9 @@ def run_one(
         checks = json.loads(checked)
     except json.JSONDecodeError:
         checks = {"passed": False, "error": "the checker printed no JSON"}
+        if agent["valid"]:
+            # The checker, not the agent, failed: the run measured nothing.
+            agent = {**agent, "valid": False, "invalid_reason": checks["error"]}
     (run_dir / "checks.json").write_text(
         json.dumps(checks, indent=2) + "\n", encoding="utf-8"
     )
@@ -769,7 +813,7 @@ def setup(
         parser.error(f"unknown case(s): {', '.join(sorted(unknown))}")
     arms = [a for a in args.arms.split(",") if a]
     for arm in arms:
-        if arm != "without" and not arm.startswith(("with:", "invoke:")):
+        if arm != "without" and not arm.startswith(("with:", INVOKE_ARM)):
             parser.error(f"unknown arm {arm!r}")
 
     out = args.out or REPO / "evals" / "results" / results / datetime.now(UTC).strftime(
@@ -790,13 +834,32 @@ def setup(
     return selected, arms, out, plugins
 
 
-def run_jobs(args: argparse.Namespace, out: Path, fn, jobs: list) -> list[dict]:
-    """Run ``fn`` over ``jobs`` with ``--jobs`` workers, inside the egress setup."""
+def run_jobs(
+    args: argparse.Namespace, out: Path, fn, jobs: list, describe
+) -> list[dict]:
+    """Run ``fn`` over ``jobs`` with ``--jobs`` workers, inside the egress setup.
+
+    A job that raises becomes an invalid record built from ``describe(job)``;
+    the other runs and the summary are kept.
+    """
+
+    def safe(job) -> dict:
+        try:
+            return fn(job)
+        except (Exception, SystemExit) as exc:  # noqa: BLE001 - any job failure is recorded, not raised
+            print(f"runner error in {describe(job)}: {exc!r}", flush=True)
+            return {
+                **describe(job),
+                "valid": False,
+                "invalid_reason": f"runner error: {exc!r}"[:300],
+                "passed": False,
+            }
+
     if args.sandbox == "docker":
         start_egress(args, out.name.lower())
     try:
         with ThreadPoolExecutor(max_workers=args.jobs) as pool:
-            return list(pool.map(fn, jobs))
+            return list(pool.map(safe, jobs))
     finally:
         if args.sandbox == "docker":
             stop_egress(args)
@@ -824,7 +887,18 @@ def main(argv: list[str] | None = None) -> int:
         for c in selected
     ]
     jobs = [(c, arm, n) for c in cases for arm in arms for n in range(1, args.runs + 1)]
-    records = run_jobs(args, out, one, jobs)
+    records = run_jobs(
+        args,
+        out,
+        one,
+        jobs,
+        lambda job: {
+            "case": job[0]["id"],
+            "kind": job[0]["kind"],
+            "arm": job[1],
+            "run": job[2],
+        },
+    )
 
     summary = {
         "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),

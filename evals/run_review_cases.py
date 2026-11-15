@@ -40,6 +40,7 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -98,10 +99,8 @@ def git(tree: Path, *cmd: str) -> None:
 
 def prepare_pr(case: dict, variant: str, tree: Path) -> None:
     """Start state on main, the solution as one commit on branch pr."""
-    ra.prepare_tree(case["id"], tree)
-    # prepare_tree also made the host's git dir for the change evals; a
-    # review records no patch.
-    shutil.rmtree(tree.parent / (tree.name + ".git"), ignore_errors=True)
+    # A review records no patch: no host git dir.
+    ra.prepare_tree(case["id"], tree, host_repo=False)
     git(tree, "checkout", "-q", "-b", "pr")
     shutil.copytree(
         ra.CASES / case["id"] / "solutions" / variant, tree, dirs_exist_ok=True
@@ -119,8 +118,12 @@ def read_review(tree: Path) -> str:
     """
     path = tree / REVIEW_FILE
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        # O_NONBLOCK: opening a FIFO the agent left there must not hang.
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except OSError:
+        return ""
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
         return ""
     with os.fdopen(fd, "rb") as fh:
         data = fh.read(REVIEW_MAX_BYTES + 1)
@@ -233,6 +236,7 @@ def run_review(
         "skill_commit": commit,
         "model": args.model,
         "judge_model": args.judge_model,
+        "isolation": args.isolation,
         "sandbox": args.sandbox,
         **agent,
         "verdict": said,
@@ -292,11 +296,23 @@ def main(argv: list[str] | None = None) -> int:
         for arm in arms
         for n in range(1, args.runs + 1)
     ]
-    records = ra.run_jobs(args, out, one, jobs)
+    records = ra.run_jobs(
+        args,
+        out,
+        one,
+        jobs,
+        lambda job: {
+            "case": job[0]["id"],
+            "variant": job[1],
+            "arm": job[2],
+            "run": job[3],
+        },
+    )
     summary = {
         "generated_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "model": args.model,
         "judge_model": args.judge_model,
+        "isolation": args.isolation,
         "sandbox": args.sandbox,
         "arms": {arm: plugins.get(arm, (None, ""))[1] for arm in arms},
         "runs": records,

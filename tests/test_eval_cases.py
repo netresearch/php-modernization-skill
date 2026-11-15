@@ -19,6 +19,7 @@ Stdlib only. Run with ``python3 tests/test_eval_cases.py``.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -110,7 +111,8 @@ def load_runner():
     spec = importlib.util.spec_from_file_location(
         "run_agent_cases", REPO_ROOT / "evals" / "run_agent_cases.py"
     )
-    assert spec is not None and spec.loader is not None
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -162,6 +164,13 @@ class RunValidityTest(unittest.TestCase):
             runner.validity("with:HEAD", self.init([], [other]), self.plugin)[0]
         )
         self.assertFalse(runner.validity("with:HEAD", None, self.plugin)[0])
+        # The plugin is listed, but its skill did not load (bad frontmatter):
+        # the run measured the arm without the skill.
+        valid, reason = runner.validity(
+            "with:HEAD", self.init([], [self.ours()]), self.plugin
+        )
+        self.assertFalse(valid)
+        self.assertIn("did not load", reason)
 
     def test_invoke_arm_needs_the_slash_command(self) -> None:
         runner = load_runner()
@@ -177,6 +186,68 @@ class RunValidityTest(unittest.TestCase):
             )
         )
         self.assertTrue(runner.prompt("with:HEAD", "Do X.").startswith("Do X."))
+
+
+class InfraFailureTest(unittest.TestCase):
+    """A run the agent could not influence is invalid, not failed."""
+
+    def test_failures_outside_the_agent(self) -> None:
+        runner = load_runner()
+        self.assertIn("without a result event", runner.infra_failure(1, {}))
+        api = {"result": {"is_error": True, "subtype": "success", "result_head": "x"}}
+        self.assertIn("error result", runner.infra_failure(1, api))
+
+    def test_agent_failures_stay_valid(self) -> None:
+        runner = load_runner()
+        # A timeout and the turn limit are the agent's.
+        self.assertEqual(runner.infra_failure(None, {}), "")
+        turns = {"result": {"is_error": True, "subtype": "error_max_turns"}}
+        self.assertEqual(runner.infra_failure(1, turns), "")
+        done = {"result": {"is_error": False, "subtype": "success"}}
+        self.assertEqual(runner.infra_failure(0, done), "")
+
+
+class RunJobsTest(unittest.TestCase):
+    def test_a_failing_job_becomes_an_invalid_record(self) -> None:
+        import argparse
+
+        runner = load_runner()
+
+        def fn(job: int) -> dict:
+            if job == 2:
+                raise SystemExit("git failed")
+            return {"run": job, "valid": True, "passed": True}
+
+        args = argparse.Namespace(sandbox="host", jobs=2)
+        records = runner.run_jobs(args, Path("x"), fn, [1, 2, 3], lambda j: {"run": j})
+        self.assertEqual([r["run"] for r in records], [1, 2, 3])
+        self.assertTrue(records[0]["valid"])
+        self.assertFalse(records[1]["valid"])
+        self.assertIn("git failed", records[1]["invalid_reason"])
+        self.assertTrue(records[2]["passed"])
+
+
+class WorktreePluginTest(unittest.TestCase):
+    def test_untracked_files_are_part_of_the_worktree_copy(self) -> None:
+        import uuid
+
+        runner = load_runner()
+        probe = (
+            REPO_ROOT
+            / "skills"
+            / "php-modernization"
+            / "references"
+            / f"zz-eval-probe-{uuid.uuid4().hex}.md"
+        )
+        try:
+            probe.write_text("probe\n", encoding="utf-8")
+            with tempfile.TemporaryDirectory() as tmp:
+                target, commit = runner.plugin_root("with:WORKTREE", Path(tmp))
+                self.assertTrue((target / probe.relative_to(REPO_ROOT)).is_file())
+                self.assertTrue(commit.endswith("+dirty"))
+                self.assertFalse((target / "evals").exists())
+        finally:
+            probe.unlink(missing_ok=True)
 
 
 def load_reviewer():
@@ -205,6 +276,13 @@ class ReviewScoringTest(unittest.TestCase):
             tree = Path(tmp) / "tree"
             tree.mkdir()
             (tree / "REVIEW.md").symlink_to(secret)
+            self.assertEqual(r.read_review(tree), "")
+            (tree / "REVIEW.md").unlink()
+            # A directory or a FIFO in its place neither raises nor blocks.
+            (tree / "REVIEW.md").mkdir()
+            self.assertEqual(r.read_review(tree), "")
+            (tree / "REVIEW.md").rmdir()
+            os.mkfifo(tree / "REVIEW.md")
             self.assertEqual(r.read_review(tree), "")
             (tree / "REVIEW.md").unlink()
             (tree / "REVIEW.md").write_text("Verdict: approve\n", encoding="utf-8")
