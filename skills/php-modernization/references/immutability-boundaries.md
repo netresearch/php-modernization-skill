@@ -94,7 +94,7 @@ Rector's `ReadOnlyClassRector` makes such a class `readonly` without a warning (
 
 - Scalars, enums and `\DateTimeImmutable`: immutable.
 - Another `readonly` class: immutable only when its own properties pass this check. `readonly` says nothing about the members one level down.
-- Mutable objects: replace them with an immutable type (`\DateTimeImmutable`), or copy on the way in and on the way out (`clone`), and pin the behaviour with a test that changes the passed object and the returned object.
+- Mutable objects: replace them with an immutable type (`\DateTimeImmutable`), or copy on the way in and on the way out, and pin the behaviour with a test that changes the passed object and the returned object. `clone` is shallow: an object that holds another mutable object needs a `__clone()` that copies it too, or the copy still shares it; the test then changes the nested object as well.
 - Arrays of objects: the array is copied, the objects in it are shared.
 
 A class with a mutable member can still be `readonly` when nothing relies on it being a value object; it is then not a value object, and the docblock does not call it one.

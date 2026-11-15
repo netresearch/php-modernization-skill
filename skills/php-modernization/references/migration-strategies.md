@@ -115,8 +115,10 @@ return RectorConfig::configure()
 # 1 = error (config, unknown rule, parse error): not "no change"
 vendor/bin/rector process --dry-run
 
-# One rule on one area; --only needs the rule to be registered in the
-# config or in a set the config loads
+# One rule on one area; --only needs Rector 2.0 or later (1.2.10 has no
+# such option) and the rule registered in the config or in a set the
+# config loads. On Rector 1.x, write a temporary config that registers only
+# that rule (withRules([...])) and pass it with --config.
 vendor/bin/rector process src/Payment \
   --only='Rector\Php80\Rector\Switch_\ChangeSwitchToMatchRector' --dry-run
 

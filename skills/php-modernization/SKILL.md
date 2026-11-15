@@ -46,7 +46,7 @@ allowed-tools:
    - Which check shows the result is right — and which behaviour test pins the decision?
 
    The verifier runs mechanical checks only. The `llm_review` checkpoints in `checkpoints.yaml` (enums PM-21, PHP 8 features and `match` PM-22, `readonly` PM-40, …) are yours; a green verifier does not cover them.
-5. **Apply in bounded steps**: baseline tests → `modernize_loop.py --mode dry-run` or `rector process <path> --only=<rule> --dry-run` → review the diff against step 4 → apply → formatter → lint, PHPStan, tests → the same dry-run again proposes nothing → commit. Details: `references/migration-strategies.md`.
+5. **Apply in bounded steps**: baseline tests → `modernize_loop.py --mode dry-run` or `rector process <path> --only=<rule> --dry-run` (when the project's own command adds a config or a container, run that command with the flags instead: the orchestrator calls the binaries directly) → review the diff against step 4 → apply → formatter → lint, PHPStan, tests → the same dry-run again proposes nothing → commit. Details: `references/migration-strategies.md`.
 6. **References**: load on demand; do not pre-load.
 
 ## Reference routing
