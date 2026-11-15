@@ -183,6 +183,12 @@ class IntrospectTest(unittest.TestCase):
                 root, {"autoload": {"classmap": ["packages/*/src/"]}}
             )
             self.assertEqual(dirs["src"], ["packages/a/src"])
+            # An absolute pattern makes Path.glob raise; it must not stop
+            # the profile.
+            absolute = _common.source_dirs(
+                root, {"autoload": {"classmap": [f"{root}/packages/*/src/"]}}
+            )
+            self.assertEqual(absolute["src"], [f"{root}/packages/a/src"])
 
     @unittest.skipIf(os.geteuid() == 0, "root reads a directory without permission")
     def test_unreadable_workflow_directory_keeps_the_profile(self) -> None:
@@ -1258,11 +1264,73 @@ class ModernizeLoopTest(unittest.TestCase):
 
         script = "parallel-lint src && tar --exclude=src -p x -cf dist.tar ."
         composer = {"scripts": {"lint": script}}
-        self.assertEqual(modernize_loop._lint_excludes(composer), [])
+        self.assertEqual(modernize_loop._lint_excludes(REPO_ROOT, composer), [])
         self.assertIsNone(modernize_loop._lint_php(composer))
         composer = {"scripts": {"lint": "parallel-lint -p php8.1 --exclude x src"}}
-        self.assertEqual(modernize_loop._lint_excludes(composer), ["x"])
+        self.assertEqual(modernize_loop._lint_excludes(REPO_ROOT, composer), ["x"])
         self.assertEqual(modernize_loop._lint_php(composer), "php8.1")
+
+    def test_lint_excludes_never_narrow_another_call(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import modernize_loop
+
+        with TempProject("generic-composer-minimal") as root:
+            (root / "tests" / "Fixtures").mkdir(parents=True, exist_ok=True)
+            cases = (
+                # Another script lints tests without excluding it.
+                (["parallel-lint --exclude tests .", "parallel-lint tests"], []),
+                # The same exclude in two scripts is kept.
+                (
+                    [
+                        "parallel-lint --exclude tests/Fixtures src tests",
+                        "parallel-lint --exclude tests/Fixtures --checkstyle src tests",
+                    ],
+                    ["tests/Fixtures"],
+                ),
+                # A script that does not lint the excluded path keeps it.
+                (
+                    [
+                        "parallel-lint --exclude tests/Fixtures src tests",
+                        "parallel-lint src",
+                    ],
+                    ["tests/Fixtures"],
+                ),
+            )
+            for scripts, expected in cases:
+                with self.subTest(scripts=scripts):
+                    composer = {
+                        "scripts": {f"lint{i}": c for i, c in enumerate(scripts)}
+                    }
+                    self.assertEqual(
+                        modernize_loop._lint_excludes(root, composer), expected
+                    )
+
+    def test_lint_script_glob_matches_a_named_hidden_directory(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import modernize_loop
+
+        with TempProject("generic-composer-minimal") as root:
+            (root / "src" / ".checks").mkdir(parents=True)
+            (root / "src" / ".checks" / "x.php").write_text("<?php\n", "utf-8")
+            targets = modernize_loop._lint_script_targets(
+                root, {"scripts": {"lint": "parallel-lint src/.checks/*.php"}}
+            )
+            self.assertEqual(targets, ["src/.checks/x.php"])
+
+    @unittest.skipUnless(shutil.which("php"), "needs a php binary")
+    def test_lint_resolves_a_relative_php_against_the_root(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            tools = root / "tools"
+            tools.mkdir()
+            (tools / "php").write_text(
+                f'#!/bin/sh\nexec {shutil.which("php")} "$@"\n', "utf-8"
+            )
+            (tools / "php").chmod(0o755)
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer["scripts"] = {"lint": "parallel-lint -p tools/php src"}
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            result = run_py("modernize_loop.py", "--root", root, "--tools", "lint")
+            self.assertEqual(loop_status(result), {"lint": "pass"}, result.stdout)
 
     def test_lint_passes_the_project_php_to_parallel_lint(self) -> None:
         with TempProject("generic-composer-minimal") as root:
@@ -1291,29 +1359,38 @@ class ModernizeLoopTest(unittest.TestCase):
             self.assertEqual(loop_status(result), {"lint": "fail"}, result.stdout)
 
     def test_php_cs_fixer_fallback_keeps_a_root_mapped_package(self) -> None:
-        # Without a Finder the loop passes the source dirs; a package that
-        # maps its root ("") is fixed as ".", not as its tests alone.
+        # Without a Finder the loop passes the source dirs. A package that
+        # maps its root ("") gets the top-level entries: its production
+        # code and tests, but not node_modules or the vendor-dir, which the
+        # real fixer would otherwise rewrite in apply mode.
         with TempProject("fully-modern") as root:
             composer = json.loads((root / "composer.json").read_text("utf-8"))
             composer["autoload"] = {"psr-4": {"Vendor\\Pkg\\": ""}}
             composer["autoload-dev"] = {"psr-4": {"Vendor\\Pkg\\Tests\\": "tests/"}}
             (root / "composer.json").write_text(json.dumps(composer), "utf-8")
             (root / "tests").mkdir(exist_ok=True)
+            (root / "Root.php").write_text("<?php\n", "utf-8")
+            (root / "node_modules" / "x").mkdir(parents=True)
             fixer = fake_tool(root, "php-cs-fixer", exit_code=0)
             # After the arguments are logged, so a failed call leaves them too.
             fixer.write_text(
                 fixer.read_text().replace(
                     '/calls.log"\n',
                     '/calls.log"\n'
-                    'case " $* " in *" . "*) ;; *)\n'
+                    'case " $* " in *" tests "*) ;; *)\n'
                     '  echo "You must call one of in() or append()" >&2; exit 1;; esac\n',
                 ),
                 encoding="utf-8",
             )
-            run_py("modernize_loop.py", "--root", root, "--tools", "php-cs-fixer")
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "php-cs-fixer"
+            )
+            self.assertEqual(loop_status(result), {"php-cs-fixer": "pass"})
             args = (root / "vendor" / "bin" / "php-cs-fixer.args").read_text().split()
-            self.assertIn(".", args)
-            self.assertNotIn("tests", args)
+            self.assertIn("Root.php", args)
+            self.assertIn("tests", args)
+            for third_party in ("node_modules", "vendor", "."):
+                self.assertNotIn(third_party, args)
 
     def test_several_rector_rules_need_rector_2_6_7(self) -> None:
         rules = ("--rector-only", "A\\One", "--rector-only", "B\\Two")

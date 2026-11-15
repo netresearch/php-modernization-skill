@@ -40,6 +40,7 @@ and the tools may write their own caches.
 from __future__ import annotations
 
 import argparse
+import glob
 import json
 import os
 import re
@@ -50,7 +51,7 @@ import sys
 import time
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree  # the project's own config; trusted as code
 
 # Sibling-import the shared module (see introspect.py).
@@ -329,6 +330,38 @@ def _fixer_needs_paths(ctx: Context, artifact: str, result: ToolResult) -> bool:
     )
 
 
+def _third_party_dirs(ctx: Context) -> list[str]:
+    """Existing directories at the root that hold code the project does not own."""
+    vendor_dir = ((ctx.composer or {}).get("config") or {}).get("vendor-dir")
+    found: list[str] = []
+    for name in (vendor_dir or "vendor", ".Build", "node_modules"):
+        if not isinstance(name, str):
+            continue
+        name = name.rstrip("/")
+        if (ctx.root / name).is_dir() and name not in found:
+            found.append(name)
+    return found
+
+
+def _root_entries(ctx: Context) -> list[str]:
+    """The project root as explicit paths, without third-party directories."""
+    # A nested vendor-dir (lib/vendor) keeps its parent, which can hold the
+    # project's own code; the fixer's Finder skips a directory named vendor.
+    skip = {d for d in _third_party_dirs(ctx) if "/" not in d}
+    try:
+        entries = sorted(ctx.root.iterdir())
+    except OSError:
+        return ["."]
+    paths = [
+        p.name
+        for p in entries
+        if not p.name.startswith(".")
+        and p.name not in skip
+        and (p.is_dir() or p.suffix == ".php")
+    ]
+    return paths or ["."]
+
+
 def run_php_cs_fixer(ctx: Context, *, dry_run: bool) -> ToolResult:
     if ctx.coding_standard == "phpcs":
         return _skipped(
@@ -367,11 +400,13 @@ def run_php_cs_fixer(ctx: Context, *, dry_run: bool) -> ToolResult:
             return result
         # The project passes its paths on the command line; without a
         # --path the loop uses the source and test directories.
-        # A package that maps its root ("") is fixed as "."; that covers
-        # the test directory as well.
+        # A package that maps its root ("") gets the top-level entries
+        # instead of ".": the fixer's Finder skips directories named vendor
+        # and dot-directories, but not node_modules or a vendor-dir with
+        # another name, and apply mode would rewrite them.
         dirs = source_dirs(ctx.root, ctx.composer)
         found = dirs["src"] + [d for d in dirs["tests"] if d not in dirs["src"]]
-        paths = ["."] if "." in found or not found else found
+        paths = _root_entries(ctx) if "." in found or not found else found
         return _execute(ctx, "php-cs-fixer", [*base, *paths, *tail], artifact, classify)
     # Without intersection the paths replace the config's Finder, and files
     # the project excludes get fixed.
@@ -624,52 +659,82 @@ def _lint_script_targets(root: Path, composer: dict | None) -> list[str]:
     """
     targets: list[str] = []
     for args in _lint_script_calls(composer):
-        skip = False
-        for token in args:
-            if skip:
-                skip = False
-                continue
-            if token in _LINT_VALUE_OPTIONS:
-                skip = True
-                continue
-            if token.startswith("-"):
-                continue
-            matches = (
-                sorted(
-                    str(p.relative_to(root))
-                    for p in root.glob(token)
-                    # The shell running the script skips dotfiles.
-                    if not any(
-                        part.startswith(".") for part in p.relative_to(root).parts
-                    )
-                    or token.startswith(".")
-                )
-                if any(c in token for c in "*?[")
-                else [token.rstrip("/")]
-            )
-            for rel in matches:
-                if (root / rel).exists() and rel not in targets:
-                    targets.append(rel)
+        for rel in _lint_call_targets(root, args):
+            if rel not in targets:
+                targets.append(rel)
     return targets
 
 
-def _lint_excludes(composer: dict | None) -> list[str]:
+def _lint_call_targets(root: Path, args: list[str]) -> list[str]:
+    """The existing paths one parallel-lint call lints, globs expanded."""
+    targets: list[str] = []
+    skip = False
+    for token in args:
+        if skip:
+            skip = False
+            continue
+        if token in _LINT_VALUE_OPTIONS:
+            skip = True
+            continue
+        if token.startswith("-"):
+            continue
+        # glob.glob follows the shell: a wildcard does not match a leading
+        # dot, a hidden directory named in the pattern is matched.
+        matches = (
+            sorted(glob.glob(token, root_dir=root))
+            if any(c in token for c in "*?[")
+            else [token.rstrip("/")]
+        )
+        for rel in matches:
+            if (root / rel).exists() and rel not in targets:
+                targets.append(rel)
+    return targets
+
+
+def _lint_call_excludes(args: list[str]) -> list[str]:
+    excludes: list[str] = []
+    for i, token in enumerate(args):
+        if token == "--exclude" and i + 1 < len(args):
+            path = args[i + 1]
+        elif token.startswith("--exclude="):
+            path = token.split("=", 1)[1]
+        else:
+            continue
+        path = path.rstrip("/")
+        if path and path not in excludes:
+            excludes.append(path)
+    return excludes
+
+
+def _overlaps(a: str, b: str) -> bool:
+    pa, pb = PurePosixPath(a), PurePosixPath(b)
+    return "." in (a, b) or pa.is_relative_to(pb) or pb.is_relative_to(pa)
+
+
+def _lint_excludes(root: Path, composer: dict | None) -> list[str]:
     """``--exclude`` paths of the project's own parallel-lint script.
 
     Fixture files that are invalid PHP on purpose are excluded there; the
-    loop excludes the same paths.
+    loop excludes the same paths. The loop lints the targets of all calls
+    at once, so an exclude is kept only when every other call that lints an
+    overlapping path excludes it too: one call's exclude never narrows
+    another call's targets, and the loop lints wider, never narrower.
     """
+    calls = [
+        (_lint_call_targets(root, args), _lint_call_excludes(args))
+        for args in _lint_script_calls(composer)
+    ]
     excludes: list[str] = []
-    for args in _lint_script_calls(composer):
-        for i, token in enumerate(args):
-            if token == "--exclude" and i + 1 < len(args):
-                path = args[i + 1]
-            elif token.startswith("--exclude="):
-                path = token.split("=", 1)[1]
-            else:
+    for own, (_, own_excludes) in enumerate(calls):
+        for path in own_excludes:
+            if path in excludes:
                 continue
-            path = path.rstrip("/")
-            if path and path not in excludes:
+            if all(
+                path in other_excludes
+                or not any(_overlaps(path, t) for t in other_targets)
+                for other, (other_targets, other_excludes) in enumerate(calls)
+                if other != own
+            ):
                 excludes.append(path)
     return excludes
 
@@ -680,18 +745,15 @@ def run_lint(ctx: Context) -> ToolResult:
         return _skipped(
             "lint", "no source directories found (composer autoload, src/, Classes/)"
         )
-    excludes = _lint_excludes(ctx.composer)
+    excludes = _lint_excludes(ctx.root, ctx.composer)
     if "." in targets:
-        vendor_dir = ((ctx.composer or {}).get("config") or {}).get("vendor-dir")
-        for name in (vendor_dir or "vendor", ".Build", "node_modules"):
-            if not isinstance(name, str):
-                continue
-            name = name.rstrip("/")
-            if (ctx.root / name).is_dir() and name not in excludes:
-                excludes.append(name)
+        excludes += [d for d in _third_party_dirs(ctx) if d not in excludes]
     # The PHP the project lints with; without -p, parallel-lint uses the PHP
     # it runs under, which can be newer than the project's floor.
     lint_php = _lint_php(ctx.composer)
+    if lint_php and "/" in lint_php and not Path(lint_php).is_absolute():
+        # Composer runs the script in the project root.
+        lint_php = str(ctx.root / lint_php)
     parallel = find_binary(ctx.root, "parallel-lint", ctx.composer)
     if parallel is not None:
         cmd = [str(parallel), "--no-progress"]

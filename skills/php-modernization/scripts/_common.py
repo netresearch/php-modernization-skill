@@ -8,6 +8,7 @@ Stdlib-only — no third-party dependencies.
 
 from __future__ import annotations
 
+import glob
 import json
 import re
 from pathlib import Path
@@ -314,11 +315,8 @@ def source_dirs(root: Path, composer: dict[str, Any] | None) -> dict[str, list[s
         for p in paths:
             rel = p.strip().rstrip("/") or "."
             # Composer expands "*" in classmap paths ("packages/*/src/").
-            candidates = (
-                sorted(str(m.relative_to(root)) for m in root.glob(rel))
-                if "*" in rel
-                else [rel]
-            )
+            # glob.glob takes an absolute pattern too; Path.glob raises.
+            candidates = sorted(glob.glob(rel, root_dir=root)) if "*" in rel else [rel]
             for cand in candidates:
                 if cand not in out and (root / cand).is_dir():
                     out.append(cand)

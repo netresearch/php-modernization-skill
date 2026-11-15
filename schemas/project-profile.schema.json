@@ -30,7 +30,8 @@
   "properties": {
     "schema_version": {
       "type": "string",
-      "description": "Semantic version of this schema (e.g. \"1.0.0\")."
+      "pattern": "^1\\.[0-9]+\\.[0-9]+$",
+      "description": "Semantic version of this schema (e.g. \"1.0.0\"). This schema covers 1.x; 1.0.0 profiles lack the fields added in 1.1.0."
     },
     "skill": {
       "type": "string",
