@@ -233,7 +233,9 @@ CI_FILE_CANDIDATES: tuple[str, ...] = (
     ".travis.yml",
     "bitbucket-pipelines.yml",
 )
-_MAKE_TARGET_RE = re.compile(r"^([A-Za-z0-9][A-Za-z0-9_.:/-]*)\s*:(?!=)", re.MULTILINE)
+_MAKE_TARGET_RE = re.compile(
+    r"^([A-Za-z0-9][A-Za-z0-9_./-]*)\s*::?(?![:=])", re.MULTILINE
+)
 
 
 def first_existing(root: Path, candidates: tuple[str, ...]) -> str | None:

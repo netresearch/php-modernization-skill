@@ -1301,8 +1301,8 @@ def evaluate(root: Path, *, run_tools: bool) -> Report:
     check_01, phpstan_cfg = check_pm01(root)
     check_02, phpstan_level = check_pm02(root, phpstan_cfg)
     check_03 = check_pm03(root, phpstan_cfg)
-    check_04, phpcs_cfg = check_pm04(root)
-    check_05 = check_pm05(root, phpcs_cfg)
+    check_04, fixer_cfg = check_pm04(root)
+    check_05 = check_pm05(root, fixer_cfg)
     check_09, rector_cfg = check_pm09(root)
     check_13 = check_pm13(composer)
     check_14 = check_pm14(composer)
@@ -1331,6 +1331,9 @@ def evaluate(root: Path, *, run_tools: bool) -> Report:
     ]
 
     baseline = find_first_existing(root, PHPSTAN_BASELINE_CANDIDATES)
+    phpcs_file = first_existing(root, PHPCS_CONFIG_CANDIDATES)
+    phpunit_file = first_existing(root, PHPUNIT_CONFIG_CANDIDATES)
+    fractor_file = first_existing(root, FRACTOR_CONFIG_CANDIDATES)
     tooling = Tooling(
         phpstan={
             "configured": phpstan_cfg is not None,
@@ -1343,10 +1346,10 @@ def evaluate(root: Path, *, run_tools: bool) -> Report:
             "config_file": str(rector_cfg.relative_to(root)) if rector_cfg else None,
         },
         php_cs_fixer={
-            "configured": phpcs_cfg is not None,
-            "config_file": str(phpcs_cfg.relative_to(root)) if phpcs_cfg else None,
+            "configured": fixer_cfg is not None,
+            "config_file": str(fixer_cfg.relative_to(root)) if fixer_cfg else None,
             "ruleset_includes_per_cs": (
-                bool(phpcs_cfg) and uses_per_cs(phpcs_cfg)  # type: ignore[arg-type]
+                bool(fixer_cfg) and uses_per_cs(fixer_cfg)  # type: ignore[arg-type]
             ),
         },
         phpat={"configured": composer_dep_mentions(root, "phpat")},
@@ -1360,19 +1363,19 @@ def evaluate(root: Path, *, run_tools: bool) -> Report:
             or (root / "vendor/bin/composer").is_file()
         ),
         phpcs={
-            "configured": first_existing(root, PHPCS_CONFIG_CANDIDATES) is not None,
-            "config_file": first_existing(root, PHPCS_CONFIG_CANDIDATES),
+            "configured": phpcs_file is not None,
+            "config_file": phpcs_file,
         },
         phpunit={
-            "configured": first_existing(root, PHPUNIT_CONFIG_CANDIDATES) is not None,
-            "config_file": first_existing(root, PHPUNIT_CONFIG_CANDIDATES),
+            "configured": phpunit_file is not None,
+            "config_file": phpunit_file,
         },
         fractor={
-            "configured": first_existing(root, FRACTOR_CONFIG_CANDIDATES) is not None,
-            "config_file": first_existing(root, FRACTOR_CONFIG_CANDIDATES),
+            "configured": fractor_file is not None,
+            "config_file": fractor_file,
         },
         coding_standard=coding_standard(
-            root, str(phpcs_cfg.relative_to(root)) if phpcs_cfg else None
+            root, str(fixer_cfg.relative_to(root)) if fixer_cfg else None
         ),
     )
 

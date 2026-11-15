@@ -84,6 +84,16 @@ def fake_tool(root: Path, name: str, exit_code: int, stdout: str = "{}") -> Path
     return binary
 
 
+class MakefileTargetTest(unittest.TestCase):
+    def test_double_colon_rules_and_assignments(self) -> None:
+        sys.path.insert(0, str(SCRIPTS))
+        import _common
+
+        text = "clean::\nFOO ::= bar\nbuild: dep\nX := 1\ntest:\n"
+        names = [m.group(1) for m in _common._MAKE_TARGET_RE.finditer(text)]
+        self.assertEqual(names, ["clean", "build", "test"])
+
+
 class IntrospectTest(unittest.TestCase):
     def test_detects_the_archetype_of_each_fixture(self) -> None:
         expected = {
@@ -639,6 +649,27 @@ class ModernizeLoopTest(unittest.TestCase):
             ("ignore_errors_on_exit", phpcs_totals(2, 0), "pass"),
             ("ignore_warnings_on_exit", phpcs_totals(2, 0, warnings=3), "fail"),
             (None, phpcs_totals(0, 0, warnings=3), "fail"),
+            # One unfixable error, one fixable warning: totals.fixable is 1,
+            # but the fixable finding is the ignored warning.
+            (
+                "ignore_warnings_on_exit",
+                json.dumps(
+                    {
+                        "totals": {"errors": 1, "warnings": 1, "fixable": 1},
+                        "files": {
+                            "src/A.php": {
+                                "messages": [
+                                    {"type": "ERROR", "fixable": False},
+                                    {"type": "WARNING", "fixable": True},
+                                ]
+                            }
+                        },
+                    }
+                ),
+                "fail",
+            ),
+            # PHP printed a deprecation before the report.
+            (None, "Deprecated: x in y\n" + phpcs_totals(2, 2), "changes"),
         )
         for name, stdout, expected in settings:
             with (
@@ -807,6 +838,28 @@ class ModernizeLoopTest(unittest.TestCase):
                 (bin_dir / "phpstan.args").read_text().split(),
             )
 
+    def test_path_dot_keeps_the_configured_scope(self) -> None:
+        # "rector process ." would replace the config's paths and reach vendor/.
+        with TempProject("generic-composer-minimal") as root:
+            fake_tool(root, "rector", exit_code=0)
+            result = run_py(
+                "modernize_loop.py", "--root", root, "--tools", "rector", "--path", "."
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            args = (root / "vendor" / "bin" / "rector.args").read_text().split()
+            self.assertNotIn(".", args)
+            self.assertEqual(json.loads(result.stdout)["scope"], [])
+
+    def test_a_stale_stderr_report_is_removed(self) -> None:
+        with TempProject("fully-modern") as root:
+            fake_tool(root, "phpstan", exit_code=0)
+            stale = root / ".build" / "php-modernization" / "phpstan.json.stderr"
+            stale.parent.mkdir(parents=True)
+            stale.write_text("crash from an earlier run\n", encoding="utf-8")
+            result = run_py("modernize_loop.py", "--root", root, "--tools", "phpstan")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertFalse(stale.exists())
+
     def test_missing_path_is_a_usage_error(self) -> None:
         with TempProject("generic-composer-minimal") as root:
             result = run_py("modernize_loop.py", "--root", root, "--path", "nope")
@@ -873,6 +926,22 @@ class ModernizeLoopTest(unittest.TestCase):
             # Control: without the project's exclude the fixture is linted.
             del composer["scripts"]["lint"]
             (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            result = run_py("modernize_loop.py", "--root", root, "--tools", "lint")
+            self.assertEqual(loop_status(result), {"lint": "fail"})
+
+    @unittest.skipUnless(shutil.which("php"), "needs a php binary")
+    def test_lint_of_a_root_mapped_package_skips_vendor(self) -> None:
+        with TempProject("generic-composer-minimal") as root:
+            composer = json.loads((root / "composer.json").read_text("utf-8"))
+            composer["autoload"] = {"psr-4": {"Vendor\\Pkg\\": ""}}
+            composer.pop("autoload-dev", None)
+            (root / "composer.json").write_text(json.dumps(composer), "utf-8")
+            (root / "vendor" / "pkg").mkdir(parents=True)
+            (root / "vendor" / "pkg" / "Old.php").write_text("<?php\nfunction (\n")
+            result = run_py("modernize_loop.py", "--root", root, "--tools", "lint")
+            # Linted, not skipped, and vendor/ is not part of it.
+            self.assertEqual(loop_status(result), {"lint": "pass"}, result.stdout)
+            (root / "Broken.php").write_text("<?php\nfunction (\n", "utf-8")
             result = run_py("modernize_loop.py", "--root", root, "--tools", "lint")
             self.assertEqual(loop_status(result), {"lint": "fail"})
 

@@ -174,10 +174,12 @@ def _run(
     if artifact is not None:
         try:
             artifact.write_text(completed.stdout or "", encoding="utf-8")
+            stderr_file = artifact.with_name(artifact.name + ".stderr")
             if stderr.strip():
-                artifact.with_name(artifact.name + ".stderr").write_text(
-                    stderr, encoding="utf-8"
-                )
+                stderr_file.write_text(stderr, encoding="utf-8")
+            else:
+                # A file from an earlier run must not sit beside this report.
+                stderr_file.unlink(missing_ok=True)
         except OSError:
             # The reports are a convenience; status and summary do not
             # depend on them.
@@ -328,6 +330,43 @@ def _phpcs_exit_settings(ctx: Context) -> tuple[bool, bool]:
     )
 
 
+def _phpcs_report(stdout: str) -> dict:
+    """The JSON report, also when PHP printed a notice before it."""
+    try:
+        return json.loads(stdout)
+    except ValueError:
+        start = stdout.find('{"totals"')
+        if start < 0:
+            raise
+        return json.loads(stdout[start:])
+
+
+def _phpcs_counts(
+    report: dict, ignore_warnings: bool, ignore_errors: bool
+) -> tuple[int, int]:
+    """(findings, fixable findings) of the types phpcs's exit code counts.
+
+    ``totals.fixable`` counts errors and warnings together, so with an
+    ignored type the fixable count comes from the messages.
+    """
+    totals = report["totals"]
+    found = (0 if ignore_errors else int(totals.get("errors", 0))) + (
+        0 if ignore_warnings else int(totals.get("warnings", 0))
+    )
+    if not (ignore_warnings or ignore_errors):
+        return found, int(totals.get("fixable", 0))
+    ignored = {"WARNING"} if ignore_warnings else set()
+    if ignore_errors:
+        ignored.add("ERROR")
+    fixable = sum(
+        1
+        for entry in (report.get("files") or {}).values()
+        for message in entry.get("messages") or []
+        if message.get("fixable") and message.get("type") not in ignored
+    )
+    return found, fixable
+
+
 def run_phpcs(ctx: Context, *, dry_run: bool) -> ToolResult:
     """PHPCS in dry-run, PHPCBF followed by a PHPCS check in apply.
 
@@ -357,11 +396,11 @@ def run_phpcs(ctx: Context, *, dry_run: bool) -> ToolResult:
             return _missing("phpcs", "phpcbf")
         cmd = [str(phpcbf), *args]
         commands.append(" ".join(cmd))
-        rc, took, err, _ = _run(cmd, ctx.root, None)
+        phpcbf_rc, took, err, _ = _run(cmd, ctx.root, None)
         duration += took
         if err:
             status = "timeout" if err == "timeout" else "error"
-            return ToolResult("phpcs", status, rc, commands[0], duration, err)
+            return ToolResult("phpcs", status, phpcbf_rc, commands[0], duration, err)
 
     cmd = [str(phpcs), "--report=json", *args]
     commands.append(" ".join(cmd))
@@ -386,14 +425,9 @@ def run_phpcs(ctx: Context, *, dry_run: bool) -> ToolResult:
     duration += time.monotonic() - start
     rc = completed.returncode
     try:
-        report = json.loads(completed.stdout or "")
-        totals = report["totals"]
-        ignore_warnings, ignore_errors = _phpcs_exit_settings(ctx)
-        found = (0 if ignore_errors else int(totals.get("errors", 0))) + (
-            0 if ignore_warnings else int(totals.get("warnings", 0))
-        )
-        fixable = min(int(totals.get("fixable", 0)), found)
-    except (ValueError, KeyError, TypeError):
+        report = _phpcs_report(completed.stdout or "")
+        found, fixable = _phpcs_counts(report, *_phpcs_exit_settings(ctx))
+    except (ValueError, KeyError, TypeError, AttributeError):
         return ToolResult(
             "phpcs",
             "error",
@@ -417,19 +451,20 @@ def run_phpcs(ctx: Context, *, dry_run: bool) -> ToolResult:
         summary = f"phpcs: {found} finding(s), {found - fixable} need a human"
         return ToolResult("phpcs", "fail", rc, command, duration, summary, rel)
     summary = (
-        f"phpcbf applied; phpcs still reports {found} finding(s) that need a human"
+        f"phpcbf applied (exit {phpcbf_rc}); phpcs still reports {found} "
+        "finding(s) that need a human"
     )
     return ToolResult("phpcs", "fail", rc, command, duration, summary, rel)
 
 
 def _lint_targets(ctx: Context) -> list[str]:
-    # "." is the whole project, vendor/ included: lint the project's own
-    # source and test directories instead.
-    paths = [p for p in ctx.paths if p != "."]
-    if paths:
-        return paths
+    if ctx.paths:
+        return list(ctx.paths)
     dirs = source_dirs(ctx.root, ctx.composer)
-    return [d for d in dirs["src"] + dirs["tests"] if d != "."]
+    targets = dirs["src"] + [d for d in dirs["tests"] if d not in dirs["src"]]
+    # A package that maps its root ("psr-4": {"Vendor\\": ""}) is linted
+    # as "."; run_lint keeps vendor/ out of that.
+    return ["."] if "." in targets else targets
 
 
 def _lint_excludes(composer: dict | None) -> list[str]:
@@ -473,6 +508,14 @@ def run_lint(ctx: Context) -> ToolResult:
             "lint", "no source directories found (composer autoload, src/, Classes/)"
         )
     excludes = _lint_excludes(ctx.composer)
+    if "." in targets:
+        vendor_dir = ((ctx.composer or {}).get("config") or {}).get("vendor-dir")
+        for name in (vendor_dir or "vendor", ".Build", "node_modules"):
+            if not isinstance(name, str):
+                continue
+            name = name.rstrip("/")
+            if (ctx.root / name).is_dir() and name not in excludes:
+                excludes.append(name)
     parallel = find_binary(ctx.root, "parallel-lint", ctx.composer)
     if parallel is not None:
         cmd = [str(parallel), "--no-progress"]
@@ -843,7 +886,10 @@ def main(argv: list[str] | None = None) -> int:
         if not target.exists():
             sys.stderr.write(f"error: --path {rel!r} does not exist under --root\n")
             return 2
-        paths.append(str(target.relative_to(root)) if target != root else ".")
+        # The whole project is the tools' configured scope: passing "."
+        # would replace the configs' paths and reach vendor/.
+        if target != root:
+            paths.append(str(target.relative_to(root)))
 
     transcript = execute(
         root,
