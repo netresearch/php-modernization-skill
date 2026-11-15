@@ -4,7 +4,7 @@
   "kind": "convert",
   "namespace": "Acme\\ShopOrders\\",
   "php_floor": "8.2",
-  "task": "The order status values 'pending', 'paid' and 'shipped' are scattered as strings across src/. Introduce a backed enum OrderStatus in the namespace Acme\\ShopOrders and use it inside the domain: Order::status() returns an OrderStatus and OrderLabel::label() takes an OrderStatus. Order::fromRow() reads database rows and Order::toArray() feeds a public JSON API.",
+  "task": "The order status values 'pending', 'paid' and 'shipped' are scattered as strings across src/. Introduce a backed enum OrderStatus in the namespace Acme\\ShopOrders and use it inside the domain: Order::status() returns an OrderStatus and OrderLabel::label() takes an OrderStatus. Order::fromRow() reads database rows and Order::toArray() feeds a public JSON API, and PHP callers read the array it returns.",
   "start_expect": "fail",
   "bad": {
     "fails_at": "phpunit"

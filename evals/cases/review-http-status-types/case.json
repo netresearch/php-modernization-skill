@@ -4,7 +4,7 @@
   "kind": "convert",
   "namespace": "Acme\\HttpStatus\\",
   "php_floor": "8.2",
-  "task": "Modernize src/Request.php, src/Response.php and src/StatusText.php to PHP 8.2: native property, parameter and return types, constructor promotion, and a match expression instead of the switch where that keeps the behaviour.",
+  "task": "Modernize src/Request.php, src/Response.php and src/StatusText.php to PHP 8.2: native property, parameter and return types, constructor promotion, and a match expression instead of the switch. StatusText::for() keeps answering every input it answers today: callers pass ints, strings from headers, or null.",
   "start_expect": "fail",
   "bad": {
     "fails_at": "phpstan",

@@ -4,7 +4,7 @@
   "kind": "convert",
   "namespace": "Acme\\Bookings\\",
   "php_floor": "8.2",
-  "task": "Make Booking in src/ an immutable value object using readonly.",
+  "task": "Make Booking in src/ an immutable value object using readonly. Callers construct it with a \\DateTime; that keeps working.",
   "start_expect": "fail",
   "bad": {
     "fails_at": "phpunit"
