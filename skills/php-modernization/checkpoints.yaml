@@ -361,7 +361,7 @@ mechanical:
   # === IMMUTABILITY BOUNDARIES (guardrail) ===
   - id: PM-39
     type: command
-    pattern: "! grep -rlE --exclude-dir=.Build --exclude-dir=vendor --exclude-dir=node_modules '^((final|abstract)\\s+)?readonly\\s+((final|abstract)\\s+)?class' src/ Classes/ packages/ 2>/dev/null | xargs -r grep -lE '#\\[(ORM\\\\)?Entity|#\\[(ORM\\\\)?MappedSuperclass' 2>/dev/null | grep -q ."
+    pattern: "! grep -rlE --exclude-dir=.Build --exclude-dir=vendor --exclude-dir=node_modules '^((final|abstract)\\s+)?readonly\\s+((final|abstract)\\s+)?class' src/ Classes/ packages/ 2>/dev/null | xargs -r grep -lE '#\\[(\\\\?[A-Za-z_]+\\\\)*(Entity|MappedSuperclass)\\b' 2>/dev/null | grep -q ."
     severity: error
     desc: "readonly must not be applied to Doctrine entities or mapped-superclasses (Doctrine hydrates them via reflection-bypassing the constructor). Embeddables are a nuanced case — see references/doctrine-modernization-edges.md"
 
@@ -614,16 +614,26 @@ llm_reviews:
     prompt: |
       Review the codebase for `readonly class` or `final readonly class` declarations.
       Flag any class that is ALSO one of:
-      1. Annotated with #[ORM\Entity], #[ORM\Embeddable], or #[ORM\MappedSuperclass]
-      2. Implements a Form-bound interface (e.g., extends Symfony AbstractType bound model)
-      3. Implements __unserialize / Serializable / is restored via session/cache
-      4. Used as a hydration target by a deserializer (Symfony Serializer, JMS, Symfony ObjectMapper)
-      5. Assigned after construction (setter, framework property injection,
+      1. Mapped as a Doctrine entity or mapped superclass (#[ORM\Entity],
+         #[ORM\MappedSuperclass], under any alias or fully qualified)
+      2. A form-bound model (the data class of a Symfony AbstractType)
+      3. Assigned after construction (setter, framework property injection,
          a wither that writes through reflection)
-      For these, readonly is INCORRECT: remove it. Exception: an
-      #[ORM\Embeddable] value object can be `final readonly` on ORM 3.x;
-      check it against references/doctrine-modernization-edges.md before
-      reporting it.
+      For these, readonly is INCORRECT: remove it.
+
+      Check, do not flag by category:
+      4. Restored from a session, a cache or a queue (unserialize(),
+         __unserialize, Serializable): plain unserialize() restores readonly
+         properties, so readonly fails only where the restore code assigns
+         a property after construction.
+      5. A deserializer's target (Symfony Serializer, JMS, Symfony
+         ObjectMapper): readonly works when it builds the object through the
+         constructor and fails when it writes properties afterwards. Name
+         the path the project's configuration takes.
+      6. #[ORM\Embeddable]: can be `final readonly` on ORM 3.x; see
+         references/doctrine-modernization-edges.md.
+      Report one of these only with the code that assigns after
+      construction.
 
       Then review `readonly class` declarations and `readonly` properties
       that are described or used as value objects and hold a mutable object
