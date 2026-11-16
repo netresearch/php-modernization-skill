@@ -521,6 +521,42 @@ class VerifierTest(unittest.TestCase):
             )
             self.assertEqual(report["summary"]["tool_runs_failed"], 1)
 
+    def test_unwritable_tool_artifact_is_not_reported(self) -> None:
+        with TempProject("fully-modern") as root:
+            fake_tool(root, "phpstan", exit_code=0)
+            fake_tool(root, "composer", exit_code=0)
+            (root / "composer.lock").write_text("{}\n", encoding="utf-8")
+            # A directory where the report file belongs makes the write fail.
+            artifacts = root / ".build" / "php-modernization"
+            (artifacts / "phpstan.json").mkdir(parents=True)
+            (artifacts / "composer-audit.json").mkdir()
+            # A PATH without a system composer, so the verifier takes the fake
+            # one from vendor/bin; the fakes need only cat and dirname.
+            path_dir = root / "path"
+            path_dir.mkdir()
+            for tool in ("cat", "dirname"):
+                (path_dir / tool).symlink_to(shutil.which(tool))
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    SCRIPTS / "verify_php_project.py",
+                    "--root",
+                    root,
+                    "--no-cache",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=120,
+                env={**os.environ, "PATH": str(path_dir)},
+            )
+            runs = {r["tool"]: r for r in json.loads(result.stdout)["tool_runs"]}
+            self.assertEqual(set(runs), {"phpstan", "composer-audit"})
+            for tool, run_ in runs.items():
+                with self.subTest(tool=tool):
+                    self.assertEqual(run_["status"], "pass")
+                    self.assertIsNone(run_["artifact"])
+
     def test_verifier_finds_phpcs_in_the_composer_bin_dir(self) -> None:
         with TempProject("generic-composer-phpcs") as root:
             composer = json.loads((root / "composer.json").read_text("utf-8"))
