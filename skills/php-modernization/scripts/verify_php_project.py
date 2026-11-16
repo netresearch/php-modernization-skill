@@ -1143,17 +1143,21 @@ def run_phpstan(root: Path) -> ToolRun | None:
             command=" ".join(cmd),
             artifact=None,
         )
+    # The run counts on its exit code; the saved output is a convenience, so a
+    # failed write only drops the artifact path rather than naming a file
+    # that was never written.
+    artifact_path: str | None = str(artifact.relative_to(root))
     try:
         artifact.write_text(completed.stdout or "", encoding="utf-8")
     except OSError:
-        pass
+        artifact_path = None
     status = "pass" if completed.returncode == 0 else "fail"
     return ToolRun(
         tool="phpstan",
         status=status,
         exit_code=completed.returncode,
         command=" ".join(cmd),
-        artifact=str(artifact.relative_to(root)),
+        artifact=artifact_path,
     )
 
 
@@ -1197,10 +1201,14 @@ def run_composer_audit(root: Path) -> ToolRun | None:
             command=" ".join(cmd),
             artifact=None,
         )
+    # The run counts on its exit code; the saved output is a convenience, so a
+    # failed write only drops the artifact path rather than naming a file
+    # that was never written.
+    artifact_path: str | None = str(artifact.relative_to(root))
     try:
         artifact.write_text(completed.stdout or "", encoding="utf-8")
     except OSError:
-        pass
+        artifact_path = None
     # composer audit exits non-zero when vulnerabilities are found.
     status = "pass" if completed.returncode == 0 else "fail"
     return ToolRun(
@@ -1208,7 +1216,7 @@ def run_composer_audit(root: Path) -> ToolRun | None:
         status=status,
         exit_code=completed.returncode,
         command=" ".join(cmd),
-        artifact=str(artifact.relative_to(root)),
+        artifact=artifact_path,
     )
 
 
