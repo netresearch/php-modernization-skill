@@ -11,6 +11,28 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-11-17
+
+### Added
+
+- The introspector detects PHPCS, PHPUnit, parallel-lint, Fractor, Composer scripts, Makefile targets and source directories, including configs under `Build/` (TYPO3 `tea` layout) and `phpstan.dist.neon`. The project profile `schema_version` is 1.1.0; a 1.0.0 profile still validates (#184)
+- The verifier lists the checkpoints it did not evaluate (`review_coverage`) and reports failed tool runs in `summary.tool_runs_failed`; new report fields are additive and the exit codes without `--check` are unchanged (#184)
+- `modernize_loop.py` runs Rector, the formatter, lint, PHPStan and PHPUnit in that order with the project's own configs, scope and lint targets, and skips Rector and the formatters when the project configures none. Rector's dry-run exit 2 is reported as `changes`, not as a failure. PHPCS is classified by the totals of `phpcs --report=json`, and apply mode runs `phpcbf`, then `phpcs` (#184)
+- `SKILL.md` tells the agent to run the project's own commands per concern and to answer four questions before each change; the enum, `match` and `readonly` review checkpoints name the cases where Rector's diff changes behaviour (`ChangeSwitchToMatchRector` on untyped or numeric-string subjects, `ReadOnlyClassRector` on a class holding a mutable `\DateTime`) (#183)
+- `references/multi-agent-pitfalls.md`: Hazard 9 names the default PHPStan and Rector cache locations, that every worktree shares them and that they outlive `git worktree remove`, the cleanup command and how to give each worktree its own cache. `SKILL.md` adds `--memory-limit=1G` for PHPStan on larger projects, since PHP's default `memory_limit` is 128M (#193)
+
+### Changed
+
+- PM-40 separates the classes where `readonly` is wrong (Doctrine entities and mapped superclasses, form-bound models, classes written after construction) from restored and deserialized objects, which it checks rather than excludes; `immutability-boundaries.md` and `doctrine-modernization-edges.md` give the reasons (#183)
+
+### Fixed
+
+- A PHPCS project passes PM-04 and PM-17 instead of failing for a missing PHP-CS-Fixer config (#184)
+- PHPStan configs under `Build/` are passed on the command line, so a TYPO3 extension's PHPStan run analyses instead of stopping with "At least one path must be specified to analyse" (#184)
+- The `SecretPlacement` example under "match() ensures all cases are handled" handles all seven enum cases instead of three (#183)
+- The verifier reports `artifact: null` when it cannot write a PHPStan or Composer audit output file, instead of naming a file that was never written (#192)
+- The cache purge commands also clear the default `/tmp/phpstan` directory, which the `/tmp/phpstan-*` glob did not match (#193)
+
 ## [1.24.3] - 2026-11-15
 
 ### Fixed
@@ -246,7 +268,8 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 (historical — pre-CHANGELOG)
 
-[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.3...HEAD
+[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.25.0...HEAD
+[1.25.0]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.3...v1.25.0
 [1.24.3]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.2...v1.24.3
 [1.24.2]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.1...v1.24.2
 [1.24.1]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.0...v1.24.1
