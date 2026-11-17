@@ -85,7 +85,8 @@ allowed-tools:
 - Never apply blanket `final` to mock targets or extension points without confirmation.
 - Never edit `@generated` files or files under `var/cache/`, `vendor/`, `node_modules/`, `.Build/`.
 - Never `git checkout --` files outside your scope in shared trees — use `git stash` / `git diff`.
-- Never trust a warm PHPStan cache after vendor change: `rm -rf /tmp/phpstan-* var/cache/phpstan` first.
+- Never trust a warm PHPStan cache after vendor change: `rm -rf /tmp/phpstan /tmp/phpstan-* var/cache/phpstan` first. PHPStan and Rector caches outlive `git worktree remove` (`references/multi-agent-pitfalls.md`, Hazard 9).
+- PHP's default `memory_limit` is 128M; PHPStan stops at it on larger projects ("reached configured PHP memory limit"). Pass `--memory-limit=1G`.
 - Never mass-substitute `createMock` → `createStub` — promote to `expects(...)->method(...)->with(...)`.
 
 ## Migration checklist

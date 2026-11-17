@@ -661,7 +661,7 @@ analysis results keyed to `vendor/` stubs. After **any** of:
 Always purge before final verify:
 
 ```bash
-rm -rf /tmp/phpstan-* var/cache/phpstan
+rm -rf /tmp/phpstan /tmp/phpstan-* var/cache/phpstan
 vendor/bin/phpstan analyse --no-progress
 ```
 

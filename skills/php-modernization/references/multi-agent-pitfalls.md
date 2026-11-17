@@ -197,6 +197,38 @@ result so far is void.
 Same family as Hazard 4: that one is the wrong dependency *version*,
 this one the wrong *source tree*.
 
+## Hazard 9: Analysis caches outlive the worktree that wrote them
+
+PHPStan and Rector cache under the system temp directory, not in the
+worktree. The caches survive `git worktree remove`, and every worktree
+and agent on the machine shares them. Default locations, read from the
+PHPStan 2.3.6 and Rector 2.8.5 sources and confirmed after a run
+(`<tmp>` is `sys_get_temp_dir()`, usually `/tmp`):
+
+| Tool | Location | Holds |
+|---|---|---|
+| PHPStan | `<tmp>/phpstan/`, or the `tmpDir` set in `phpstan.neon` | `resultCache.php`, `cache/PHPStan/`, the compiled container in `cache/nette.configurator/` |
+| Rector | `<tmp>/rector_cached_files/` | Rector's file cache |
+| PHPStan inside Rector | `<tmp>/cache/PHPStan/`, `<tmp>/cache/nette.configurator/` | Rector hands its container cache directory (default `<tmp>`) to PHPStan as `tmpDir` |
+
+`vendor/bin/phpstan clear-result-cache` deletes `resultCache.php` only;
+the compiled container stays. When a run fails on a path into a
+worktree that no longer exists, for example
+`phar://…/<removed-worktree>/vendor/phpstan/phpstan/phpstan.phar/… is not a file`,
+remove the caches and run again:
+
+```bash
+T=$(php -r 'echo sys_get_temp_dir();')
+rm -rf "$T/phpstan" "$T/cache/PHPStan" "$T/cache/nette.configurator" "$T/rector_cached_files"
+```
+
+These directories belong to every project on the machine; each one
+rebuilds its cache on the next run. To keep worktrees apart, give each
+its own location: `tmpDir` in `phpstan.neon`,
+`withCache(cacheDirectory: …, containerCacheDirectory: …)` in
+`rector.php`, or `TMPDIR` set to a directory inside the worktree for the
+run.
+
 ## Concise briefing template
 
 Include this in every multi-agent dispatch where modifications happen
@@ -218,4 +250,7 @@ SHARED REPO HAZARDS:
 - In a fresh worktree, never symlink vendor/ from a sibling — the
   autoloader would load that sibling's src/. Verify with
   ReflectionClass::getFileName() before trusting any test result.
+- PHPStan/Rector caches live in the system temp dir and are shared by
+  all worktrees; a path into a removed worktree in an error means a
+  stale cache (Hazard 9).
 ```
