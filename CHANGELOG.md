@@ -268,7 +268,8 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag â
 
 (historical â€” pre-CHANGELOG)
 
-[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.3...HEAD
+[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.25.0...HEAD
+[1.25.0]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.3...v1.25.0
 [1.24.3]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.2...v1.24.3
 [1.24.2]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.1...v1.24.2
 [1.24.1]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.0...v1.24.1
