@@ -222,12 +222,18 @@ T=$(php -r 'echo sys_get_temp_dir();')
 rm -rf "$T/phpstan" "$T/cache/PHPStan" "$T/cache/nette.configurator" "$T/rector_cached_files"
 ```
 
-These directories belong to every project on the machine; each one
+These are the defaults. When the project configures its own locations,
+remove those as well: the `tmpDir` in `phpstan.neon`, and the
+`cacheDirectory` and `containerCacheDirectory` passed to `withCache()` in
+`rector.php`.
+
+The default directories belong to every project on the machine; each one
 rebuilds its cache on the next run. To keep worktrees apart, give each
 its own location: `tmpDir` in `phpstan.neon`,
 `withCache(cacheDirectory: …, containerCacheDirectory: …)` in
 `rector.php`, or `TMPDIR` set to a directory inside the worktree for the
-run.
+run. `TMPDIR` moves only the default locations: a path set in
+`phpstan.neon` or `rector.php` stays shared.
 
 ## Concise briefing template
 
