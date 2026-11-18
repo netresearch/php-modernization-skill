@@ -73,7 +73,7 @@ breaking or safe:
 | Add a method to the interface | unaffected | fatal error when the class loads | — |
 | Add a second interface that extends it; the shipped class implements both | unaffected | unaffected, opts in later | `method.notFound` on a call through the old type, until the caller narrows with `instanceof` |
 | `@deprecated` docblock on a method | unaffected | unaffected | one `method.deprecated` finding per call |
-| `#[\Deprecated]` attribute (PHP 8.4+) | `E_USER_DEPRECATED` on every call | unaffected | one `method.deprecated` finding per call |
+| `#[\Deprecated]` attribute (PHP 8.4+) | `E_USER_DEPRECATED` on each call that runs a method carrying the attribute | unaffected | one `method.deprecated` finding per call |
 
 Measured on PHP 8.4: an implementer missing an added method stops with
 `Class Impl contains 1 abstract method and must therefore be declared abstract
@@ -84,19 +84,29 @@ or implement the remaining methods`, and a call to a function carrying
 as `method.deprecated`, and a call to the new method through the old type as
 `method.notFound`.
 
-- **The static-analysis column is real only where the rules load.**
+A call through an interface type runs the implementing class's method, so the
+runtime notice appears only where that method carries the attribute too.
+
+- **`method.deprecated` appears only where the deprecation rules load.**
   `phpstan/phpstan-deprecation-rules` reports deprecated calls, and
   `phpstan/extension-installer` loads it without a line in `phpstan.neon`
-  once any meta-package requires it. Read each consumer's `ignoreErrors` before
+  once any meta-package requires it. The installer skips it when Composer does
+  not allow the plugin (`config.allow-plugins`), when the consumer lists the
+  package under `extra.phpstan/extension-installer.ignore`, or when the install
+  ran with `--no-plugins`. Read those and each consumer's `ignoreErrors` before
   predicting a red pipeline: a global `#Call to deprecated method#` ignore
-  keeps it green.
+  keeps it green. `method.notFound` comes from PHPStan's core rules and needs
+  no extension.
 - **The attribute is a runtime change.** An error handler that turns
   deprecations into exceptions, such as PHPUnit's `failOnDeprecation` or a
   framework's development mode, can fail on the first call. Prefer the docblock
   tag inside a minor release.
-- **Name the consumers, not the category.** Run steps 1 and 2 for the touched
-  methods and report one row per consumer: calls the method, implements the
-  interface, loads the deprecation rules. "Could break implementers" without a
+- **Name the consumers, not the category.** Run step 1, then search each
+  consumer for the touched method names (`->method(`) and for `implements` of
+  the interface, and report one row per consumer: calls the method, implements
+  the interface, loads the deprecation rules. Mark a consumer unresolved when
+  the search cannot decide its role, for example a call through a variable
+  method name. "Could break implementers" without a
   list of implementers is not an assessment.
 
 ## Output
