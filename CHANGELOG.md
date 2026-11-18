@@ -11,6 +11,10 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+### Changed
+
+- `references/public-api-inventory.md` sorts interface changes by who is affected, callers or implementers, names the PHPStan finding a new interface method raises in an implementing class, and scopes the findings to the changed interface (#195)
+
 ## [1.25.0] - 2026-11-17
 
 ### Added
