@@ -11,6 +11,8 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.25.1] - 2026-11-18
+
 ### Changed
 
 - `references/public-api-inventory.md` sorts interface changes by who is affected, callers or implementers, and adds a method-level search for both. It names the PHPStan findings: `method.notFound` from core and `method.deprecated` from the deprecation-rules extension, with the conditions under which extension-installer skips those rules. The runtime deprecation notice is limited to methods that carry the attribute (#195)
@@ -272,7 +274,8 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 (historical — pre-CHANGELOG)
 
-[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.25.0...HEAD
+[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.25.1...HEAD
+[1.25.1]: https://github.com/netresearch/php-modernization-skill/compare/v1.25.0...v1.25.1
 [1.25.0]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.3...v1.25.0
 [1.24.3]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.2...v1.24.3
 [1.24.2]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.1...v1.24.2
