@@ -71,7 +71,7 @@ breaking or safe:
 | Change | Caller | Implementer | Consumer's static analysis |
 |---|---|---|---|
 | Add a method to the interface | unaffected | fatal error when the class loads | — |
-| Add a second interface that extends it; the shipped class implements both | unaffected | unaffected, opts in later | a caller narrows with `instanceof` before it calls the new method |
+| Add a second interface that extends it; the shipped class implements both | unaffected | unaffected, opts in later | `method.notFound` on a call through the old type, until the caller narrows with `instanceof` |
 | `@deprecated` docblock on a method | unaffected | unaffected | one `method.deprecated` finding per call |
 | `#[\Deprecated]` attribute (PHP 8.4+) | `E_USER_DEPRECATED` on every call | unaffected | one `method.deprecated` finding per call |
 
@@ -79,7 +79,10 @@ Measured on PHP 8.4: an implementer missing an added method stops with
 `Class Impl contains 1 abstract method and must therefore be declared abstract
 or implement the remaining methods`, and a call to a function carrying
 `#[\Deprecated(message: "use g")]` raises `E_USER_DEPRECATED` with
-`Function old() is deprecated, use g`. A docblock tag raises nothing.
+`Function old() is deprecated, use g`. A docblock tag raises nothing. PHPStan
+2.3 with the deprecation rules reports both the attribute and the docblock tag
+as `method.deprecated`, and a call to the new method through the old type as
+`method.notFound`.
 
 - **The static-analysis column is real only where the rules load.**
   `phpstan/phpstan-deprecation-rules` reports deprecated calls, and
