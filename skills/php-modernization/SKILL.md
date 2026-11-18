@@ -72,7 +72,7 @@ allowed-tools:
 | Mutation testing | `references/mutation-testing.md` |
 | Lexing PHP as tokens, across versions | `references/lexing-php-across-versions.md` |
 | Migration planning | `references/migration-strategies.md` |
-| Public API inventory vs consumers | `references/public-api-inventory.md` |
+| Public API inventory vs consumers, interface changes on update | `references/public-api-inventory.md` |
 | PHPUnit 12→13, mock vs stub | `references/phpunit-modernization.md` |
 | Multi-agent dispatch hazards | `references/multi-agent-pitfalls.md` |
 | Reading a PHP config file without running it | `references/reading-php-config-safely.md` |

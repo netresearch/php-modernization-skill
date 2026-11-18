@@ -62,6 +62,40 @@ or untagged class from production code is a contract that exists in practice
 and nowhere on paper. Each one needs either promotion to the public surface or
 a supported replacement plus a migration note — before anything is frozen.
 
+## 5. Changing a published interface: who breaks on update
+
+A change to a published interface reaches three kinds of consumer, and each
+one breaks in its own way. Sort the change by all three before calling it
+breaking or safe:
+
+| Change | Caller | Implementer | Consumer's static analysis |
+|---|---|---|---|
+| Add a method to the interface | unaffected | fatal error when the class loads | — |
+| Add a second interface that extends it; the shipped class implements both | unaffected | unaffected, opts in later | a caller narrows with `instanceof` before it calls the new method |
+| `@deprecated` docblock on a method | unaffected | unaffected | one `method.deprecated` finding per call |
+| `#[\Deprecated]` attribute (PHP 8.4+) | `E_USER_DEPRECATED` on every call | unaffected | one `method.deprecated` finding per call |
+
+Measured on PHP 8.4: an implementer missing an added method stops with
+`Class Impl contains 1 abstract method and must therefore be declared abstract
+or implement the remaining methods`, and a call to a function carrying
+`#[\Deprecated(message: "use g")]` raises `E_USER_DEPRECATED` with
+`Function old() is deprecated, use g`. A docblock tag raises nothing.
+
+- **The static-analysis column is real only where the rules load.**
+  `phpstan/phpstan-deprecation-rules` reports deprecated calls, and
+  `phpstan/extension-installer` loads it without a line in `phpstan.neon`
+  once any meta-package requires it. Read each consumer's `ignoreErrors` before
+  predicting a red pipeline: a global `#Call to deprecated method#` ignore
+  keeps it green.
+- **The attribute is a runtime change.** An error handler that turns
+  deprecations into exceptions, such as PHPUnit's `failOnDeprecation` or a
+  framework's development mode, can fail on the first call. Prefer the docblock
+  tag inside a minor release.
+- **Name the consumers, not the category.** Run steps 1 and 2 for the touched
+  methods and report one row per consumer: calls the method, implements the
+  interface, loads the deprecation rules. "Could break implementers" without a
+  list of implementers is not an assessment.
+
 ## Output
 
 One row per surface type: FQCN, consumers (production / tests only), in-repo
