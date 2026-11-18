@@ -11,6 +11,10 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+### Changed
+
+- `references/public-api-inventory.md` sorts interface changes by who is affected, callers or implementers, and adds a method-level search for both. It names the PHPStan findings: `method.notFound` from core and `method.deprecated` from the deprecation-rules extension, with the conditions under which extension-installer skips those rules. The runtime deprecation notice is limited to methods that carry the attribute (#195)
+
 ## [1.25.0] - 2026-11-17
 
 ### Added
