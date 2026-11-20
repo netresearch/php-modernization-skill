@@ -11,6 +11,13 @@ Section ordering within a release: **Added → Changed → Deprecated → Remove
 
 ## [Unreleased]
 
+## [1.25.2] - 2026-11-20
+
+### Added
+
+- `references/phpstan-compliance.md`: a parallel worker that crashes is counted and printed as an error (`[ERROR] Found 1 error`, or an `::error` annotation with `--error-format=github`), so read the error bodies and re-run with `--memory-limit=1G` before calling it a finding. A helper over a database row takes an unsealed shape `array{k: t, ...}`: with `bleedingEdge.neon` a sealed shape rejects the wider row the caller passes, and `array<string, mixed>` brings back the casts from `mixed` (#198)
+- `references/multi-agent-pitfalls.md` (Hazard 4): after a rebase that adds a path package or PSR-4 prefix, nearly every test fails with the same `Class "..." not found` for the repository's own package; run `composer install` (new path package) or `composer dump-autoload` (root autoload change only) before reading results (#198)
+
 ## [1.25.1] - 2026-11-18
 
 ### Changed
@@ -274,7 +281,8 @@ This entry collects the cumulative work landed on `main` after the v1.15.1 tag �
 
 (historical — pre-CHANGELOG)
 
-[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.25.1...HEAD
+[Unreleased]: https://github.com/netresearch/php-modernization-skill/compare/v1.25.2...HEAD
+[1.25.2]: https://github.com/netresearch/php-modernization-skill/compare/v1.25.1...v1.25.2
 [1.25.1]: https://github.com/netresearch/php-modernization-skill/compare/v1.25.0...v1.25.1
 [1.25.0]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.3...v1.25.0
 [1.24.3]: https://github.com/netresearch/php-modernization-skill/compare/v1.24.2...v1.24.3
