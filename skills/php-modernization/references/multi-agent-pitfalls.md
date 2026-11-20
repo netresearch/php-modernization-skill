@@ -106,8 +106,10 @@ A rebase can also add a path package or PSR-4 prefix to
 still describes the old tree, and the suite fails almost
 completely with the same `Class "..." not found` for a class of the
 repository's **own** package, not of a third-party dependency. That
-shape is the tell: run `composer dump-autoload` and re-run before
-reading any result. In the case that produced this rule, 126 errors
+shape is the tell: before reading any result, run `composer install`
+when the rebase added a path package (`dump-autoload` only maps
+packages that are already installed), or `composer dump-autoload`
+when only the root package's `autoload` section changed, and re-run. In the case that produced this rule, 126 errors
 in 130 tests became the two real failures the change had caused.
 
 ## Hazard 5: File-scope overlap between concurrent agents
