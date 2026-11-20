@@ -100,6 +100,16 @@ on the old binary while failing in CI on the new.
 should run `composer install --ignore-platform-req=...` afterwards (or
 inside Docker if the host lacks the project's PHP extensions).
 
+A rebase can also add a path package or PSR-4 prefix to
+`composer.json` (a `packages/<name>` directory in a monorepo) while
+`vendor/` stays as it was. `vendor/composer/autoload_psr4.php` then
+still describes the old tree, and the suite fails almost
+completely with the same `Class "..." not found` for a class of the
+repository's **own** package, not of a third-party dependency. That
+shape is the tell: run `composer dump-autoload` and re-run before
+reading any result. In the case that produced this rule, 126 errors
+in 130 tests became the two real failures the change had caused.
+
 ## Hazard 5: File-scope overlap between concurrent agents
 
 If two agents have overlapping file scopes, the second to finish
