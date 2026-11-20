@@ -255,6 +255,58 @@ Run the static analyzer **after** adding the test files, not before — tests ar
 analyzed too, so a `(string) $mixed` cast or an offset-on-possibly-empty in a
 fresh test file fails CI even though the pre-test run was green.
 
+### Array Shapes for Helpers Over Database Rows
+
+A helper that reads a few columns of a row the caller fetched with more columns
+needs a shape that names those columns and admits the rest. `array<string, mixed>`
+brings back `Cannot cast mixed to string`; a sealed shape names the columns but,
+with `bleedingEdge.neon` included, rejects the wider row the caller passes. The
+trailing `...` makes the shape unsealed:
+
+```php
+/** @param array{uid: int, title: string} $row */          // sealed
+public static function sealedLabel(array $row): string { /* ... */ }
+// bleedingEdge: Parameter #1 $row ... expects array{uid: int, title: string},
+//   array{uid: int, title: string, hidden: int} given.
+//   Sealed array shape does not accept array with extra key 'hidden'.
+
+/** @param array{uid: int, title: string, ...} $row */     // unsealed
+public static function label(array $row): string {
+    return $row['title'] . ' (' . $row['uid'] . ')';         // typed, no cast
+}
+```
+
+Measured with PHPStan 2.2.12 at `level: max`: without `bleedingEdge.neon` the
+sealed shape also accepts the wider row, so the error appears only once the
+project opts in. Neither widening to `mixed` nor `@phpstan-ignore` is the fix.
+Where the row crosses a layer boundary rather than a private helper, map it to a
+DTO instead (see `request-dtos.md`).
+
+### A Crashed Worker Is Reported as an Error
+
+When a parallel worker dies, PHPStan counts the crash as an error, so the
+summary is the same as for a real finding (PHPStan 2.2.7, a worker that hit
+`--memory-limit=80M`):
+
+```text
+     Child process error: PHPStan process crashed because it reached
+     configured PHP memory limit: 80M
+     ...
+      while running parallel worker
+
+ [ERROR] Found 1 error
+
+⚠️  Result is incomplete because of severe errors. ⚠️
+```
+
+With `--error-format=github` the same crash becomes an `::error ::Child process
+error: ...` annotation on the pull request. Never judge a run by its last line:
+write the whole output to a file, check the exit status, and read the error
+bodies. `Child process error`, `Internal error`, `Result is incomplete because
+of severe errors` and a parse error inside `vendor/` all mean the analysis did
+not complete, not that the code is wrong. Re-run with `--memory-limit=1G` (PHP's
+default `memory_limit` is 128M) before drawing any conclusion.
+
 ## Type Aliases and Custom Types
 
 ### Defining Type Aliases
