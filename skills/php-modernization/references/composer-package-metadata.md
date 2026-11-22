@@ -99,7 +99,7 @@ A dry run downloads no dists. An install, with or without the entry, fetches eac
 
 If the source has to stay a VCS repository, add `"no-api": true` to the entry (Composer then clones with git instead of calling the API), or authenticate Composer in CI (`composer config --global github-oauth.github.com "$GITHUB_TOKEN"`) for the higher authenticated limit.
 
-**Packagist's `p2` metadata is minified, so a version without `require` did not drop its requirements.** `repo.packagist.org/p2/<vendor>/<name>.json` lists versions newest first and writes only the fields that change from the entry before it; a missing `require` means "same as the previous, newer entry", and a field that disappears is written as `"__unset"`. Reading only the entries that carry the key puts a version boundary one release late. To answer "since which version does package X accept Y", read the dependency at the tags on both sides of the boundary instead:
+**Packagist's `p2` metadata is minified, so a version without `require` did not drop its requirements.** `repo.packagist.org/p2/<vendor>/<name>.json` lists versions newest first and writes only the fields that change from the entry before it; a missing `require` means "same as the previous, newer entry", and a field that disappears is written as `"__unset"`. The minifier leaves `require` out of every consecutive version that repeats it, so reading only the entries that carry the key can put a version boundary several releases late. To answer "since which version does package X accept Y", read the dependency at the tags on both sides of the boundary instead:
 
 ```bash
 for v in v13.4.25 v13.4.26; do
