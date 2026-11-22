@@ -98,3 +98,15 @@ grep api.github.com "$log"
 A dry run downloads no dists. An install, with or without the entry, fetches each GitHub-hosted dist from `api.github.com/repos/<owner>/<repo>/zipball/<sha>`, which redirects to `codeload.github.com`; an install from a `composer.lock` makes no other GitHub API request.
 
 If the source has to stay a VCS repository, add `"no-api": true` to the entry (Composer then clones with git instead of calling the API), or authenticate Composer in CI (`composer config --global github-oauth.github.com "$GITHUB_TOKEN"`) for the higher authenticated limit.
+
+**Packagist's `p2` metadata is minified, so a version without `require` did not drop its requirements.** `repo.packagist.org/p2/<vendor>/<name>.json` lists versions newest first and writes only the fields that change from the entry before it; a missing `require` means "same as the previous, newer entry", and a field that disappears is written as `"__unset"`. The minifier leaves `require` out of every consecutive version that repeats it, so reading only the entries that carry the key can put a version boundary several releases late. To answer "since which version does package X accept Y", read the dependency at the tags on both sides of the boundary instead:
+
+```bash
+for v in v13.4.25 v13.4.26; do
+  printf '%s ' "$v"
+  gh api "repos/TYPO3-CMS/core/contents/composer.json?ref=$v" --jq .content \
+    | base64 -d | jq -r '.require["firebase/php-jwt"]'
+done
+```
+
+Seen on 2026-11-22: filtering the `p2` entries of `typo3/cms-core` for a `require` key suggested that 13.4.27 was the first release accepting `firebase/php-jwt` 7.x; the tags show `^6.10.2 || ^7.0.2` already at 13.4.26 and `^6.10.2` at 13.4.25. The file says so itself (`"minified": "composer/2.0"`), and Composer's own client expands it: `composer show --all <vendor>/<name> <version>` prints the full requirements of one version.
