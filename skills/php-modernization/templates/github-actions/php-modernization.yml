@@ -57,7 +57,10 @@ jobs:
         uses: shivammathur/setup-php@v2  # nosemgrep: github-actions-mutable-action-tag
         with:
           php-version: ${{ inputs.php-version }}
-          coverage: none
+          # Infection needs a coverage driver (pcov, phpdbg or xdebug) for the
+          # PR diff run; without one it stops before mutating anything. pcov
+          # is enough: Infection reads line coverage.
+          coverage: pcov
           tools: composer:v2
 
       - name: Install composer dependencies
@@ -71,35 +74,54 @@ jobs:
       - name: Run verifier (JSON)
         id: verify-json
         run: |
+          # Without pipefail the exit code of tee hides a failing verifier
+          set -o pipefail
           uv run skills/php-modernization/scripts/verify_php_project.py \
             --root . --format json | tee php-modernization-report.json
 
+      # The steps below report; !cancelled() keeps them running after a
+      # failing verifier or orchestrator step, so the job is red and still
+      # produces the SARIF upload, the artifacts and the PR comment. They are
+      # skipped when the JSON verifier was skipped, i.e. a setup step failed,
+      # so the root cause is not buried under secondary failures.
       - name: Run verifier (SARIF)
-        if: ${{ inputs.enable-sarif }}
+        id: sarif
+        if: ${{ !cancelled() && steps.verify-json.outcome != 'skipped' && inputs.enable-sarif }}
         run: |
+          set -o pipefail
+          rc=0
           uv run skills/php-modernization/scripts/verify_php_project.py \
-            --root . --format sarif | tee php-modernization.sarif
+            --root . --format sarif | tee php-modernization.sarif || rc=$?
+          # Upload only a complete SARIF document: a crash leaves an empty or
+          # partial file, a failing verifier (exit 1) a complete one.
+          if python3 -c 'import json,sys; json.load(open(sys.argv[1]))' php-modernization.sarif 2>/dev/null; then
+            echo "valid=true" >> "$GITHUB_OUTPUT"
+          fi
+          exit "$rc"
 
       - name: Upload SARIF to code scanning
-        if: ${{ inputs.enable-sarif }}
+        if: ${{ !cancelled() && steps.sarif.outputs.valid == 'true' }}
         uses: github/codeql-action/upload-sarif@v3  # nosemgrep: github-actions-mutable-action-tag
         with:
           sarif_file: php-modernization.sarif
           category: php-modernization
 
       - name: Run orchestrator (dry-run)
-        if: ${{ inputs.enable-infection-diff && github.event_name == 'pull_request' }}
+        if: ${{ !cancelled() && steps.verify-json.outcome != 'skipped' && inputs.enable-infection-diff && github.event_name == 'pull_request' }}
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
+          # Without pipefail the exit code of tee hides a failing gate
+          set -o pipefail
           uv run skills/php-modernization/scripts/modernize_loop.py \
             --mode dry-run \
             --git-diff-base="origin/${BASE_REF}" \
             | tee modernize-loop.json
 
       - name: Run orchestrator (dry-run, no infection)
-        if: ${{ !inputs.enable-infection-diff || github.event_name != 'pull_request' }}
+        if: ${{ !cancelled() && steps.verify-json.outcome != 'skipped' && (!inputs.enable-infection-diff || github.event_name != 'pull_request') }}
         run: |
+          set -o pipefail
           uv run skills/php-modernization/scripts/modernize_loop.py \
             --mode dry-run \
             --tools rector,php-cs-fixer,phpcs,lint,phpstan,phpunit \
@@ -117,23 +139,48 @@ jobs:
             .build/php-modernization/
           if-no-files-found: ignore
 
+      # One marked comment per pull request, updated on every push. Skipped for
+      # pull requests from forks, whose token cannot write comments.
       - name: PR summary comment
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ !cancelled() && steps.verify-json.outcome != 'skipped' && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          COMMENT_MARKER: "<!-- php-modernization-verifier -->"
         run: |
+          set -o pipefail
           uv run skills/php-modernization/scripts/verify_php_project.py \
-            --root . --format json --summary --no-cache > php-modernization-summary.json
+            --root . --format json --summary --no-cache > php-modernization-summary.json \
+            || [ "$?" = 1 ]  # exit 1 = failures found; the status below decides
 
           status=$(python3 -c 'import json,sys; print(json.load(open("php-modernization-summary.json")).get("summary",{}).get("status","fail"))')
+          marker="$COMMENT_MARKER"
+          # Only this workflow's own comment: anyone can post the marker, and a
+          # foreign comment cannot (and must not) be edited with this token
+          comment_id=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith(env.COMMENT_MARKER))) | .id' \
+            | tail -n 1)
           if [ "$status" = "fail" ]; then
             {
+              echo "$marker"
               echo "### php-modernization verifier — failures detected"
               echo
               echo '```json'
               cat php-modernization-summary.json
               echo '```'
             } > php-modernization-comment.md
-            gh pr comment "${{ github.event.pull_request.number }}" \
-              --body-file php-modernization-comment.md
+          elif [ -n "$comment_id" ]; then
+            # An earlier push reported failures; say they are gone
+            {
+              echo "$marker"
+              echo "### php-modernization verifier — no failures"
+            } > php-modernization-comment.md
+          else
+            exit 0
+          fi
+          if [ -n "$comment_id" ]; then
+            gh api -X PATCH "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
+              -F body=@php-modernization-comment.md > /dev/null
+          else
+            gh pr comment "$PR_NUMBER" --body-file php-modernization-comment.md
           fi
