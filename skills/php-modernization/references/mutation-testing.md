@@ -29,11 +29,20 @@ vendor/bin/infection \
   --min-msi=80
 ```
 
-Mutates **only** the lines changed in the current branch versus the base. Typical runtime: under a minute on a normal PR. High signal: every escaped mutant maps to code the developer just wrote or touched.
+Mutates **only** the lines changed in the current branch versus the merge base (Infection runs `git merge-base <base> HEAD` itself; in a shallow clone it falls back to the base ref, so check out the full history). Typical runtime: under a minute on a normal PR. High signal: every escaped mutant maps to code the developer just wrote or touched.
 
 This is the default mode for PR gates. It scales: a 5000-line codebase with a 30-line PR runs in seconds.
 
 `--git-diff-lines` (rather than `--git-diff-filter`) restricts mutation to the changed *lines*, not entire files. Without it, a one-line change pulls the whole file into mutation scope.
+
+#### Generation scope
+
+State which mutants a diff run creates; it decides the run's size, not only which survivors you read.
+
+- **A change to production code only: `--git-diff-lines`.** Infection keeps a mutant when the line range of the mutated node overlaps a changed line range (Infection 0.32.7 and 0.35.12). `--git-diff-filter=AM` selects changed *files* and mutates every line in them: in a measured one-line edit of production code that was 25 mutants instead of 1. The two options exclude each other.
+- **A one-line edit must not mutate an unrelated expression in the same file.** If the edit turns `if ($total > $threshold)` into `>=`, and the same method computes `$bonus = $rate * 2` on an unchanged line, a line-limited run mutates the `if` line only. A run that also mutates `* 2` was not limited to the change.
+- **Widen the selection where the effect of a change does not sit in changed source lines:** a test-only change (no source line changed, so `--git-diff-lines` generates nothing; mutate the classes the changed tests cover, or leave them to the full run and say so), a shared fixture, base test case or PHPUnit/Infection configuration (run the affected directories or the full set), and an edit to one line of a multiline expression (only mutants whose own node touches a changed line are kept; widen to that file).
+- **Count the generated mutants, not only the relevant survivors.** A file-wide run with no survivor in the changed lines reads like a passing line-limited run. Compare `stats.totalMutantsCount` in the JSON log with what the changed lines can produce.
 
 ### Full Mode (scheduled, not per-PR)
 
@@ -59,11 +68,10 @@ Strategy:
 # Initial baseline run
 vendor/bin/infection \
   --initial-tests-php-options="-d memory_limit=2G" \
-  --threads=$(nproc) \
-  --only-covered
+  --threads=$(nproc)
 ```
 
-`--only-covered` skips mutating uncovered code (the report would be misleading if you can't kill mutants in lines no test executes). For a legacy baseline, this gives you a cleaner picture of what your *existing* tests cover semantically.
+Since Infection 0.31 uncovered code is not mutated by default; `--only-covered` was removed then, and Infection 0.35 rejects it as an unknown option. The default run skips mutants in lines no test executes, which for a legacy baseline gives a cleaner picture of what the *existing* tests check semantically. Add `--with-uncovered` only to measure how much code no test reaches.
 
 ## Configuration
 
@@ -109,7 +117,7 @@ Key options:
 
 ### `minMsi` vs `minCoveredMsi`
 
-- **MSI (Mutation Score Indicator)**: killed mutants ÷ total mutants generated. Includes mutants in uncovered code (which can never be killed by definition, so they always escape).
+- **MSI (Mutation Score Indicator)**: killed mutants ÷ total mutants generated. It includes mutants in uncovered code only when the run passes `--with-uncovered` (Infection 0.31 and later); without the flag MSI equals Covered MSI, and `minMsi` and `minCoveredMsi` compare the same number.
 - **Covered MSI**: killed mutants ÷ mutants in covered code. The pure measure of your test suite's mutation-killing ability.
 
 Gate on **`minCoveredMsi`** for PR diffs (you want the new code's tests to be sharp). Gate on **`minMsi`** for full runs (you also want overall coverage to grow).
