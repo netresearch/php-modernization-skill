@@ -665,7 +665,7 @@ llm_reviews:
       If `infection.json` or `infection.json5` exists, evaluate whether the project follows
       the recommended Infection strategy (see references/mutation-testing.md):
       1. Diff-mode (--git-diff-base) configured for PR runs
-      2. The PR diff run passes --with-uncovered and fails on any escaped or not covered mutant in the changed lines, and when no test executed the changed files (no MSI percentage there); MSI thresholds (>= 70 baseline) gate the scheduled full run
+      2. The PR diff run passes --with-uncovered and fails on any escaped or not covered mutant in the changed lines, and when no test executed the changed files or no mutant was generated (no MSI percentage there); MSI thresholds (>= 70 baseline) gate the scheduled full run
       3. Excluded paths cover legitimate non-test surface (logging, debug-only, generated code)
       4. CI invokes Infection on PR diff, not full codebase per push
       Report deviations and suggest configuration improvements.

@@ -43,6 +43,8 @@ This is the default mode for PR gates. It scales: a 5000-line codebase with a 30
 
 When the diff holds no source line to mutate, Infection prints "Could not find any modified …" or "No source file found for the filter applied …" (a changed file that `source.excludes` drops), exits 0 and writes no log; accept a missing log only then. "No source code from the diff was executed …" also comes with exit 0 and no log, with or without `--with-uncovered`, but it means that no test executed any line of the changed files. A new class without a test produces it, so treat it as a failure. A diff of declarations only (an interface, abstract method signatures, constants) produces the same message, because it has no executable line. Tell the two apart by reading the changed lines: a changed statement inside a function or method body means a test is missing; a diff of signatures and declarations alone is the case the gate cannot judge. The job stays red for such a diff and nothing passes it automatically: a reviewer confirms that the changed lines hold declarations only and merges past the red job. Keep the mutation job out of the required status checks, so that this merge needs no branch-protection bypass; the reviewer's written confirmation in the pull request is the record.
 
+A log with 0 generated mutants fails as well. The changed lines then hold nothing Infection mutates: it skips abstract method signatures and interface methods (`AbstractMethodIgnorer`, `InterfaceIgnorer` in 0.35.12), and comments or constants give no mutant either. "No source code from the diff was executed" does not appear when other, tested lines of the same file ran, so this is how a declarations-only change in a tested class shows up. It is handled the same way: the job stays red and a reviewer confirms it.
+
 The MSI thresholds gate the scheduled full run only. `modernize_loop.py --git-diff-base` applies exactly this rule.
 
 `--git-diff-lines` (rather than `--git-diff-filter`) restricts mutation to the changed *lines*, not entire files. Without it, a one-line change pulls the whole file into mutation scope.
@@ -171,6 +173,11 @@ GitHub Actions, diff mode on PRs:
       # --logger-github annotates escaped mutants only; list both with their location
       jq -r '(.escaped[]?, .uncovered[]?) | "\(.mutator.originalFilePath):\(.mutator.originalStartLine) \(.mutator.mutatorName)"' infection-diff.json
       echo "::error::$escaped escaped and $not_covered not covered mutant(s) in the changed lines"
+      exit 1
+    fi
+    # 0 mutants: nothing in the changed lines was judged (see Diff Mode)
+    if [ "$(jq -e '.stats.totalMutantsCount' infection-diff.json)" = 0 ]; then
+      echo "::error::no mutant generated from the changed lines"
       exit 1
     fi
   env:

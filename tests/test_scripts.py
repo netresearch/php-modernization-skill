@@ -1373,6 +1373,59 @@ class ModernizeLoopTest(unittest.TestCase):
             self.assertEqual(outcome["status"], "fail", outcome)
             self.assertIn("2 not covered", outcome["summary"])
 
+    @unittest.skipIf(os.geteuid() == 0, "root writes read-only files")
+    def test_infection_diff_ignores_a_stale_text_report(self) -> None:
+        # The report of an earlier run must not answer for this one when the
+        # new report cannot be written.
+        with TempProject("fully-modern") as root:
+            self._fake_infection(
+                root,
+                " [OK] No source code from the diff was executed by the test"
+                " framework.",
+                None,
+            )
+            report = root / ".build" / "php-modernization" / "infection.txt"
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(
+                " [OK] Could not find any modified lines\n", encoding="utf-8"
+            )
+            report.chmod(0o444)
+            outcome = self._run_infection_diff(root)
+            self.assertEqual(outcome["status"], "fail", outcome)
+
+    @unittest.skipIf(os.geteuid() == 0, "root writes into read-only directories")
+    def test_infection_diff_without_a_text_report_is_an_error(self) -> None:
+        with TempProject("fully-modern") as root:
+            self._fake_infection(root, " [OK] Could not find any modified lines", None)
+            artifacts = root / ".build" / "php-modernization"
+            artifacts.mkdir(parents=True, exist_ok=True)
+            artifacts.chmod(0o555)
+            try:
+                outcome = self._run_infection_diff(root)
+            finally:
+                artifacts.chmod(0o755)
+            self.assertEqual(outcome["status"], "error", outcome)
+
+    def test_infection_diff_fails_when_no_mutant_was_generated(self) -> None:
+        # A log with 0 mutants: the changed lines hold nothing Infection
+        # mutates (an abstract method signature in a tested class, say). The
+        # run cannot judge the change, so it does not pass.
+        with TempProject("fully-modern") as root:
+            self._fake_infection(
+                root,
+                "",
+                {
+                    "stats": {
+                        "totalMutantsCount": 0,
+                        "escapedCount": 0,
+                        "notCoveredCount": 0,
+                    }
+                },
+            )
+            outcome = self._run_infection_diff(root)
+            self.assertEqual(outcome["status"], "fail", outcome)
+            self.assertIn("no mutant", outcome["summary"])
+
     def test_infection_diff_without_not_covered_count_is_an_error(self) -> None:
         # A log without notCoveredCount cannot show that no changed line is
         # untested; reading it as 0 would pass an unchecked run.

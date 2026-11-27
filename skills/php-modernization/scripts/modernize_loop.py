@@ -19,7 +19,8 @@ Runs the project's own tools in a fixed order, in either dry-run mode
 5. phpunit         — the project's test suite, when it has a PHPUnit config
 6. infection-diff  — mutation testing of the changed lines (PR mode); fails on
                      any escaped or not covered mutant there, and when no test
-                     executed the changed files; no MSI threshold
+                     executed the changed files or none was generated; no
+                     MSI threshold
 
 Refactoring runs before formatting, so the formatter tidies what Rector
 wrote; the checks run last, on the final code. In apply mode Rector runs a
@@ -931,6 +932,19 @@ def run_infection_diff(ctx: Context, *, git_diff_base: str) -> ToolResult:
         return _missing("infection-diff", "infection")
     log = _ensure_artifact_dir(ctx.root) / "infection.json"
     log.unlink(missing_ok=True)
+    # The text report of an earlier run must not answer for this one when
+    # the new one cannot be written.
+    try:
+        (log.parent / "infection.txt").unlink(missing_ok=True)
+    except OSError as exc:
+        return ToolResult(
+            "infection-diff",
+            "error",
+            None,
+            "(not run)",
+            0.0,
+            f"infection diff: cannot remove the previous report ({exc})",
+        )
     threads = str(os.cpu_count() or 1)
     cmd = [
         str(binary),
@@ -963,11 +977,15 @@ def run_infection_diff(ctx: Context, *, git_diff_base: str) -> ToolResult:
         not_covered = int(stats["notCoveredCount"])
         generated = int(stats["totalMutantsCount"])
     except FileNotFoundError:
-        output = (
-            (ctx.root / result.artifact).read_text(encoding="utf-8")
-            if result.artifact
-            else ""
-        )
+        try:
+            output = (
+                (ctx.root / result.artifact).read_text(encoding="utf-8")
+                if result.artifact
+                else ""
+            )
+        except OSError:
+            # No report: no message to accept, so the run ends in "error".
+            output = ""
         if _INFECTION_NO_TEST_RAN_THE_DIFF.search(output):
             result.status = "fail"
             result.summary = (
@@ -991,6 +1009,15 @@ def run_infection_diff(ctx: Context, *, git_diff_base: str) -> ToolResult:
         result.summary = (
             f"infection diff: {escaped} escaped and {not_covered} not covered"
             f" mutant(s) in the changed lines ({generated} generated)"
+        )
+    elif not generated:
+        # Changed lines Infection does not mutate (an abstract method
+        # signature or a constant beside tested code, a comment): the run
+        # cannot judge the change, and a reviewer confirms it.
+        result.status = "fail"
+        result.summary = (
+            "infection diff: no mutant generated from the changed lines;"
+            " add the test, or confirm the diff holds declarations only"
         )
     else:
         result.summary = (
