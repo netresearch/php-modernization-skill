@@ -1238,37 +1238,215 @@ class ModernizeLoopTest(unittest.TestCase):
             summary = json.loads(result.stdout)["results"][0]["summary"]
             self.assertIn("not checked", summary)
 
-    def test_infection_keeps_the_project_min_msi(self) -> None:
-        cases = (
-            ({"infection.json5": '{"minMsi": 95}'}, False),
-            ({"infection.json5": "{}"}, True),
-            ({"infection.json5.dist": '{"minMsi": 60}'}, False),
-            # Infection loads infection.json5 first; a minMsi elsewhere is
-            # not the threshold it runs with.
-            ({"infection.json5": "{}", "infection.json.dist": '{"minMsi": 60}'}, True),
-            # A commented-out minMsi sets nothing; Infection runs without one.
-            ({"infection.json5": "{\n  // minMsi: 95\n}"}, True),
-            ({"infection.json5": "{ /* minMsi: 1 */ minMsi: 70 }"}, False),
+    def _fake_infection(self, root: Path, stdout: str, log: dict | None) -> None:
+        """A vendor/bin/infection that writes the log to its --logger-json path."""
+        fake_tool(root, "infection", exit_code=0, stdout=stdout)
+        binary = root / "vendor" / "bin" / "infection"
+        if log is not None:
+            payload = json.dumps(log).replace("'", "'\\''")
+            binary.write_text(
+                binary.read_text(encoding="utf-8").replace(
+                    "exit 0\n",
+                    'for a in "$@"; do case "$a" in --logger-json=*) '
+                    f"printf '%s' '{payload}' > \"${{a#--logger-json=}}\";; esac; done\n"
+                    "exit 0\n",
+                ),
+                encoding="utf-8",
+            )
+
+    def _run_infection_diff(self, root: Path) -> dict:
+        result = run_py(
+            "modernize_loop.py",
+            "--root",
+            root,
+            "--tools",
+            "infection-diff",
+            "--git-diff-base",
+            "origin/main",
         )
-        for files, expected in cases:
+        return json.loads(result.stdout)["results"][0]
+
+    def test_infection_diff_passes_no_msi_threshold(self) -> None:
+        # The diff run gates on escaped and not covered mutants, never on an MSI percentage:
+        # the project's thresholds belong to the scheduled full run.
+        for files in ({"infection.json5": '{"minMsi": 95}'}, {}):
             with (
                 self.subTest(files=sorted(files)),
                 TempProject("fully-modern") as root,
             ):
-                fake_tool(root, "infection", exit_code=0)
+                self._fake_infection(
+                    root,
+                    "",
+                    {
+                        "stats": {
+                            "totalMutantsCount": 2,
+                            "escapedCount": 0,
+                            "notCoveredCount": 0,
+                        }
+                    },
+                )
                 for name, text in files.items():
                     (root / name).write_text(text, encoding="utf-8")
-                run_py(
-                    "modernize_loop.py",
-                    "--root",
-                    root,
-                    "--tools",
-                    "infection-diff",
-                    "--git-diff-base",
-                    "origin/main",
-                )
-                args = (root / "vendor" / "bin" / "infection.args").read_text()
-                self.assertEqual("--min-msi=80" in args.split(), expected)
+                self._run_infection_diff(root)
+                args = (root / "vendor" / "bin" / "infection.args").read_text().split()
+                self.assertIn("--min-msi=0", args)
+                self.assertIn("--min-covered-msi=0", args)
+                self.assertIn("--git-diff-lines", args)
+                self.assertTrue(any(a.startswith("--logger-json=") for a in args), args)
+
+    def test_infection_diff_fails_on_an_escaped_mutant(self) -> None:
+        cases = (
+            (
+                {
+                    "stats": {
+                        "totalMutantsCount": 3,
+                        "escapedCount": 1,
+                        "notCoveredCount": 0,
+                    }
+                },
+                "fail",
+                "1 escaped",
+            ),
+            (
+                {
+                    "stats": {
+                        "totalMutantsCount": 3,
+                        "escapedCount": 0,
+                        "notCoveredCount": 0,
+                    }
+                },
+                "pass",
+                "3 generated",
+            ),
+        )
+        for log, status, text in cases:
+            with self.subTest(log=log), TempProject("fully-modern") as root:
+                self._fake_infection(root, "", log)
+                outcome = self._run_infection_diff(root)
+                self.assertEqual(outcome["status"], status, outcome)
+                self.assertIn(text, outcome["summary"])
+
+    def test_infection_diff_without_a_log(self) -> None:
+        # Infection writes no log when the diff holds no source line; any
+        # other run without a log checked nothing and must not pass.
+        nothing = (
+            " [OK] Could not find any modified lines for the git filter"
+            ' "AM" and the base "origin/main".'
+        )
+        excluded = (
+            " [OK] No source file found for the filter applied to the configured"
+            ' sources. The git filter used was: "AM".'
+        )
+        cases = (
+            (
+                nothing,
+                "pass",
+            ),
+            (excluded, "pass"),
+            ("Infection - PHP Mutation Testing Framework", "error"),
+        )
+        for stdout, status in cases:
+            with self.subTest(stdout=stdout), TempProject("fully-modern") as root:
+                self._fake_infection(root, stdout, None)
+                outcome = self._run_infection_diff(root)
+                self.assertEqual(outcome["status"], status, outcome)
+
+    def test_infection_diff_fails_on_an_uncovered_mutant(self) -> None:
+        # A method no test calls, added to a tested class: without
+        # --with-uncovered Infection drops its nodes and reports 0 generated.
+        # With the flag they count as not covered, and the run must fail.
+        with TempProject("fully-modern") as root:
+            self._fake_infection(
+                root,
+                "",
+                {
+                    "stats": {
+                        "totalMutantsCount": 2,
+                        "escapedCount": 0,
+                        "notCoveredCount": 2,
+                    }
+                },
+            )
+            outcome = self._run_infection_diff(root)
+            args = (root / "vendor" / "bin" / "infection.args").read_text().split()
+            self.assertIn("--with-uncovered", args)
+            self.assertEqual(outcome["status"], "fail", outcome)
+            self.assertIn("2 not covered", outcome["summary"])
+
+    @unittest.skipIf(os.geteuid() == 0, "root writes read-only files")
+    def test_infection_diff_ignores_a_stale_text_report(self) -> None:
+        # The report of an earlier run must not answer for this one when the
+        # new report cannot be written.
+        with TempProject("fully-modern") as root:
+            self._fake_infection(
+                root,
+                " [OK] No source code from the diff was executed by the test"
+                " framework.",
+                None,
+            )
+            report = root / ".build" / "php-modernization" / "infection.txt"
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(
+                " [OK] Could not find any modified lines\n", encoding="utf-8"
+            )
+            report.chmod(0o444)
+            outcome = self._run_infection_diff(root)
+            self.assertEqual(outcome["status"], "fail", outcome)
+
+    @unittest.skipIf(os.geteuid() == 0, "root writes into read-only directories")
+    def test_infection_diff_without_a_text_report_is_an_error(self) -> None:
+        with TempProject("fully-modern") as root:
+            self._fake_infection(root, " [OK] Could not find any modified lines", None)
+            artifacts = root / ".build" / "php-modernization"
+            artifacts.mkdir(parents=True, exist_ok=True)
+            artifacts.chmod(0o555)
+            try:
+                outcome = self._run_infection_diff(root)
+            finally:
+                artifacts.chmod(0o755)
+            self.assertEqual(outcome["status"], "error", outcome)
+
+    def test_infection_diff_fails_when_no_mutant_was_generated(self) -> None:
+        # A log with 0 mutants: the changed lines hold nothing Infection
+        # mutates (an abstract method signature in a tested class, say). The
+        # run cannot judge the change, so it does not pass.
+        with TempProject("fully-modern") as root:
+            self._fake_infection(
+                root,
+                "",
+                {
+                    "stats": {
+                        "totalMutantsCount": 0,
+                        "escapedCount": 0,
+                        "notCoveredCount": 0,
+                    }
+                },
+            )
+            outcome = self._run_infection_diff(root)
+            self.assertEqual(outcome["status"], "fail", outcome)
+            self.assertIn("no mutant", outcome["summary"])
+
+    def test_infection_diff_without_not_covered_count_is_an_error(self) -> None:
+        # A log without notCoveredCount cannot show that no changed line is
+        # untested; reading it as 0 would pass an unchecked run.
+        with TempProject("fully-modern") as root:
+            self._fake_infection(
+                root, "", {"stats": {"totalMutantsCount": 2, "escapedCount": 0}}
+            )
+            outcome = self._run_infection_diff(root)
+            self.assertEqual(outcome["status"], "error", outcome)
+
+    def test_infection_diff_fails_when_no_test_executed_the_diff(self) -> None:
+        # A new class no test executes: Infection prints this, exits 0 and
+        # writes no log. The diff has source lines; no test ran them.
+        stdout = (
+            " [OK] No source code from the diff was executed by the test framework."
+        )
+        with TempProject("fully-modern") as root:
+            self._fake_infection(root, stdout, None)
+            outcome = self._run_infection_diff(root)
+            self.assertEqual(outcome["status"], "fail", outcome)
+            self.assertIn("no test executed", outcome["summary"])
 
     def test_binary_under_a_custom_vendor_dir(self) -> None:
         with TempProject("fully-modern") as root:

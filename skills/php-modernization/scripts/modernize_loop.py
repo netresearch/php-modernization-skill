@@ -17,7 +17,10 @@ Runs the project's own tools in a fixed order, in either dry-run mode
 3. lint            — syntax, with parallel-lint when installed, else ``php -l``
 4. phpstan         — static analysis
 5. phpunit         — the project's test suite, when it has a PHPUnit config
-6. infection-diff  — mutation testing of the changed lines (PR mode)
+6. infection-diff  — mutation testing of the changed lines (PR mode); fails on
+                     any escaped or not covered mutant there, and when no test
+                     executed the changed files or none was generated; no
+                     MSI threshold
 
 Refactoring runs before formatting, so the formatter tidies what Rector
 wrote; the checks run last, on the final code. In apply mode Rector runs a
@@ -901,87 +904,126 @@ def run_phpunit(ctx: Context) -> ToolResult:
     )
 
 
-def _infection_sets_min_msi(root: Path) -> bool:
-    """Whether the config Infection loads sets its own minMsi.
-
-    Infection loads the first of these that exists (0.35.11,
-    SchemaConfigurationLoader::POSSIBLE_DEFAULT_CONFIG_FILE_NAMES).
-    """
-    for name in (
-        "infection.json5",
-        "infection.json",
-        "infection.json5.dist",
-        "infection.json.dist",
-    ):
-        try:
-            text = (root / name).read_text(encoding="utf-8")
-        except OSError:
-            continue
-        # A commented-out "// minMsi: 80" sets nothing.
-        return bool(_MIN_MSI_KEY_RE.search(_strip_json5_comments(text)))
-    return False
-
-
-_MIN_MSI_KEY_RE = re.compile(r"""(?:^|[{,])\s*["']?minMsi["']?\s*:""")
-
-
-def _strip_json5_comments(text: str) -> str:
-    """The text without // and /* */ comments; string contents are kept."""
-    out: list[str] = []
-    quote: str | None = None
-    i = 0
-    while i < len(text):
-        char = text[i]
-        if quote:
-            out.append(char)
-            if char == "\\" and i + 1 < len(text):
-                out.append(text[i + 1])
-                i += 2
-                continue
-            if char == quote:
-                quote = None
-        elif char in "\"'":
-            quote = char
-            out.append(char)
-        elif text.startswith("//", i):
-            end = text.find("\n", i)
-            i = len(text) if end < 0 else end
-            continue
-        elif text.startswith("/*", i):
-            end = text.find("*/", i + 2)
-            i = len(text) if end < 0 else end + 2
-            continue
-        else:
-            out.append(char)
-        i += 1
-    return "".join(out)
+# Infection prints one of these and writes no log when the diff holds no
+# source line to mutate (NoSourceFound with isSourceFiltered, 0.32.7-0.35.12).
+_INFECTION_NOTHING_TO_MUTATE = re.compile(
+    r"Could not find any modified|No source file found for the filter applied"
+)
+# Printed the same way, exit 0 and no log, when no test executed a line of the
+# changed files: a new class without a test, or a diff of declarations only
+# (an interface, abstract method signatures, constants). Never a pass.
+_INFECTION_NO_TEST_RAN_THE_DIFF = re.compile(
+    r"No source code from the diff was executed"
+)
 
 
 def run_infection_diff(ctx: Context, *, git_diff_base: str) -> ToolResult:
+    """Mutation testing of the changed lines, gated on escaped and uncovered mutants.
+
+    A diff run holds a handful of mutants, so an MSI percentage is noise
+    there: the thresholds are zeroed and any escaped or not covered mutant in
+    the changed lines fails the run. --with-uncovered makes changed lines no
+    test executes count as not covered instead of generating nothing. The
+    project's MSI thresholds gate the scheduled full run only. --logger-json
+    needs Infection 0.35.11 or later.
+    """
     binary = find_binary(ctx.root, "infection", ctx.composer)
     if binary is None:
         return _missing("infection-diff", "infection")
+    log = _ensure_artifact_dir(ctx.root) / "infection.json"
+    log.unlink(missing_ok=True)
+    # The text report of an earlier run must not answer for this one when
+    # the new one cannot be written.
+    try:
+        (log.parent / "infection.txt").unlink(missing_ok=True)
+    except OSError as exc:
+        return ToolResult(
+            "infection-diff",
+            "error",
+            None,
+            "(not run)",
+            0.0,
+            f"infection diff: cannot remove the previous report ({exc})",
+        )
     threads = str(os.cpu_count() or 1)
     cmd = [
         str(binary),
         f"--git-diff-base={git_diff_base}",
         "--git-diff-lines",
+        "--with-uncovered",
         f"--threads={threads}",
-        *([] if _infection_sets_min_msi(ctx.root) else ["--min-msi=80"]),
+        "--min-msi=0",
+        "--min-covered-msi=0",
+        f"--logger-json={log}",
         "--logger-github",
         "--formatter=summary",
     ]
-    return _execute(
+    result = _execute(
         ctx,
         "infection-diff",
         cmd,
         "infection.txt",
         lambda rc: (
-            ("pass", "infection diff: MSI threshold met")
+            ("pass", "infection diff: ran")
             if rc == 0
-            else ("fail", f"infection diff: below MSI (exit {rc})")
+            else ("fail", f"infection diff: exit {rc}")
         ),
     )
+    if result.status != "pass":
+        return result
+    try:
+        stats = json.loads(log.read_text(encoding="utf-8"))["stats"]
+        escaped = int(stats["escapedCount"])
+        not_covered = int(stats["notCoveredCount"])
+        generated = int(stats["totalMutantsCount"])
+    except FileNotFoundError:
+        try:
+            output = (
+                (ctx.root / result.artifact).read_text(encoding="utf-8")
+                if result.artifact
+                else ""
+            )
+        except OSError:
+            # No report: no message to accept, so the run ends in "error".
+            output = ""
+        if _INFECTION_NO_TEST_RAN_THE_DIFF.search(output):
+            result.status = "fail"
+            result.summary = (
+                "infection diff: no test executed any line of the changed files;"
+                " add the test, or confirm the diff holds declarations only"
+                " (interface, abstract method, constant)"
+            )
+            return result
+        if _INFECTION_NOTHING_TO_MUTATE.search(output):
+            result.summary = "infection diff: no changed source line to mutate"
+            return result
+        result.status = "error"
+        result.summary = f"infection diff: no JSON log at {log.relative_to(ctx.root)}"
+        return result
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        result.status = "error"
+        result.summary = f"infection diff: unreadable JSON log ({exc})"
+        return result
+    if escaped or not_covered:
+        result.status = "fail"
+        result.summary = (
+            f"infection diff: {escaped} escaped and {not_covered} not covered"
+            f" mutant(s) in the changed lines ({generated} generated)"
+        )
+    elif not generated:
+        # Changed lines Infection does not mutate (an abstract method
+        # signature or a constant beside tested code, a comment): the run
+        # cannot judge the change, and a reviewer confirms it.
+        result.status = "fail"
+        result.summary = (
+            "infection diff: no mutant generated from the changed lines;"
+            " add the test, or confirm the diff holds declarations only"
+        )
+    else:
+        result.summary = (
+            f"infection diff: no escaped or not covered mutant ({generated} generated)"
+        )
+    return result
 
 
 # ---------------------------------------------------------------------------

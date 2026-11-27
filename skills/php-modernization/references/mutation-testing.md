@@ -25,15 +25,38 @@ When you make a large mechanical change and the test suite stays green, mutation
 vendor/bin/infection \
   --git-diff-base=origin/main \
   --git-diff-lines \
+  --with-uncovered \
   --threads=$(nproc) \
-  --min-msi=80
+  --min-msi=0 \
+  --min-covered-msi=0 \
+  --logger-json=infection-diff.json
+# The gate (escaped and not covered counts, missing log) is in the CI example under CI Integration.
 ```
 
-Mutates **only** the lines changed in the current branch versus the base. Typical runtime: under a minute on a normal PR. High signal: every escaped mutant maps to code the developer just wrote or touched.
+Mutates **only** the lines changed in the current branch versus the merge base (Infection runs `git merge-base <base> HEAD` itself; in a shallow clone it falls back to the base ref, so check out the full history). Typical runtime: under a minute on a normal PR. High signal: every escaped mutant maps to code the developer just wrote or touched.
 
 This is the default mode for PR gates. It scales: a 5000-line codebase with a 30-line PR runs in seconds.
 
+**The PR gate is the escaped and not covered count, not an MSI percentage.** Over a handful of mutants one escape moves the score by tens of points, so the thresholds are zeroed (overriding `minMsi`/`minCoveredMsi` from `infection.json5`) and the run fails on any escaped or not covered mutant in the changed lines, read from `stats.escapedCount` and `stats.notCoveredCount` of the JSON log (`--logger-json` needs Infection 0.35.11; on older versions set `logs.json` in the config).
+
+`--with-uncovered` is part of the gate. Without it Infection drops the nodes no test executes before it creates mutants: a method no test calls, added to a tested class, yields 0 mutants and the run passes. With it, those mutants are counted in `notCoveredCount`.
+
+When the diff holds no source line to mutate, Infection prints "Could not find any modified …" or "No source file found for the filter applied …" (a changed file that `source.excludes` drops), exits 0 and writes no log; accept a missing log only then. "No source code from the diff was executed …" also comes with exit 0 and no log, with or without `--with-uncovered`, but it means that no test executed any line of the changed files. A new class without a test produces it, so treat it as a failure. A diff of declarations only (an interface, abstract method signatures, constants) produces the same message, because it has no executable line. Tell the two apart by reading the changed lines: a changed statement inside a function or method body means a test is missing; a diff of signatures and declarations alone is the case the gate cannot judge. The job stays red for such a diff and nothing passes it automatically: a reviewer confirms that the changed lines hold declarations only and merges past the red job. Keep the mutation job out of the required status checks, so that this merge needs no branch-protection bypass; the reviewer's written confirmation in the pull request is the record.
+
+A log with 0 generated mutants fails as well. The changed lines then hold nothing Infection mutates: it skips abstract method signatures and interface methods (`AbstractMethodIgnorer`, `InterfaceIgnorer` in 0.35.12), and comments or constants give no mutant either. "No source code from the diff was executed" does not appear when other, tested lines of the same file ran, so this is how a declarations-only change in a tested class shows up. It is handled the same way: the job stays red and a reviewer confirms it.
+
+The MSI thresholds gate the scheduled full run only. `modernize_loop.py --git-diff-base` applies exactly this rule.
+
 `--git-diff-lines` (rather than `--git-diff-filter`) restricts mutation to the changed *lines*, not entire files. Without it, a one-line change pulls the whole file into mutation scope.
+
+#### Generation scope
+
+State which mutants a diff run creates; it decides the run's size, not only which survivors you read.
+
+- **A change to production code only: `--git-diff-lines`.** Infection keeps a mutant when the line range of the mutated node overlaps a changed line range (Infection 0.32.7 and 0.35.12). `--git-diff-filter=AM` selects changed *files* and mutates every line in them: in a measured one-line edit of production code that was 25 mutants instead of 1. The two options exclude each other.
+- **A one-line edit must not mutate an unrelated expression in the same file.** If the edit turns `if ($total > $threshold)` into `>=`, and the same method computes `$bonus = $rate * 2` on an unchanged line, a line-limited run mutates the `if` line only. A run that also mutates `* 2` was not limited to the change.
+- **Widen the selection where the effect of a change does not sit in changed source lines:** a test-only change (no source line changed, so `--git-diff-lines` generates nothing; mutate the classes the changed tests cover, or leave them to the full run and say so), a shared fixture, base test case or PHPUnit/Infection configuration (run the affected directories or the full set), and an edit to one line of a multiline expression (only mutants whose own node touches a changed line are kept; widen to that file).
+- **Count the generated mutants, not only the relevant survivors.** A file-wide run with no survivor in the changed lines reads like a passing line-limited run. Compare `stats.totalMutantsCount` in the JSON log with what the changed lines can produce.
 
 ### Full Mode (scheduled, not per-PR)
 
@@ -51,19 +74,18 @@ The first run on a legacy codebase is ugly. Realistic numbers: 30–50% MSI, hun
 
 Strategy:
 1. Run full mode once. Record the MSI as the baseline.
-2. Set `minMsi` slightly below the current value (e.g., baseline 42% → gate at 40%).
+2. Set `minCoveredMsi` slightly below the current value (e.g., baseline 42% → gate at 40%); in a default run it is the threshold that binds.
 3. Exclude generated code, debug helpers, and anything you genuinely don't want mutated.
-4. Each sprint, ratchet `minMsi` upward.
+4. Each sprint, ratchet `minCoveredMsi` upward.
 
 ```bash
 # Initial baseline run
 vendor/bin/infection \
   --initial-tests-php-options="-d memory_limit=2G" \
-  --threads=$(nproc) \
-  --only-covered
+  --threads=$(nproc)
 ```
 
-`--only-covered` skips mutating uncovered code (the report would be misleading if you can't kill mutants in lines no test executes). For a legacy baseline, this gives you a cleaner picture of what your *existing* tests cover semantically.
+Since Infection 0.31 uncovered code is not mutated by default; `--only-covered` was removed then, and Infection 0.35 rejects it as an unknown option. The default run skips mutants in lines no test executes, which for a legacy baseline gives a cleaner picture of what the *existing* tests check semantically. In a full run, add `--with-uncovered` only to measure how much code no test reaches; the PR diff run always passes it (see Diff Mode).
 
 ## Configuration
 
@@ -91,7 +113,6 @@ Sample `infection.json5`:
     "@default": true,
     "Throw_": false
   },
-  minMsi: 70,
   minCoveredMsi: 80,
   testFramework: "phpunit",
   testFrameworkOptions: "--testsuite=unit"
@@ -109,12 +130,12 @@ Key options:
 
 ### `minMsi` vs `minCoveredMsi`
 
-- **MSI (Mutation Score Indicator)**: killed mutants ÷ total mutants generated. Includes mutants in uncovered code (which can never be killed by definition, so they always escape).
+- **MSI (Mutation Score Indicator)**: killed mutants ÷ total mutants generated. It includes mutants in uncovered code only when the run passes `--with-uncovered` (Infection 0.31 and later); without the flag MSI equals Covered MSI, and `minMsi` and `minCoveredMsi` compare the same number.
 - **Covered MSI**: killed mutants ÷ mutants in covered code. The pure measure of your test suite's mutation-killing ability.
 
-Gate on **`minCoveredMsi`** for PR diffs (you want the new code's tests to be sharp). Gate on **`minMsi`** for full runs (you also want overall coverage to grow).
+The MSI thresholds gate the **scheduled full run** only; a PR diff run fails on any escaped or not covered mutant in the changed lines instead (see Diff Mode). In a default full run both keys compare the same number; `minMsi` differs from `minCoveredMsi` only with `--with-uncovered`.
 
-A common pair: `minCoveredMsi: 80` and `minMsi: 70`. The 10-point gap absorbs the "we have a few uncovered helpers" reality without letting the suite degrade.
+A pair such as `minCoveredMsi: 80` and `minMsi: 70` only means something in a `--with-uncovered` full run, where the 10-point gap absorbs the uncovered helpers. In a default run the two compare the same number and `minCoveredMsi` alone binds; set only that one there (as the legacy ratchet above does).
 
 ## CI Integration
 
@@ -124,12 +145,41 @@ GitHub Actions, diff mode on PRs:
 - name: Mutation testing (PR diff)
   if: github.event_name == 'pull_request'
   run: |
+    set -o pipefail
     vendor/bin/infection \
       --git-diff-base="origin/${BASE_REF}" \
       --git-diff-lines \
+      --with-uncovered \
       --threads=$(nproc) \
-      --min-msi=80 \
-      --logger-github
+      --min-msi=0 \
+      --min-covered-msi=0 \
+      --logger-json=infection-diff.json \
+      --logger-github | tee infection-diff.out
+    if [ ! -f infection-diff.json ]; then
+      # No test executed a line of the changed files: a missing test, or a
+      # diff of declarations only (see Diff Mode)
+      if grep -q 'No source code from the diff was executed' infection-diff.out; then
+        echo "::error::no test executed any line of the changed files"
+        exit 1
+      fi
+      # No source line in the diff: Infection writes no log
+      grep -qE 'Could not find any modified|No source file found for the filter applied' infection-diff.out
+      exit
+    fi
+    # -e: a missing field is an error, not a zero
+    escaped=$(jq -e '.stats.escapedCount' infection-diff.json)
+    not_covered=$(jq -e '.stats.notCoveredCount' infection-diff.json)
+    if [ "$escaped" != 0 ] || [ "$not_covered" != 0 ]; then
+      # --logger-github annotates escaped mutants only; list both with their location
+      jq -r '(.escaped[]?, .uncovered[]?) | "\(.mutator.originalFilePath):\(.mutator.originalStartLine) \(.mutator.mutatorName)"' infection-diff.json
+      echo "::error::$escaped escaped and $not_covered not covered mutant(s) in the changed lines"
+      exit 1
+    fi
+    # 0 mutants: nothing in the changed lines was judged (see Diff Mode)
+    if [ "$(jq -e '.stats.totalMutantsCount' infection-diff.json)" = 0 ]; then
+      echo "::error::no mutant generated from the changed lines"
+      exit 1
+    fi
   env:
     BASE_REF: ${{ github.base_ref }}
     INFECTION_BADGE_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
@@ -215,4 +265,4 @@ In both cases the action is the same: write the test. The mutant is killed and t
 
 ## Summary
 
-Diff mode for PRs (fast, high signal). Full mode nightly (trend tracking). Baseline first on legacy, ratchet up. Gate on `minCoveredMsi` for PRs, on `minMsi` for full runs. Use `--logger-github` for actionable PR feedback. Treat escaped mutants as test gaps, not bugs — the fix is almost always a sharper test, occasionally a code fix when the mutant reveals an actual edge case.
+Diff mode for PRs (fast, high signal), failing on any escaped or not covered mutant in the changed lines. Full mode nightly (trend tracking) with the MSI gate. Baseline first on legacy, ratchet up. Use `--logger-github` for actionable PR feedback. Treat escaped mutants as test gaps, not bugs — the fix is almost always a sharper test, occasionally a code fix when the mutant reveals an actual edge case.

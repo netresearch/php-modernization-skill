@@ -1,0 +1,1 @@
+- `references/mutation-testing.md`: the legacy baseline example no longer passes `--only-covered`, which Infection removed in 0.31; MSI is described as it is since 0.31; a "Generation scope" section states when a diff run uses `--git-diff-lines` and when a wider selection is right.
