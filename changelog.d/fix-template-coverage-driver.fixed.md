@@ -1,0 +1,1 @@
+- `templates/github-actions/php-modernization.yml` sets up PHP with `coverage: pcov` instead of `coverage: none`. Without a coverage driver Infection stops before mutating anything, so the template's `infection-diff` step failed in every pull request.

@@ -57,7 +57,10 @@ jobs:
         uses: shivammathur/setup-php@v2  # nosemgrep: github-actions-mutable-action-tag
         with:
           php-version: ${{ inputs.php-version }}
-          coverage: none
+          # Infection needs a coverage driver (pcov, phpdbg or xdebug) for the
+          # PR diff run; without one it stops before mutating anything. pcov
+          # is enough: Infection reads line coverage.
+          coverage: pcov
           tools: composer:v2
 
       - name: Install composer dependencies
