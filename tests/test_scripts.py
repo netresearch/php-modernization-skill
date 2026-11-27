@@ -1313,11 +1313,16 @@ class ModernizeLoopTest(unittest.TestCase):
             " [OK] Could not find any modified lines for the git filter"
             ' "AM" and the base "origin/main".'
         )
+        excluded = (
+            " [OK] No source file found for the filter applied to the configured"
+            ' sources. The git filter used was: "AM".'
+        )
         cases = (
             (
                 nothing,
                 "pass",
             ),
+            (excluded, "pass"),
             ("Infection - PHP Mutation Testing Framework", "error"),
         )
         for stdout, status in cases:

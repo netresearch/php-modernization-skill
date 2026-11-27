@@ -905,7 +905,9 @@ def run_phpunit(ctx: Context) -> ToolResult:
 # Infection prints one of these and writes no log when the diff holds no
 # source line to mutate (NoSourceFound with isSourceFiltered, 0.32.7-0.35.12).
 _INFECTION_NOTHING_TO_MUTATE = re.compile(
-    r"Could not find any modified|No source code from the diff was executed"
+    r"Could not find any modified"
+    r"|No source code from the diff was executed"
+    r"|No source file found for the filter applied"
 )
 
 

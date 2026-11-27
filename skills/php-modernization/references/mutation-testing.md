@@ -29,14 +29,14 @@ vendor/bin/infection \
   --min-msi=0 \
   --min-covered-msi=0 \
   --logger-json=infection-diff.json
-test "$(jq -r '.stats.escapedCount' infection-diff.json)" = 0   # the gate
+# The gate (escaped count, missing log) is in the CI example under CI Integration.
 ```
 
 Mutates **only** the lines changed in the current branch versus the merge base (Infection runs `git merge-base <base> HEAD` itself; in a shallow clone it falls back to the base ref, so check out the full history). Typical runtime: under a minute on a normal PR. High signal: every escaped mutant maps to code the developer just wrote or touched.
 
 This is the default mode for PR gates. It scales: a 5000-line codebase with a 30-line PR runs in seconds.
 
-**The PR gate is the escaped count, not an MSI percentage.** Over a handful of mutants one escape moves the score by tens of points, so the thresholds are zeroed (overriding `minMsi`/`minCoveredMsi` from `infection.json5`) and the run fails on any escaped mutant in the changed lines, read from `stats.escapedCount` of the JSON log (`--logger-json` needs Infection 0.35.11; on older versions set `logs.json` in the config). When the diff holds no source line, Infection prints "Could not find any modified …" or "No source code from the diff was executed …", exits 0 and writes no log; accept a missing log only then. The MSI thresholds gate the scheduled full run only. `modernize_loop.py --git-diff-base` applies exactly this rule.
+**The PR gate is the escaped count, not an MSI percentage.** Over a handful of mutants one escape moves the score by tens of points, so the thresholds are zeroed (overriding `minMsi`/`minCoveredMsi` from `infection.json5`) and the run fails on any escaped mutant in the changed lines, read from `stats.escapedCount` of the JSON log (`--logger-json` needs Infection 0.35.11; on older versions set `logs.json` in the config). When the diff holds no source line to mutate, Infection prints "Could not find any modified …", "No source file found for the filter applied …" (a changed file that `source.excludes` drops) or "No source code from the diff was executed …", exits 0 and writes no log; accept a missing log only then. The MSI thresholds gate the scheduled full run only. `modernize_loop.py --git-diff-base` applies exactly this rule.
 
 `--git-diff-lines` (rather than `--git-diff-filter`) restricts mutation to the changed *lines*, not entire files. Without it, a one-line change pulls the whole file into mutation scope.
 
@@ -65,9 +65,9 @@ The first run on a legacy codebase is ugly. Realistic numbers: 30–50% MSI, hun
 
 Strategy:
 1. Run full mode once. Record the MSI as the baseline.
-2. Set `minMsi` slightly below the current value (e.g., baseline 42% → gate at 40%).
+2. Set `minCoveredMsi` slightly below the current value (e.g., baseline 42% → gate at 40%); in a default run it is the threshold that binds.
 3. Exclude generated code, debug helpers, and anything you genuinely don't want mutated.
-4. Each sprint, ratchet `minMsi` upward.
+4. Each sprint, ratchet `minCoveredMsi` upward.
 
 ```bash
 # Initial baseline run
@@ -104,7 +104,6 @@ Sample `infection.json5`:
     "@default": true,
     "Throw_": false
   },
-  minMsi: 70,
   minCoveredMsi: 80,
   testFramework: "phpunit",
   testFrameworkOptions: "--testsuite=unit"
@@ -127,7 +126,7 @@ Key options:
 
 The MSI thresholds gate the **scheduled full run** only; a PR diff run fails on any escaped mutant in the changed lines instead (see Diff Mode). In a default full run both keys compare the same number; `minMsi` differs from `minCoveredMsi` only with `--with-uncovered`.
 
-A common pair: `minCoveredMsi: 80` and `minMsi: 70`. The 10-point gap absorbs the "we have a few uncovered helpers" reality without letting the suite degrade.
+A pair such as `minCoveredMsi: 80` and `minMsi: 70` only means something in a `--with-uncovered` full run, where the 10-point gap absorbs the uncovered helpers. In a default run the two compare the same number and `minCoveredMsi` alone binds; set only that one there (as the legacy ratchet above does).
 
 ## CI Integration
 
@@ -137,6 +136,7 @@ GitHub Actions, diff mode on PRs:
 - name: Mutation testing (PR diff)
   if: github.event_name == 'pull_request'
   run: |
+    set -o pipefail
     vendor/bin/infection \
       --git-diff-base="origin/${BASE_REF}" \
       --git-diff-lines \
@@ -147,7 +147,7 @@ GitHub Actions, diff mode on PRs:
       --logger-github | tee infection-diff.out
     if [ ! -f infection-diff.json ]; then
       # No source line in the diff: Infection writes no log
-      grep -qE 'Could not find any modified|No source code from the diff was executed' infection-diff.out
+      grep -qE 'Could not find any modified|No source code from the diff was executed|No source file found for the filter applied' infection-diff.out
       exit
     fi
     escaped=$(jq -r '.stats.escapedCount' infection-diff.json)
