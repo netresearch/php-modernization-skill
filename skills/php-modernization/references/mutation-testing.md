@@ -25,18 +25,25 @@ When you make a large mechanical change and the test suite stays green, mutation
 vendor/bin/infection \
   --git-diff-base=origin/main \
   --git-diff-lines \
+  --with-uncovered \
   --threads=$(nproc) \
   --min-msi=0 \
   --min-covered-msi=0 \
   --logger-json=infection-diff.json
-# The gate (escaped count, missing log) is in the CI example under CI Integration.
+# The gate (escaped and not covered counts, missing log) is in the CI example under CI Integration.
 ```
 
 Mutates **only** the lines changed in the current branch versus the merge base (Infection runs `git merge-base <base> HEAD` itself; in a shallow clone it falls back to the base ref, so check out the full history). Typical runtime: under a minute on a normal PR. High signal: every escaped mutant maps to code the developer just wrote or touched.
 
 This is the default mode for PR gates. It scales: a 5000-line codebase with a 30-line PR runs in seconds.
 
-**The PR gate is the escaped count, not an MSI percentage.** Over a handful of mutants one escape moves the score by tens of points, so the thresholds are zeroed (overriding `minMsi`/`minCoveredMsi` from `infection.json5`) and the run fails on any escaped mutant in the changed lines, read from `stats.escapedCount` of the JSON log (`--logger-json` needs Infection 0.35.11; on older versions set `logs.json` in the config). When the diff holds no source line to mutate, Infection prints "Could not find any modified …", "No source file found for the filter applied …" (a changed file that `source.excludes` drops) or "No source code from the diff was executed …", exits 0 and writes no log; accept a missing log only then. The MSI thresholds gate the scheduled full run only. `modernize_loop.py --git-diff-base` applies exactly this rule.
+**The PR gate is the escaped and not covered count, not an MSI percentage.** Over a handful of mutants one escape moves the score by tens of points, so the thresholds are zeroed (overriding `minMsi`/`minCoveredMsi` from `infection.json5`) and the run fails on any escaped or not covered mutant in the changed lines, read from `stats.escapedCount` and `stats.notCoveredCount` of the JSON log (`--logger-json` needs Infection 0.35.11; on older versions set `logs.json` in the config).
+
+`--with-uncovered` is part of the gate. Without it Infection drops the nodes no test executes before it creates mutants: a method no test calls, added to a tested class, yields 0 mutants and the run passes. With it, those mutants are counted in `notCoveredCount`.
+
+When the diff holds no source line to mutate, Infection prints "Could not find any modified …" or "No source file found for the filter applied …" (a changed file that `source.excludes` drops), exits 0 and writes no log; accept a missing log only then. "No source code from the diff was executed …" also comes with exit 0 and no log, with or without `--with-uncovered`, but it means that no test executed any line of the changed files. A new class without a test produces it, so treat it as a failure. A diff of declarations only (an interface, abstract method signatures, constants) produces the same message, because it has no executable line. Tell the two apart by reading the changed lines: a changed statement inside a function or method body means a test is missing; a diff of signatures and declarations alone is the case the gate cannot judge, and the reviewer confirms it.
+
+The MSI thresholds gate the scheduled full run only. `modernize_loop.py --git-diff-base` applies exactly this rule.
 
 `--git-diff-lines` (rather than `--git-diff-filter`) restricts mutation to the changed *lines*, not entire files. Without it, a one-line change pulls the whole file into mutation scope.
 
@@ -76,7 +83,7 @@ vendor/bin/infection \
   --threads=$(nproc)
 ```
 
-Since Infection 0.31 uncovered code is not mutated by default; `--only-covered` was removed then, and Infection 0.35 rejects it as an unknown option. The default run skips mutants in lines no test executes, which for a legacy baseline gives a cleaner picture of what the *existing* tests check semantically. Add `--with-uncovered` only to measure how much code no test reaches.
+Since Infection 0.31 uncovered code is not mutated by default; `--only-covered` was removed then, and Infection 0.35 rejects it as an unknown option. The default run skips mutants in lines no test executes, which for a legacy baseline gives a cleaner picture of what the *existing* tests check semantically. In a full run, add `--with-uncovered` only to measure how much code no test reaches; the PR diff run always passes it (see Diff Mode).
 
 ## Configuration
 
@@ -124,7 +131,7 @@ Key options:
 - **MSI (Mutation Score Indicator)**: killed mutants ÷ total mutants generated. It includes mutants in uncovered code only when the run passes `--with-uncovered` (Infection 0.31 and later); without the flag MSI equals Covered MSI, and `minMsi` and `minCoveredMsi` compare the same number.
 - **Covered MSI**: killed mutants ÷ mutants in covered code. The pure measure of your test suite's mutation-killing ability.
 
-The MSI thresholds gate the **scheduled full run** only; a PR diff run fails on any escaped mutant in the changed lines instead (see Diff Mode). In a default full run both keys compare the same number; `minMsi` differs from `minCoveredMsi` only with `--with-uncovered`.
+The MSI thresholds gate the **scheduled full run** only; a PR diff run fails on any escaped or not covered mutant in the changed lines instead (see Diff Mode). In a default full run both keys compare the same number; `minMsi` differs from `minCoveredMsi` only with `--with-uncovered`.
 
 A pair such as `minCoveredMsi: 80` and `minMsi: 70` only means something in a `--with-uncovered` full run, where the 10-point gap absorbs the uncovered helpers. In a default run the two compare the same number and `minCoveredMsi` alone binds; set only that one there (as the legacy ratchet above does).
 
@@ -140,18 +147,30 @@ GitHub Actions, diff mode on PRs:
     vendor/bin/infection \
       --git-diff-base="origin/${BASE_REF}" \
       --git-diff-lines \
+      --with-uncovered \
       --threads=$(nproc) \
       --min-msi=0 \
       --min-covered-msi=0 \
       --logger-json=infection-diff.json \
       --logger-github | tee infection-diff.out
     if [ ! -f infection-diff.json ]; then
+      # No test executed a line of the changed files: a missing test, or a
+      # diff of declarations only (see Diff Mode)
+      if grep -q 'No source code from the diff was executed' infection-diff.out; then
+        echo "::error::no test executed any line of the changed files"
+        exit 1
+      fi
       # No source line in the diff: Infection writes no log
-      grep -qE 'Could not find any modified|No source code from the diff was executed|No source file found for the filter applied' infection-diff.out
+      grep -qE 'Could not find any modified|No source file found for the filter applied' infection-diff.out
       exit
     fi
-    escaped=$(jq -r '.stats.escapedCount' infection-diff.json)
-    [ "$escaped" = 0 ] || { echo "::error::$escaped escaped mutant(s) in the changed lines"; exit 1; }
+    # -e: a missing field is an error, not a zero
+    escaped=$(jq -e '.stats.escapedCount' infection-diff.json)
+    not_covered=$(jq -e '.stats.notCoveredCount' infection-diff.json)
+    if [ "$escaped" != 0 ] || [ "$not_covered" != 0 ]; then
+      echo "::error::$escaped escaped and $not_covered not covered mutant(s) in the changed lines"
+      exit 1
+    fi
   env:
     BASE_REF: ${{ github.base_ref }}
     INFECTION_BADGE_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
@@ -237,4 +256,4 @@ In both cases the action is the same: write the test. The mutant is killed and t
 
 ## Summary
 
-Diff mode for PRs (fast, high signal), failing on any escaped mutant in the changed lines. Full mode nightly (trend tracking) with the MSI gate. Baseline first on legacy, ratchet up. Use `--logger-github` for actionable PR feedback. Treat escaped mutants as test gaps, not bugs — the fix is almost always a sharper test, occasionally a code fix when the mutant reveals an actual edge case.
+Diff mode for PRs (fast, high signal), failing on any escaped or not covered mutant in the changed lines. Full mode nightly (trend tracking) with the MSI gate. Baseline first on legacy, ratchet up. Use `--logger-github` for actionable PR feedback. Treat escaped mutants as test gaps, not bugs — the fix is almost always a sharper test, occasionally a code fix when the mutant reveals an actual edge case.

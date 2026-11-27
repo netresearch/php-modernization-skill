@@ -1267,7 +1267,7 @@ class ModernizeLoopTest(unittest.TestCase):
         return json.loads(result.stdout)["results"][0]
 
     def test_infection_diff_passes_no_msi_threshold(self) -> None:
-        # The diff run gates on escaped mutants, never on an MSI percentage:
+        # The diff run gates on escaped and not covered mutants, never on an MSI percentage:
         # the project's thresholds belong to the scheduled full run.
         for files in ({"infection.json5": '{"minMsi": 95}'}, {}):
             with (
@@ -1275,7 +1275,15 @@ class ModernizeLoopTest(unittest.TestCase):
                 TempProject("fully-modern") as root,
             ):
                 self._fake_infection(
-                    root, "", {"stats": {"totalMutantsCount": 2, "escapedCount": 0}}
+                    root,
+                    "",
+                    {
+                        "stats": {
+                            "totalMutantsCount": 2,
+                            "escapedCount": 0,
+                            "notCoveredCount": 0,
+                        }
+                    },
                 )
                 for name, text in files.items():
                     (root / name).write_text(text, encoding="utf-8")
@@ -1289,12 +1297,24 @@ class ModernizeLoopTest(unittest.TestCase):
     def test_infection_diff_fails_on_an_escaped_mutant(self) -> None:
         cases = (
             (
-                {"stats": {"totalMutantsCount": 3, "escapedCount": 1}},
+                {
+                    "stats": {
+                        "totalMutantsCount": 3,
+                        "escapedCount": 1,
+                        "notCoveredCount": 0,
+                    }
+                },
                 "fail",
                 "1 escaped",
             ),
             (
-                {"stats": {"totalMutantsCount": 3, "escapedCount": 0}},
+                {
+                    "stats": {
+                        "totalMutantsCount": 3,
+                        "escapedCount": 0,
+                        "notCoveredCount": 0,
+                    }
+                },
                 "pass",
                 "3 generated",
             ),
@@ -1330,6 +1350,40 @@ class ModernizeLoopTest(unittest.TestCase):
                 self._fake_infection(root, stdout, None)
                 outcome = self._run_infection_diff(root)
                 self.assertEqual(outcome["status"], status, outcome)
+
+    def test_infection_diff_fails_on_an_uncovered_mutant(self) -> None:
+        # A method no test calls, added to a tested class: without
+        # --with-uncovered Infection drops its nodes and reports 0 generated.
+        # With the flag they count as not covered, and the run must fail.
+        with TempProject("fully-modern") as root:
+            self._fake_infection(
+                root,
+                "",
+                {
+                    "stats": {
+                        "totalMutantsCount": 2,
+                        "escapedCount": 0,
+                        "notCoveredCount": 2,
+                    }
+                },
+            )
+            outcome = self._run_infection_diff(root)
+            args = (root / "vendor" / "bin" / "infection.args").read_text().split()
+            self.assertIn("--with-uncovered", args)
+            self.assertEqual(outcome["status"], "fail", outcome)
+            self.assertIn("2 not covered", outcome["summary"])
+
+    def test_infection_diff_fails_when_no_test_executed_the_diff(self) -> None:
+        # A new class no test executes: Infection prints this, exits 0 and
+        # writes no log. The diff has source lines; no test ran them.
+        stdout = (
+            " [OK] No source code from the diff was executed by the test framework."
+        )
+        with TempProject("fully-modern") as root:
+            self._fake_infection(root, stdout, None)
+            outcome = self._run_infection_diff(root)
+            self.assertEqual(outcome["status"], "fail", outcome)
+            self.assertIn("no test executed", outcome["summary"])
 
     def test_binary_under_a_custom_vendor_dir(self) -> None:
         with TempProject("fully-modern") as root:

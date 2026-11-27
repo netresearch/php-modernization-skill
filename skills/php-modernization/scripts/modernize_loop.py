@@ -18,7 +18,8 @@ Runs the project's own tools in a fixed order, in either dry-run mode
 4. phpstan         — static analysis
 5. phpunit         — the project's test suite, when it has a PHPUnit config
 6. infection-diff  — mutation testing of the changed lines (PR mode); fails on
-                     any escaped mutant there, no MSI threshold
+                     any escaped or not covered mutant there, and when no test
+                     executed the changed files; no MSI threshold
 
 Refactoring runs before formatting, so the formatter tidies what Rector
 wrote; the checks run last, on the final code. In apply mode Rector runs a
@@ -905,19 +906,25 @@ def run_phpunit(ctx: Context) -> ToolResult:
 # Infection prints one of these and writes no log when the diff holds no
 # source line to mutate (NoSourceFound with isSourceFiltered, 0.32.7-0.35.12).
 _INFECTION_NOTHING_TO_MUTATE = re.compile(
-    r"Could not find any modified"
-    r"|No source code from the diff was executed"
-    r"|No source file found for the filter applied"
+    r"Could not find any modified|No source file found for the filter applied"
+)
+# Printed the same way, exit 0 and no log, when no test executed a line of the
+# changed files: a new class without a test, or a diff of declarations only
+# (an interface, abstract method signatures, constants). Never a pass.
+_INFECTION_NO_TEST_RAN_THE_DIFF = re.compile(
+    r"No source code from the diff was executed"
 )
 
 
 def run_infection_diff(ctx: Context, *, git_diff_base: str) -> ToolResult:
-    """Mutation testing of the changed lines, gated on escaped mutants.
+    """Mutation testing of the changed lines, gated on escaped and uncovered mutants.
 
     A diff run holds a handful of mutants, so an MSI percentage is noise
-    there: the thresholds are zeroed and any escaped mutant in the changed
-    lines fails the run. The project's MSI thresholds gate the scheduled full
-    run only. --logger-json needs Infection 0.35.11 or later.
+    there: the thresholds are zeroed and any escaped or not covered mutant in
+    the changed lines fails the run. --with-uncovered makes changed lines no
+    test executes count as not covered instead of generating nothing. The
+    project's MSI thresholds gate the scheduled full run only. --logger-json
+    needs Infection 0.35.11 or later.
     """
     binary = find_binary(ctx.root, "infection", ctx.composer)
     if binary is None:
@@ -929,6 +936,7 @@ def run_infection_diff(ctx: Context, *, git_diff_base: str) -> ToolResult:
         str(binary),
         f"--git-diff-base={git_diff_base}",
         "--git-diff-lines",
+        "--with-uncovered",
         f"--threads={threads}",
         "--min-msi=0",
         "--min-covered-msi=0",
@@ -952,6 +960,7 @@ def run_infection_diff(ctx: Context, *, git_diff_base: str) -> ToolResult:
     try:
         stats = json.loads(log.read_text(encoding="utf-8"))["stats"]
         escaped = int(stats["escapedCount"])
+        not_covered = int(stats["notCoveredCount"])
         generated = int(stats["totalMutantsCount"])
     except FileNotFoundError:
         output = (
@@ -959,6 +968,14 @@ def run_infection_diff(ctx: Context, *, git_diff_base: str) -> ToolResult:
             if result.artifact
             else ""
         )
+        if _INFECTION_NO_TEST_RAN_THE_DIFF.search(output):
+            result.status = "fail"
+            result.summary = (
+                "infection diff: no test executed any line of the changed files;"
+                " add the test, or confirm the diff holds declarations only"
+                " (interface, abstract method, constant)"
+            )
+            return result
         if _INFECTION_NOTHING_TO_MUTATE.search(output):
             result.summary = "infection diff: no changed source line to mutate"
             return result
@@ -969,14 +986,16 @@ def run_infection_diff(ctx: Context, *, git_diff_base: str) -> ToolResult:
         result.status = "error"
         result.summary = f"infection diff: unreadable JSON log ({exc})"
         return result
-    if escaped:
+    if escaped or not_covered:
         result.status = "fail"
         result.summary = (
-            f"infection diff: {escaped} escaped mutant(s) in the changed lines"
-            f" ({generated} generated)"
+            f"infection diff: {escaped} escaped and {not_covered} not covered"
+            f" mutant(s) in the changed lines ({generated} generated)"
         )
     else:
-        result.summary = f"infection diff: no escaped mutant ({generated} generated)"
+        result.summary = (
+            f"infection diff: no escaped or not covered mutant ({generated} generated)"
+        )
     return result
 
 
