@@ -26,12 +26,17 @@ vendor/bin/infection \
   --git-diff-base=origin/main \
   --git-diff-lines \
   --threads=$(nproc) \
-  --min-msi=80
+  --min-msi=0 \
+  --min-covered-msi=0 \
+  --logger-json=infection-diff.json
+test "$(jq -r '.stats.escapedCount' infection-diff.json)" = 0   # the gate
 ```
 
 Mutates **only** the lines changed in the current branch versus the merge base (Infection runs `git merge-base <base> HEAD` itself; in a shallow clone it falls back to the base ref, so check out the full history). Typical runtime: under a minute on a normal PR. High signal: every escaped mutant maps to code the developer just wrote or touched.
 
 This is the default mode for PR gates. It scales: a 5000-line codebase with a 30-line PR runs in seconds.
+
+**The PR gate is the escaped count, not an MSI percentage.** Over a handful of mutants one escape moves the score by tens of points, so the thresholds are zeroed (overriding `minMsi`/`minCoveredMsi` from `infection.json5`) and the run fails on any escaped mutant in the changed lines, read from `stats.escapedCount` of the JSON log (`--logger-json` needs Infection 0.35.11; on older versions set `logs.json` in the config). When the diff holds no source line, Infection prints "Could not find any modified …" or "No source code from the diff was executed …", exits 0 and writes no log; accept a missing log only then. The MSI thresholds gate the scheduled full run only. `modernize_loop.py --git-diff-base` applies exactly this rule.
 
 `--git-diff-lines` (rather than `--git-diff-filter`) restricts mutation to the changed *lines*, not entire files. Without it, a one-line change pulls the whole file into mutation scope.
 
@@ -120,7 +125,7 @@ Key options:
 - **MSI (Mutation Score Indicator)**: killed mutants ÷ total mutants generated. It includes mutants in uncovered code only when the run passes `--with-uncovered` (Infection 0.31 and later); without the flag MSI equals Covered MSI, and `minMsi` and `minCoveredMsi` compare the same number.
 - **Covered MSI**: killed mutants ÷ mutants in covered code. The pure measure of your test suite's mutation-killing ability.
 
-Gate on **`minCoveredMsi`** for PR diffs (you want the new code's tests to be sharp). Gate on **`minMsi`** for full runs (you also want overall coverage to grow).
+The MSI thresholds gate the **scheduled full run** only; a PR diff run fails on any escaped mutant in the changed lines instead (see Diff Mode). In a default full run both keys compare the same number; `minMsi` differs from `minCoveredMsi` only with `--with-uncovered`.
 
 A common pair: `minCoveredMsi: 80` and `minMsi: 70`. The 10-point gap absorbs the "we have a few uncovered helpers" reality without letting the suite degrade.
 
@@ -136,8 +141,17 @@ GitHub Actions, diff mode on PRs:
       --git-diff-base="origin/${BASE_REF}" \
       --git-diff-lines \
       --threads=$(nproc) \
-      --min-msi=80 \
-      --logger-github
+      --min-msi=0 \
+      --min-covered-msi=0 \
+      --logger-json=infection-diff.json \
+      --logger-github | tee infection-diff.out
+    if [ ! -f infection-diff.json ]; then
+      # No source line in the diff: Infection writes no log
+      grep -qE 'Could not find any modified|No source code from the diff was executed' infection-diff.out
+      exit
+    fi
+    escaped=$(jq -r '.stats.escapedCount' infection-diff.json)
+    [ "$escaped" = 0 ] || { echo "::error::$escaped escaped mutant(s) in the changed lines"; exit 1; }
   env:
     BASE_REF: ${{ github.base_ref }}
     INFECTION_BADGE_API_KEY: ${{ secrets.STRYKER_DASHBOARD_API_KEY }}
@@ -223,4 +237,4 @@ In both cases the action is the same: write the test. The mutant is killed and t
 
 ## Summary
 
-Diff mode for PRs (fast, high signal). Full mode nightly (trend tracking). Baseline first on legacy, ratchet up. Gate on `minCoveredMsi` for PRs, on `minMsi` for full runs. Use `--logger-github` for actionable PR feedback. Treat escaped mutants as test gaps, not bugs — the fix is almost always a sharper test, occasionally a code fix when the mutant reveals an actual edge case.
+Diff mode for PRs (fast, high signal), failing on any escaped mutant in the changed lines. Full mode nightly (trend tracking) with the MSI gate. Baseline first on legacy, ratchet up. Use `--logger-github` for actionable PR feedback. Treat escaped mutants as test gaps, not bugs — the fix is almost always a sharper test, occasionally a code fix when the mutant reveals an actual edge case.
