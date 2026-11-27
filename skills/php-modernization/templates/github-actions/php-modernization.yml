@@ -74,24 +74,30 @@ jobs:
       - name: Run verifier (JSON)
         id: verify-json
         run: |
+          # Without pipefail the exit code of tee hides a failing verifier
+          set -o pipefail
           uv run skills/php-modernization/scripts/verify_php_project.py \
             --root . --format json | tee php-modernization-report.json
 
+      # The steps below report; !cancelled() keeps them running after a
+      # failing verifier or orchestrator step, so the job is red and still
+      # produces the SARIF upload, the artifacts and the PR comment.
       - name: Run verifier (SARIF)
-        if: ${{ inputs.enable-sarif }}
+        if: ${{ !cancelled() && inputs.enable-sarif }}
         run: |
+          set -o pipefail
           uv run skills/php-modernization/scripts/verify_php_project.py \
             --root . --format sarif | tee php-modernization.sarif
 
       - name: Upload SARIF to code scanning
-        if: ${{ inputs.enable-sarif }}
+        if: ${{ !cancelled() && inputs.enable-sarif }}
         uses: github/codeql-action/upload-sarif@v3  # nosemgrep: github-actions-mutable-action-tag
         with:
           sarif_file: php-modernization.sarif
           category: php-modernization
 
       - name: Run orchestrator (dry-run)
-        if: ${{ inputs.enable-infection-diff && github.event_name == 'pull_request' }}
+        if: ${{ !cancelled() && inputs.enable-infection-diff && github.event_name == 'pull_request' }}
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
@@ -103,7 +109,7 @@ jobs:
             | tee modernize-loop.json
 
       - name: Run orchestrator (dry-run, no infection)
-        if: ${{ !inputs.enable-infection-diff || github.event_name != 'pull_request' }}
+        if: ${{ !cancelled() && (!inputs.enable-infection-diff || github.event_name != 'pull_request') }}
         run: |
           set -o pipefail
           uv run skills/php-modernization/scripts/modernize_loop.py \
@@ -124,12 +130,13 @@ jobs:
           if-no-files-found: ignore
 
       - name: PR summary comment
-        if: ${{ github.event_name == 'pull_request' }}
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           uv run skills/php-modernization/scripts/verify_php_project.py \
-            --root . --format json --summary --no-cache > php-modernization-summary.json
+            --root . --format json --summary --no-cache > php-modernization-summary.json \
+            || [ "$?" = 1 ]  # exit 1 = failures found; the status below decides
 
           status=$(python3 -c 'import json,sys; print(json.load(open("php-modernization-summary.json")).get("summary",{}).get("status","fail"))')
           if [ "$status" = "fail" ]; then
