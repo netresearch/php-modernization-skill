@@ -1373,6 +1373,16 @@ class ModernizeLoopTest(unittest.TestCase):
             self.assertEqual(outcome["status"], "fail", outcome)
             self.assertIn("2 not covered", outcome["summary"])
 
+    def test_infection_diff_without_not_covered_count_is_an_error(self) -> None:
+        # A log without notCoveredCount cannot show that no changed line is
+        # untested; reading it as 0 would pass an unchecked run.
+        with TempProject("fully-modern") as root:
+            self._fake_infection(
+                root, "", {"stats": {"totalMutantsCount": 2, "escapedCount": 0}}
+            )
+            outcome = self._run_infection_diff(root)
+            self.assertEqual(outcome["status"], "error", outcome)
+
     def test_infection_diff_fails_when_no_test_executed_the_diff(self) -> None:
         # A new class no test executes: Infection prints this, exits 0 and
         # writes no log. The diff has source lines; no test ran them.

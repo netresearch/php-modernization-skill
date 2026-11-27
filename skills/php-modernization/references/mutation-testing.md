@@ -41,7 +41,7 @@ This is the default mode for PR gates. It scales: a 5000-line codebase with a 30
 
 `--with-uncovered` is part of the gate. Without it Infection drops the nodes no test executes before it creates mutants: a method no test calls, added to a tested class, yields 0 mutants and the run passes. With it, those mutants are counted in `notCoveredCount`.
 
-When the diff holds no source line to mutate, Infection prints "Could not find any modified …" or "No source file found for the filter applied …" (a changed file that `source.excludes` drops), exits 0 and writes no log; accept a missing log only then. "No source code from the diff was executed …" also comes with exit 0 and no log, with or without `--with-uncovered`, but it means that no test executed any line of the changed files. A new class without a test produces it, so treat it as a failure. A diff of declarations only (an interface, abstract method signatures, constants) produces the same message, because it has no executable line. Tell the two apart by reading the changed lines: a changed statement inside a function or method body means a test is missing; a diff of signatures and declarations alone is the case the gate cannot judge, and the reviewer confirms it.
+When the diff holds no source line to mutate, Infection prints "Could not find any modified …" or "No source file found for the filter applied …" (a changed file that `source.excludes` drops), exits 0 and writes no log; accept a missing log only then. "No source code from the diff was executed …" also comes with exit 0 and no log, with or without `--with-uncovered`, but it means that no test executed any line of the changed files. A new class without a test produces it, so treat it as a failure. A diff of declarations only (an interface, abstract method signatures, constants) produces the same message, because it has no executable line. Tell the two apart by reading the changed lines: a changed statement inside a function or method body means a test is missing; a diff of signatures and declarations alone is the case the gate cannot judge. The job stays red for such a diff and nothing passes it automatically: a reviewer confirms that the changed lines hold declarations only and merges past the red job.
 
 The MSI thresholds gate the scheduled full run only. `modernize_loop.py --git-diff-base` applies exactly this rule.
 
@@ -168,6 +168,8 @@ GitHub Actions, diff mode on PRs:
     escaped=$(jq -e '.stats.escapedCount' infection-diff.json)
     not_covered=$(jq -e '.stats.notCoveredCount' infection-diff.json)
     if [ "$escaped" != 0 ] || [ "$not_covered" != 0 ]; then
+      # --logger-github annotates escaped mutants only; list both with their location
+      jq -r '(.escaped[]?, .uncovered[]?) | "\(.mutator.originalFilePath):\(.mutator.originalStartLine) \(.mutator.mutatorName)"' infection-diff.json
       echo "::error::$escaped escaped and $not_covered not covered mutant(s) in the changed lines"
       exit 1
     fi
