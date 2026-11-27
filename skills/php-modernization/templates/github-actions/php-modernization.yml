@@ -146,6 +146,7 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          COMMENT_MARKER: "<!-- php-modernization-verifier -->"
         run: |
           set -o pipefail
           uv run skills/php-modernization/scripts/verify_php_project.py \
@@ -153,9 +154,12 @@ jobs:
             || [ "$?" = 1 ]  # exit 1 = failures found; the status below decides
 
           status=$(python3 -c 'import json,sys; print(json.load(open("php-modernization-summary.json")).get("summary",{}).get("status","fail"))')
-          marker='<!-- php-modernization-verifier -->'
+          marker="$COMMENT_MARKER"
+          # Only this workflow's own comment: anyone can post the marker, and a
+          # foreign comment cannot (and must not) be edited with this token
           comment_id=$(gh api --paginate "repos/${GITHUB_REPOSITORY}/issues/${PR_NUMBER}/comments" \
-            --jq ".[] | select(.body | startswith(\"${marker}\")) | .id" | tail -n 1)
+            --jq '.[] | select(.user.login == "github-actions[bot]" and (.body | startswith(env.COMMENT_MARKER))) | .id' \
+            | tail -n 1)
           if [ "$status" = "fail" ]; then
             {
               echo "$marker"
